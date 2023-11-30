@@ -6,9 +6,7 @@ import { IWETH9 } from "src/interfaces/external/IWETH9.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 import { CurveGauge } from "src/interfaces/external/Curve/CurveGauge.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
 /**
@@ -19,7 +17,6 @@ import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 contract CurveAdaptor is BaseAdaptor, CurveHelper {
     using SafeTransferLib for ERC20;
     using Address for address;
-    using Strings for uint256;
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
@@ -28,7 +25,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     // pool is the Curve Pool address
     // token is the Curve LP token address(can be the same as pool)
     // gauge is the Curve Gauge(can be zero address)
-    // selector is the pool function to call when checking for re-rentrancy during user deposit/withdraws(can be bytes4(0), but then withdraws and deposits are not supported).
+    // selector is the pool function to call when checking for re-entrancy during user deposit/withdraws(can be bytes4(0), but then withdraws and deposits are not supported).
     //================= Configuration Data Specification =================
     // isLiquid bool
     // Indicates whether the position is liquid or not.
@@ -38,11 +35,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @notice Attempted add/remove liquidity from Curve resulted in excess slippage.
      */
     error CurveAdaptor___Slippage();
-
-    /**
-     * @notice Provided arrays have mismatched lengths.
-     */
-    error CurveAdaptor___MismatchedLengths();
 
     /**
      * @notice Much of the adaptor, and pricing logic relies on Curve sticking to using 18 decimals, but since that
@@ -55,12 +47,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param positionId the uint32 position id the Cellar needs to use
      */
     error CurveAdaptor__CurvePositionNotUsed(uint32 positionId);
-
-    /**
-     * @notice While attempting to verify a Curve Position was used, the call to address(this).registry() failed,
-     *         and address(this) has a nonzero code size.
-     */
-    error CurveAdaptor___VerifyPositionRevertedWithNonZeroCodeSize();
 
     /**
      * @notice Attempted to use an invalid slippage in the structure.
@@ -81,7 +67,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     /**
      * @notice Store the adaptor address in bytecode, so that Cellars can use it during delegate call operations.
      */
-    address payable public immutable addressThis;
+    address payable public immutable adaptorAddress;
 
     /**
      * @notice Number between 0.9e4, and 1e4 representing the amount of slippage that can be
@@ -93,7 +79,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
     constructor(address _nativeWrapper, uint32 _curveSlippage) CurveHelper(_nativeWrapper) {
         if (_curveSlippage < 0.9e4 || _curveSlippage > 1e4) revert CurveAdaptor___InvalidConstructorSlippage();
-        addressThis = payable(address(this));
+        adaptorAddress = payable(address(this));
         curveSlippage = _curveSlippage;
     }
 
@@ -245,8 +231,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             orderedUnderlyingTokenAmounts.length
         );
 
-        uint256 balanceDelta = lpToken.balanceOf(address(this));
-
         // Approve pool to spend amounts, and check for max available.
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (orderedUnderlyingTokenAmounts[i] > 0) {
@@ -255,12 +239,17 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             }
         }
 
+        // Generate `add_liquidity` function call data.
         bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false);
+
+        // Track the change in lpToken balance.
+        uint256 balanceDelta = lpToken.balanceOf(address(this));
 
         pool.functionCall(data);
 
         balanceDelta = lpToken.balanceOf(address(this)) - balanceDelta;
 
+        // Compare value out vs value in, and check for slippage.
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(
             underlyingTokens,
             orderedUnderlyingTokenAmounts,
@@ -269,6 +258,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (balanceDelta < minValueOut) revert CurveAdaptor___Slippage();
 
+        // Revoke any unused approvals.
         for (uint256 i; i < underlyingTokens.length; ++i)
             if (orderedUnderlyingTokenAmounts[i] > 0) _revokeExternalApproval(underlyingTokens[i], pool);
     }
@@ -306,14 +296,15 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
                     ERC20(nativeWrapper),
                     orderedUnderlyingTokenAmounts[i]
                 );
-                ERC20(nativeWrapper).safeApprove(addressThis, orderedUnderlyingTokenAmounts[i]);
+                ERC20(nativeWrapper).safeApprove(adaptorAddress, orderedUnderlyingTokenAmounts[i]);
             } else {
                 orderedUnderlyingTokenAmounts[i] = _maxAvailable(underlyingTokens[i], orderedUnderlyingTokenAmounts[i]);
-                underlyingTokens[i].safeApprove(addressThis, orderedUnderlyingTokenAmounts[i]);
+                underlyingTokens[i].safeApprove(adaptorAddress, orderedUnderlyingTokenAmounts[i]);
             }
         }
 
-        uint256 lpOut = CurveHelper(addressThis).addLiquidityETHViaProxy(
+        // Make normal function call to this adaptor to handle native ETH interactions.
+        uint256 lpOut = CurveHelper(adaptorAddress).addLiquidityETHViaProxy(
             pool,
             lpToken,
             underlyingTokens,
@@ -322,8 +313,10 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             useUnderlying
         );
 
-        for (uint256 i; i < underlyingTokens.length; ++i)
+        // Compare value out vs value in, and check for slippage.
+        for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) underlyingTokens[i] = ERC20(nativeWrapper);
+        }
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(
             underlyingTokens,
             orderedUnderlyingTokenAmounts,
@@ -332,9 +325,11 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (lpOut < minValueOut) revert CurveAdaptor___Slippage();
 
+        // Revoke any unused approvals.
         for (uint256 i; i < underlyingTokens.length; ++i) {
-            if (address(underlyingTokens[i]) == CURVE_ETH) _revokeExternalApproval(ERC20(nativeWrapper), addressThis);
-            else _revokeExternalApproval(underlyingTokens[i], addressThis);
+            if (address(underlyingTokens[i]) == CURVE_ETH)
+                _revokeExternalApproval(ERC20(nativeWrapper), adaptorAddress);
+            else _revokeExternalApproval(underlyingTokens[i], adaptorAddress);
         }
     }
 
@@ -363,12 +358,14 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
         lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
 
+        // Generate `remove_liquidity` function call data.
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
             false
         );
 
+        // Track the changes in token balances.
         uint256[] memory balanceDelta = new uint256[](underlyingTokens.length);
         for (uint256 i; i < underlyingTokens.length; ++i)
             balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this));
@@ -379,6 +376,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this)) - balanceDelta[i];
         }
 
+        // Compare value out vs value in, and check for slippage.
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(underlyingTokens, balanceDelta, lpToken);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
@@ -411,9 +409,10 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
         lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
 
-        lpToken.safeApprove(addressThis, lpTokenAmount);
+        lpToken.safeApprove(adaptorAddress, lpTokenAmount);
 
-        uint256[] memory underlyingTokensOut = CurveHelper(addressThis).removeLiquidityETHViaProxy(
+        // Make normal function call to this adaptor to handle native ETH interactions.
+        uint256[] memory underlyingTokensOut = CurveHelper(adaptorAddress).removeLiquidityETHViaProxy(
             pool,
             lpToken,
             lpTokenAmount,
@@ -422,6 +421,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             useUnderlying
         );
 
+        // Compare value out vs value in, and check for slippage.
         for (uint256 i; i < underlyingTokens.length; ++i)
             if (address(underlyingTokens[i]) == CURVE_ETH) underlyingTokens[i] = ERC20(nativeWrapper);
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(
@@ -432,7 +432,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(lpToken, addressThis);
+        // Revoke any unused approval.
+        _revokeExternalApproval(lpToken, adaptorAddress);
     }
 
     /**

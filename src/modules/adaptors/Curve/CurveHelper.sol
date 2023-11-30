@@ -23,6 +23,20 @@ contract CurveHelper {
 
     //========================================= Reentrancy Guard Functions =======================================
 
+    /**
+     * @notice Attempted to read `locked` from unstructured storage, but found uninitialized value.
+     * @dev Most likely an external contract made a delegate call to this contract.
+     */
+    error CurveHelper___StorageSlotNotInitialized();
+
+    /**
+     * @notice Attempted to reenter into this contract.
+     */
+    error CurveHelper___Reentrancy();
+
+    /**
+     * @notice Helper function to read `locked` from unstructured storage.
+     */
     function readLockedStorage() internal view returns (uint256 locked) {
         bytes32 position = lockedStoragePosition;
         assembly {
@@ -30,6 +44,9 @@ contract CurveHelper {
         }
     }
 
+    /**
+     * @notice Helper function to set `locked` to unstructured storage.
+     */
     function setLockedStorage(uint256 state) internal {
         bytes32 position = lockedStoragePosition;
         assembly {
@@ -37,9 +54,9 @@ contract CurveHelper {
         }
     }
 
-    error CurveHelper___StorageSlotNotInitialized();
-    error CurveHelper___Reentrancy();
-
+    /**
+     * @notice nonReentrant modifier that uses unstructured storage.
+     */
     modifier nonReentrant() virtual {
         uint256 locked = readLockedStorage();
         if (locked == 0) revert CurveHelper___StorageSlotNotInitialized();
@@ -158,12 +175,14 @@ contract CurveHelper {
             }
         }
 
+        // Generate `add_liquidity` function call data.
         bytes memory data = _curveAddLiquidityEncodedCallData(
             orderedUnderlyingTokenAmounts,
             minLPAmount,
             useUnderlying
         );
 
+        // Track the change in lpToken balance.
         lpTokenDeltaBalance = lpToken.balanceOf(address(this));
 
         pool.functionCallWithValue(data, nativeEthAmount);
@@ -173,6 +192,7 @@ contract CurveHelper {
         if (lpTokenDeltaBalance == 0) revert CurveHelper___ZeroTransferAmount();
         lpToken.safeTransfer(msg.sender, lpTokenDeltaBalance);
 
+        // Revoke any unused approvals.
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) != CURVE_ETH) _zeroExternalApproval(underlyingTokens[i], address(this));
         }
@@ -197,6 +217,8 @@ contract CurveHelper {
     ) external nonReentrant returns (uint256[] memory balanceDelta) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
+
+        // Generate `remove_liquidity` function call data.
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
@@ -206,6 +228,7 @@ contract CurveHelper {
         // Transfer token in.
         lpToken.safeTransferFrom(msg.sender, address(this), lpTokenAmount);
 
+        // Track the changes in token balances.
         balanceDelta = new uint256[](underlyingTokens.length);
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) {
@@ -234,6 +257,7 @@ contract CurveHelper {
             }
         }
 
+        // Revoke any unused approval.
         _zeroExternalApproval(lpToken, pool);
     }
 
