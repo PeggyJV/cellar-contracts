@@ -282,6 +282,8 @@ contract WithdrawQueue is ReentrancyGuard {
                 solveData.shareDecimals
             );
             metaData[i].requiredAssets = userAssets;
+
+            // TODO if continues removed, only run below code if flags == 0.
             totalRequiredAssets += userAssets;
             totalSharesToSolve += request.sharesToWithdraw;
         }
