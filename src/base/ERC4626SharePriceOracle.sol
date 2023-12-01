@@ -201,6 +201,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable allowedAnswerChangeUpper;
 
+    // TODO call to target.decimals will revert for destionation share price oracle since target is on a different chain.
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
@@ -254,7 +255,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Should be called after contract creation.
      * @dev Creates a Chainlink Automation Upkeep, and set the `automationForwarder` address.
      */
-    function initialize(uint96 initialUpkeepFunds) external {
+    function initialize(uint96 initialUpkeepFunds) public {
+        if (msg.sender != automationAdmin) revert("Only admin");
+
         // This function is only callable once.
         if (automationForwarder != address(0) || pendingUpkeepParamHash != bytes32(0))
             revert ERC4626SharePriceOracle__AlreadyInitialized();
@@ -339,7 +342,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Leverages Automation V2 secure offchain computation to run expensive share price calculations offchain,
      *         then inject them onchain using `performUpkeep`.
      */
-    function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
+    function checkUpkeep(
+        bytes calldata checkData
+    ) external view virtual returns (bool upkeepNeeded, bytes memory performData) {
+        (upkeepNeeded, performData) = _checkUpkeep(checkData);
+    }
+
+    function _checkUpkeep(bytes calldata) internal view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
         uint216 sharePrice = _getTargetSharePrice();
         // Read state from one slot.
@@ -372,8 +381,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Save answer on chain, and update observations if needed.
      */
-    function performUpkeep(bytes calldata performData) external {
+    function performUpkeep(bytes calldata performData) external virtual {
         if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
+        _performUpkeep(performData);
+    }
+
+    function _performUpkeep(bytes memory performData) internal {
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
