@@ -42,9 +42,9 @@ contract WithdrawQueue is ReentrancyGuard {
      *              Either all flags are false(user is solvable) or only 1 is true(an error occurred).
      *              From right to left
      *              - 0: indicates user deadline has passed.
-     *              - 1: indicates user does not have enough shares in wallet.
-     *              - 2: indicates user has not given WithdrawQueue approval.
-     *              - 3: indicates user request has zero share amount.
+     *              - 1: indicates user request has zero share amount.
+     *              - 2: indicates user does not have enough shares in wallet.
+     *              - 3: indicates user has not given WithdrawQueue approval.
      * @param sharesToSolve the amount of shares to solve
      * @param requiredAssets the amount of assets users wants for their shares
      */
@@ -129,9 +129,9 @@ contract WithdrawQueue is ReentrancyGuard {
         if (block.timestamp > userRequest.deadline) return false;
         // Validate approval.
         if (share.allowance(user, address(this)) < userRequest.sharesToWithdraw) return false;
-
+        // Validate sharesToWithdraw is nonzero.
         if (userRequest.sharesToWithdraw == 0) return false;
-
+        // Validate sharesToWithdraw is nonzero.
         if (userRequest.executionSharePrice == 0) return false;
 
         return true;
@@ -258,7 +258,7 @@ contract WithdrawQueue is ReentrancyGuard {
 
             if (block.timestamp > request.deadline) {
                 metaData[i].flags |= uint8(1);
-                continue;
+                continue; //TODO should this not call continue? If continue was removed, then flags could have more than 1 flag which could be useful.
             }
             if (request.sharesToWithdraw == 0) {
                 metaData[i].flags |= uint8(1) << 1;

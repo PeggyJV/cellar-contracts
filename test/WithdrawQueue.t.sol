@@ -36,7 +36,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         _setUp();
 
         queue = new WithdrawQueue();
-        simpleSolver = new SimpleSolver();
+        simpleSolver = new SimpleSolver(address(queue));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -539,7 +539,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         USDC.approve(address(simpleSolver), sharesToWithdraw);
         address[] memory users = new address[](1);
         users[0] = userA;
-        simpleSolver.p2pSolve(queue, cellar, users, sharesToWithdraw, sharesToWithdraw);
+        simpleSolver.p2pSolve(cellar, users, sharesToWithdraw, sharesToWithdraw);
         vm.stopPrank();
 
         assertEq(USDC.balanceOf(userA), sharesToWithdraw, "User A should have received sharesToWithdraw of USDC.");
@@ -587,14 +587,14 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
                 )
             )
         );
-        simpleSolver.p2pSolve(queue, cellar, users, type(uint256).max, sharesToWithdraw);
+        simpleSolver.p2pSolve(cellar, users, type(uint256).max, sharesToWithdraw);
 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(SimpleSolver.SimpleSolver___SolveMaxAssetsExceeded.selector, sharesToWithdraw, 0)
             )
         );
-        simpleSolver.p2pSolve(queue, cellar, users, sharesToWithdraw, 0);
+        simpleSolver.p2pSolve(cellar, users, sharesToWithdraw, 0);
         vm.stopPrank();
     }
 
@@ -630,7 +630,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         USDC.approve(address(simpleSolver), sharesToWithdraw);
         address[] memory users = new address[](1);
         users[0] = userA;
-        simpleSolver.redeemSolve(queue, cellar, users, 0, sharesToWithdraw);
+        simpleSolver.redeemSolve(cellar, users, 0, sharesToWithdraw);
         vm.stopPrank();
 
         uint256 expectedUserABalance = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
@@ -685,7 +685,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
                 )
             )
         );
-        simpleSolver.redeemSolve(queue, cellar, users, 0, 0);
+        simpleSolver.redeemSolve(cellar, users, 0, 0);
 
         vm.expectRevert(
             bytes(
@@ -696,7 +696,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
                 )
             )
         );
-        simpleSolver.redeemSolve(queue, cellar, users, type(uint256).max, type(uint256).max);
+        simpleSolver.redeemSolve(cellar, users, type(uint256).max, type(uint256).max);
         vm.stopPrank();
     }
 
@@ -705,9 +705,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         bytes memory bareBonesData = abi.encode(1, address(0));
 
         // Calling `finishSolve` on SimpleSolver directly should revert.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___NotInSolveContextOrNotActiveSolver.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___OnlyQueue.selector)));
         simpleSolver.finishSolve(bareBonesData, 0, 0);
 
         // Malicious user targets user B who has a large asset approval for Simple Solver.

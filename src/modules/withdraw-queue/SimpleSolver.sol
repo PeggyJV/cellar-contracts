@@ -3,13 +3,14 @@ pragma solidity 0.8.21;
 
 import { WithdrawQueue, ERC4626, ERC20, SafeTransferLib } from "./WithdrawQueue.sol";
 import { ISolver } from "./ISolver.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title SimpleSolver
  * @notice Allows 3rd party solvers to use an audited Solver contract for simple soles..
  * @author crispymangoes
  */
-contract SimpleSolver is ISolver {
+contract SimpleSolver is ISolver, ReentrancyGuard {
     using SafeTransferLib for ERC4626;
     using SafeTransferLib for ERC20;
 
@@ -44,14 +45,22 @@ contract SimpleSolver is ISolver {
     //============================== ERRORS ===============================
 
     error SimpleSolver___NotInSolveContextOrNotActiveSolver();
+    error SimpleSolver___AlreadyInSolveContext();
+    error SimpleSolver___OnlyQueue();
     error SimpleSolver___SolveMaxAssetsExceeded(uint256 actualAssets, uint256 maxAssets);
     error SimpleSolver___P2PSolveMinSharesNotMet(uint256 actualShares, uint256 minShares);
     error SimpleSolver___RedeemSolveMinAssetDeltaNotMet(uint256 actualDelta, uint256 minDelta);
 
     //============================== IMMUTABLES ===============================
 
-    constructor() {
+    /**
+     * @notice The withdraw queue this simple solver works with.
+     */
+    WithdrawQueue public immutable queue;
+
+    constructor(address _queue) {
         activeSolver = DEAD_ADDRESS;
+        queue = WithdrawQueue(_queue);
     }
 
     //============================== SOLVE FUNCTIONS ===============================
@@ -59,16 +68,11 @@ contract SimpleSolver is ISolver {
      * @notice Solver wants to exchange p2p share.asset() for withdraw queue shares.
      * @dev Solver should approve this contract to spend share.asset().
      */
-    function p2pSolve(
-        WithdrawQueue queue,
-        ERC4626 share,
-        address[] calldata users,
-        uint256 minSharesReceived,
-        uint256 maxAssets
-    ) external {
-        bytes memory runData = abi.encode(SolveType.P2P, msg.sender, queue, share, minSharesReceived, maxAssets);
+    function p2pSolve(ERC4626 share, address[] calldata users, uint256 minSharesReceived, uint256 maxAssets) external {
+        bytes memory runData = abi.encode(SolveType.P2P, msg.sender, share, minSharesReceived, maxAssets);
 
         // Solve for `users`.
+        if (activeSolver != DEAD_ADDRESS) revert SimpleSolver___AlreadyInSolveContext();
         activeSolver = msg.sender;
         queue.solve(share, users, runData, address(this));
         activeSolver = address(DEAD_ADDRESS);
@@ -79,18 +83,13 @@ contract SimpleSolver is ISolver {
      * @dev Solver should approve this contract to spend share.asset().
      * @dev This solve will redeem assets to the solver, to handle cases where redeem returns more than
      *      share.asset(). In these cases the solver should know, and have enough share.asset() to cover shortfall.
-     * @dev It is extreemely likely that this TX will be MEVed, private mem pools should be used to send it.
+     * @dev It is extremely likely that this TX will be MEVed, private mem pools should be used to send it.
      */
-    function redeemSolve(
-        WithdrawQueue queue,
-        ERC4626 share,
-        address[] calldata users,
-        uint256 minAssetDelta,
-        uint256 maxAssets
-    ) external {
-        bytes memory runData = abi.encode(SolveType.REDEEM, msg.sender, queue, share, minAssetDelta, maxAssets);
+    function redeemSolve(ERC4626 share, address[] calldata users, uint256 minAssetDelta, uint256 maxAssets) external {
+        bytes memory runData = abi.encode(SolveType.REDEEM, msg.sender, share, minAssetDelta, maxAssets);
 
         // Solve for `users`.
+        if (activeSolver != DEAD_ADDRESS) revert SimpleSolver___AlreadyInSolveContext();
         activeSolver = msg.sender;
         queue.solve(share, users, runData, address(this));
         activeSolver = address(DEAD_ADDRESS);
@@ -101,7 +100,12 @@ contract SimpleSolver is ISolver {
     /**
      * @notice Implement the finishSolve function WithdrawQueue expects to call.
      */
-    function finishSolve(bytes calldata runData, uint256 sharesReceived, uint256 assetApprovalAmount) external {
+    function finishSolve(
+        bytes calldata runData,
+        uint256 sharesReceived,
+        uint256 assetApprovalAmount
+    ) external nonReentrant {
+        if (msg.sender != address(queue)) revert SimpleSolver___OnlyQueue();
         (SolveType _type, address solver) = abi.decode(runData, (SolveType, address));
 
         address _activeSolver = activeSolver;
@@ -118,9 +122,9 @@ contract SimpleSolver is ISolver {
      * @notice Helper function containing the logic to handle p2p solves.
      */
     function _p2pSolve(bytes memory runData, uint256 sharesReceived, uint256 assetApprovalAmount) internal {
-        (, address solver, address queue, ERC4626 share, uint256 minSharesReceived, uint256 maxAssets) = abi.decode(
+        (, address solver, ERC4626 share, uint256 minSharesReceived, uint256 maxAssets) = abi.decode(
             runData,
-            (SolveType, address, address, ERC4626, uint256, uint256)
+            (SolveType, address, ERC4626, uint256, uint256)
         );
 
         // Make sure solver is receiving the minimum amount of shares.
@@ -140,16 +144,16 @@ contract SimpleSolver is ISolver {
         share.safeTransfer(solver, sharesReceived);
 
         // Approve queue to spend assetApprovalAmount.
-        asset.safeApprove(queue, assetApprovalAmount);
+        asset.safeApprove(address(queue), assetApprovalAmount);
     }
 
     /**
      * @notice Helper function containing the logic to handle redeem solves.
      */
     function _redeemSolve(bytes memory runData, uint256 sharesReceived, uint256 assetApprovalAmount) internal {
-        (, address solver, address queue, ERC4626 share, uint256 minAssetDelta, uint256 maxAssets) = abi.decode(
+        (, address solver, ERC4626 share, uint256 minAssetDelta, uint256 maxAssets) = abi.decode(
             runData,
-            (SolveType, address, address, ERC4626, uint256, uint256)
+            (SolveType, address, ERC4626, uint256, uint256)
         );
 
         // Make sure solvers `maxAssets` was not exceeded.
@@ -168,6 +172,6 @@ contract SimpleSolver is ISolver {
         asset.safeTransferFrom(solver, address(this), assetApprovalAmount);
 
         // Approve queue to spend assetApprovalAmount.
-        asset.safeApprove(queue, assetApprovalAmount);
+        asset.safeApprove(address(queue), assetApprovalAmount);
     }
 }
