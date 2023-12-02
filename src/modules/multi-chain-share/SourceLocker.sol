@@ -69,6 +69,7 @@ contract SourceLocker is CCIPReceiver {
         fee = router.getFee(destinationChainSelector, message);
     }
 
+    // TODO revert if target destination is not set
     // on shareToken lock, transfer shareTokens in, and CCIP Send to targetDestination amount and to address
     function bridgeToDestination(
         uint256 amount,

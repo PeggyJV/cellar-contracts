@@ -201,7 +201,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable allowedAnswerChangeUpper;
 
-    // TODO call to target.decimals will revert for destionation share price oracle since target is on a different chain.
+    // TODO call to target.decimals will revert for destination share price oracle since target is on a different chain.
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
@@ -386,6 +386,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         _performUpkeep(performData);
     }
 
+    // TODO add a bool indicating whether or not to check the killswitch
     function _performUpkeep(bytes memory performData) internal {
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 

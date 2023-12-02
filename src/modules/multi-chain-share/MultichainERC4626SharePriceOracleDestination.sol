@@ -82,5 +82,10 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
         onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
     {
         _performUpkeep(any2EvmMessage.data);
+        // TODO grab source killswitch bool and
+        // TODO so this oracle defaults its kill switch value to whatever the source ones is
+        // Test ideas
+        // messages come in out of order
+        // block timestamp of kill switch calcualtions differing between source and dest.
     }
 }

@@ -62,13 +62,16 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
 
     //============================== CHAINLINK AUTOMATION ===============================
 
+    // TODO want to handle scenarios where this one wants to shutdown but it doesn't have enough link to send the CCIP message.
     function checkUpkeep(
         bytes calldata checkData
     ) public view override returns (bool upkeepNeeded, bytes memory performData) {
         (upkeepNeeded, performData) = _checkUpkeep(checkData);
 
         if (upkeepNeeded) {
+            // TODO if cellar is shutdown we want it to stay shutdown but allow 3rd party to send a special ccip shutdown message.
             // Check that contract has enough LINK to send ccip message
+            // Could require a min share price
             Client.EVM2AnyMessage memory message = _buildMessage(performData);
 
             // Calculate fees required for message, and adjust upkeepNeeded
@@ -77,6 +80,9 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
             if (fees > link.balanceOf(address(this))) upkeepNeeded = false;
         }
     }
+
+    // TODO what does chainlink do if they quote $10 for an update
+    // but in reality TX will cost $100
 
     function performUpkeep(bytes calldata performData) public override {
         if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
@@ -94,6 +100,7 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
         emit PerformDataSent(messageId, block.timestamp);
     }
 
+    // TODO make data to be performData, and killswitch.
     function _buildMessage(bytes memory performData) internal view returns (Client.EVM2AnyMessage memory message) {
         // Send ccip message to other chain, revert if not enough link
         message = Client.EVM2AnyMessage({
