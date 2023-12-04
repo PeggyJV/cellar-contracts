@@ -21,6 +21,8 @@ contract SourceLocker is CCIPReceiver {
     error SourceLocker___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
     error SourceLocker___OnlyFactory();
     error SourceLocker___TargetDestinationAlreadySet();
+    error SourceLocker___InvalidTo();
+    error SourceLocker___FeeTooHigh();
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != destinationChainSelector)
@@ -29,6 +31,7 @@ contract SourceLocker is CCIPReceiver {
         _;
     }
 
+    // TODO add in value so we can set the message gas limit as an immutable
     constructor(
         address _router,
         address _shareToken,
@@ -79,7 +82,7 @@ contract SourceLocker is CCIPReceiver {
         address to,
         uint256 maxLinkToPay
     ) external returns (bytes32 messageId) {
-        if (to == address(0)) revert("Invalid to");
+        if (to == address(0)) revert SourceLocker___InvalidTo();
         shareToken.safeTransferFrom(msg.sender, address(this), amount);
 
         Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
@@ -88,7 +91,7 @@ contract SourceLocker is CCIPReceiver {
 
         uint256 fees = router.getFee(destinationChainSelector, message);
 
-        if (fees > maxLinkToPay) revert("Not enough link");
+        if (fees > maxLinkToPay) revert SourceLocker___FeeTooHigh();
 
         LINK.safeTransferFrom(msg.sender, address(this), fees);
 

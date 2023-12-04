@@ -58,53 +58,67 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(LINK), address(this), 1_000e18);
     }
 
-    // TODO test admin withdraw on factories.
+    function testAdminWithdraw() external {
+        // Both factories have an admin withdraw function to withdraw LINK from them.
+        uint256 expectedLinkBalance = LINK.balanceOf(address(this));
+        uint256 linkBalance = LINK.balanceOf(address(sourceLockerFactory));
+        expectedLinkBalance += linkBalance;
+        sourceLockerFactory.adminWithdraw(LINK, linkBalance, address(this));
 
-    // TODO add fuzzing for the amounts being bridged, but make sure amount going back is less than amount sent.
-    function testHappyPath() external {
-        (, address lockerAddress) = sourceLockerFactory.deploy(cellar);
+        linkBalance = LINK.balanceOf(address(destinationMinterFactory));
+        expectedLinkBalance += linkBalance;
+        destinationMinterFactory.adminWithdraw(LINK, linkBalance, address(this));
 
-        SourceLocker locker = SourceLocker(lockerAddress);
+        assertEq(LINK.balanceOf(address(this)), expectedLinkBalance, "Balance does not equal expected.");
 
-        // Simulate CCIP Message to destinateion factory.
-        Client.Any2EVMMessage memory message = router.getLastMessage();
-        vm.prank(address(router));
-        destinationMinterFactory.ccipReceive(message);
+        // Try calling it from a non owner address.
+        address nonOwner = vm.addr(1);
+        vm.startPrank(nonOwner);
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        sourceLockerFactory.adminWithdraw(LINK, linkBalance, address(this));
 
-        // Simulate CCIP message to source factory.
-        message = router.getLastMessage();
-        vm.prank(address(router));
-        sourceLockerFactory.ccipReceive(message);
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        destinationMinterFactory.adminWithdraw(LINK, linkBalance, address(this));
+        vm.stopPrank();
+    }
 
-        DestinationMinter minter = DestinationMinter(locker.targetDestination());
+    function testHappyPath(uint256 amountToDesintation, uint256 amountToSource) external {
+        amountToDesintation = bound(amountToDesintation, 1e6, type(uint96).max);
+        amountToSource = bound(amountToSource, 0.999e6, amountToDesintation);
+
+        (SourceLocker locker, DestinationMinter minter) = _runDeploy();
 
         // Try bridging shares.
-        deal(address(cellar), address(this), 10e18);
-        cellar.approve(address(locker), 10e18);
-        uint256 fee = locker.previewFee(10e18, address(this));
+        deal(address(cellar), address(this), amountToDesintation);
+        cellar.approve(address(locker), amountToDesintation);
+        uint256 fee = locker.previewFee(amountToDesintation, address(this));
         LINK.approve(address(locker), fee);
-        locker.bridgeToDestination(10e18, address(this), fee);
+        locker.bridgeToDestination(amountToDesintation, address(this), fee);
 
-        message = router.getLastMessage();
+        Client.Any2EVMMessage memory message = router.getLastMessage();
 
         vm.prank(address(router));
         minter.ccipReceive(message);
 
-        assertEq(10e18, minter.balanceOf(address(this)), "Should have minted shares.");
+        assertEq(amountToDesintation, minter.balanceOf(address(this)), "Should have minted shares.");
         assertEq(0, cellar.balanceOf(address(this)), "Should have spent Cellar shares.");
 
         // Try bridging the shares back.
-        fee = minter.previewFee(10e18, address(this));
+        fee = minter.previewFee(amountToSource, address(this));
         LINK.approve(address(minter), 1e18);
-        minter.bridgeToSource(10e18, address(this), 1e18);
+        minter.bridgeToSource(amountToSource, address(this), 1e18);
 
         message = router.getLastMessage();
 
         vm.prank(address(router));
         locker.ccipReceive(message);
 
-        assertEq(0, minter.balanceOf(address(this)), "Should have burned shares.");
-        assertEq(10e18, cellar.balanceOf(address(this)), "Should have sent Cellar shares back to this address.");
+        assertEq(amountToDesintation - amountToSource, minter.balanceOf(address(this)), "Should have burned shares.");
+        assertEq(
+            amountToSource,
+            cellar.balanceOf(address(this)),
+            "Should have sent Cellar shares back to this address."
+        );
     }
 
     //---------------------------------------- REVERT TESTS ----------------------------------------
@@ -226,12 +240,36 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         locker.setTargetDestination(address(this));
         vm.stopPrank();
 
-        // TODO check bridge to destination reverts.
+        uint256 amountToDesintation = 1e18;
+        deal(address(cellar), address(this), amountToDesintation);
+        cellar.approve(address(locker), amountToDesintation);
+        uint256 fee = locker.previewFee(amountToDesintation, address(this));
+        LINK.approve(address(locker), fee);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(SourceLocker.SourceLocker___InvalidTo.selector)));
+        locker.bridgeToDestination(amountToDesintation, address(0), fee);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(SourceLocker.SourceLocker___FeeTooHigh.selector)));
+        locker.bridgeToDestination(amountToDesintation, address(this), 0);
     }
 
     function testDestinationMinterReverts() external {
-        // TODO check bridge to source reverts.
-        // TODO test where we try burning more than we have.
+        (, DestinationMinter minter) = _runDeploy();
+
+        uint256 amountToSource = 10e18;
+        deal(address(minter), address(this), 10e18);
+        uint256 fee = minter.previewFee(amountToSource, address(this));
+        LINK.approve(address(minter), 1e18);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(DestinationMinter.DestinationMinter___InvalidTo.selector)));
+        minter.bridgeToSource(amountToSource, address(0), fee);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(DestinationMinter.DestinationMinter___FeeTooHigh.selector)));
+        minter.bridgeToSource(amountToSource, address(this), 0);
+
+        // Try bridging more than we have.
+        vm.expectRevert(stdError.arithmeticError);
+        minter.bridgeToSource(amountToSource + 1, address(this), fee);
     }
 
     function _runDeploy() internal returns (SourceLocker locker, DestinationMinter minter) {

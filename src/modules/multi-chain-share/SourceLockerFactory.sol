@@ -33,6 +33,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         destinationMinterFactory = _destinationMinterFactory;
     }
 
+    // TODO add in value so we can set the message gas limit as an immutable
     constructor(
         address _owner,
         address _router,
@@ -80,6 +81,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     }
 
     // CCIP Receive function will accept new DestinationMinter address, and corresponding source locker, and call SourceLocker:setTargetDestination()
+    // TODO we could add in a mapping assignment here so that people can map the Cellar share to the source locker? It would be possible for the owner to accidentally send 2 deploys back 2 back though
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
     )

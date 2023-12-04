@@ -18,6 +18,8 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     error DestinationMinter___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
     error DestinationMinter___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error DestinationMinter___InvalidTo(); // Used when the sender has not been allowlisted by the contract owner.
+    error DestinationMinter___FeeTooHigh(); // Used when the sender has not been allowlisted by the contract owner.
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != sourceChainSelector)
@@ -26,6 +28,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         _;
     }
 
+    // TODO add in value so we can set the message gas limit as an immutable
     constructor(
         address _router,
         address _targetSource,
@@ -65,7 +68,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     // On token burn, send CCIP message to targetSource with amount, and to address
     function bridgeToSource(uint256 amount, address to, uint256 maxLinkToPay) external returns (bytes32 messageId) {
-        if (to == address(0)) revert("Invalid to");
+        if (to == address(0)) revert DestinationMinter___InvalidTo();
         _burn(msg.sender, amount);
 
         Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
@@ -74,7 +77,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
         uint256 fees = router.getFee(sourceChainSelector, message);
 
-        if (fees > maxLinkToPay) revert("Not enough link");
+        if (fees > maxLinkToPay) revert DestinationMinter___FeeTooHigh();
 
         LINK.safeTransferFrom(msg.sender, address(this), fees);
 

@@ -31,6 +31,7 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
         _;
     }
 
+    // TODO add in value so we can set the message gas limit as an immutable
     constructor(
         address _owner,
         address _router,
