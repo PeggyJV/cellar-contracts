@@ -21,12 +21,13 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
 
     event CallBackMessageId(bytes32 id);
 
-    error SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error DestinationMinterFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
+    error DestinationMinterFactory___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != sourceChainSelector) revert SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != sourceLockerFactory) revert SenderNotAllowlisted(_sender);
+        if (_sourceChainSelector != sourceChainSelector)
+            revert DestinationMinterFactory___SourceChainNotAllowlisted(_sourceChainSelector);
+        if (_sender != sourceLockerFactory) revert DestinationMinterFactory___SenderNotAllowlisted(_sender);
         _;
     }
 

@@ -16,12 +16,13 @@ contract DestinationMinter is ERC20, CCIPReceiver {
     uint64 public immutable destinationChainSelector;
     ERC20 public immutable LINK;
 
-    error SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error DestinationMinter___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
+    error DestinationMinter___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != sourceChainSelector) revert SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != targetSource) revert SenderNotAllowlisted(_sender);
+        if (_sourceChainSelector != sourceChainSelector)
+            revert DestinationMinter___SourceChainNotAllowlisted(_sourceChainSelector);
+        if (_sender != targetSource) revert DestinationMinter___SenderNotAllowlisted(_sender);
         _;
     }
 

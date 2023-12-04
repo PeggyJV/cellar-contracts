@@ -69,10 +69,22 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
         (upkeepNeeded, performData) = _checkUpkeep(checkData);
 
         if (upkeepNeeded) {
-            // TODO if cellar is shutdown we want it to stay shutdown but allow 3rd party to send a special ccip shutdown message.
-            // Check that contract has enough LINK to send ccip message
-            // Could require a min share price
-            Client.EVM2AnyMessage memory message = _buildMessage(performData);
+            // Check if kill switch would be triggered.
+            (uint216 sharePrice, ) = abi.decode(performData, (uint216, uint64));
+            (uint256 timeWeightedAverageAnswer, bool isNotSafeToUse) = _getTimeWeightedAverageAnswer(
+                sharePrice,
+                currentIndex,
+                observationsLength
+            );
+            if (
+                _checkIfKillSwitchShouldBeTriggeredView(sharePrice, answer) ||
+                (!isNotSafeToUse && _checkIfKillSwitchShouldBeTriggeredView(sharePrice, timeWeightedAverageAnswer))
+            ) {
+                // Do not run any message checks because we need this upkeep to go through.
+                return (upkeepNeeded, performData);
+            }
+
+            Client.EVM2AnyMessage memory message = _buildMessage(performData, false);
 
             // Calculate fees required for message, and adjust upkeepNeeded
             // if contract does not have enough LINK to cover fee.
@@ -84,15 +96,28 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
     // TODO what does chainlink do if they quote $10 for an update
     // but in reality TX will cost $100
 
+    // TODO allow anyone to send a message to destination if this ones killswitch has been triggered.
+
     function performUpkeep(bytes calldata performData) public override {
         if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
         _performUpkeep(performData);
 
-        Client.EVM2AnyMessage memory message = _buildMessage(performData);
+        bool sourceKillSwitch = killSwitch;
+
+        Client.EVM2AnyMessage memory message = _buildMessage(performData, sourceKillSwitch);
 
         // Calculate fees required for message.
         uint256 fees = router.getFee(destinationChainSelector, message);
-        if (fees > link.balanceOf(address(this))) revert("Not enough Link");
+        if (fees > link.balanceOf(address(this))) {
+            if (sourceKillSwitch) {
+                // KillSwitch was triggered but we do not have enough LINK to send the update TX.
+                // TODO emit an event
+                return;
+            } else {
+                // WE dont have enough LINK to send the message.
+                revert("Not Enough Link");
+            }
+        }
 
         link.approve(address(router), fees);
 
@@ -100,12 +125,14 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
         emit PerformDataSent(messageId, block.timestamp);
     }
 
-    // TODO make data to be performData, and killswitch.
-    function _buildMessage(bytes memory performData) internal view returns (Client.EVM2AnyMessage memory message) {
+    function _buildMessage(
+        bytes memory performData,
+        bool sourceKillSwitch
+    ) internal view returns (Client.EVM2AnyMessage memory message) {
         // Send ccip message to other chain, revert if not enough link
         message = Client.EVM2AnyMessage({
             receiver: abi.encode(destinationOracle),
-            data: performData,
+            data: abi.encode(performData, sourceKillSwitch),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
@@ -113,5 +140,18 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
             ),
             feeToken: address(link)
         });
+    }
+
+    function _checkIfKillSwitchShouldBeTriggeredView(
+        uint256 proposedAnswer,
+        uint256 answerToCompareAgainst
+    ) internal view returns (bool) {
+        if (
+            proposedAnswer < answerToCompareAgainst.mulDivDown(allowedAnswerChangeLower, 1e4) ||
+            proposedAnswer > answerToCompareAgainst.mulDivDown(allowedAnswerChangeUpper, 1e4)
+        ) {
+            return true;
+        }
+        return false;
     }
 }

@@ -81,11 +81,21 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
         override
         onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
     {
-        _performUpkeep(any2EvmMessage.data);
-        // TODO grab source killswitch bool and
-        // TODO so this oracle defaults its kill switch value to whatever the source ones is
+        (bytes memory performData, bool sourceKillSwitch) = abi.decode(any2EvmMessage.data, (bytes, bool));
+        if (sourceKillSwitch) {
+            // TODO emit an event
+            killSwitch = true;
+        } else {
+            _performUpkeep(performData);
+            // It is possible for this contracts killWwitch to be triggered, but not the sources.
+            // block timestamp of kill switch calcualtions differing between source and dest.
+            if (killSwitch) {
+                killSwitch = false;
+                // TODO emit an event that the kill switch was reset?
+            }
+        }
         // Test ideas
         // messages come in out of order
-        // block timestamp of kill switch calcualtions differing between source and dest.
+        // handle scenarios where kill switch is triggered.
     }
 }

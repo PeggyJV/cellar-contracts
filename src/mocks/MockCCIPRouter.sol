@@ -12,6 +12,8 @@ contract MockCCIPRouter {
         LINK = ERC20(_link);
     }
 
+    uint256 public messageCount;
+
     uint256 public currentFee = 1e18;
 
     uint64 public constant SOURCE_SELECTOR = 6101244977088475029;
@@ -29,13 +31,14 @@ contract MockCCIPRouter {
         return messages[lastMessageId];
     }
 
-    function getFee(uint64 chainSelector, Client.EVM2AnyMessage memory message) external view returns (uint256) {
+    function getFee(uint64, Client.EVM2AnyMessage memory) external view returns (uint256) {
         return currentFee;
     }
 
     function ccipSend(uint64 chainSelector, Client.EVM2AnyMessage memory message) external returns (bytes32 messageId) {
         LINK.transferFrom(msg.sender, address(this), currentFee);
-        messageId = keccak256(abi.encode(block.timestamp, msg.sender));
+        messageId = bytes32(messageCount);
+        messageCount++;
         lastMessageId = messageId;
         messages[messageId].messageId = messageId;
         messages[messageId].sourceChainSelector = chainSelector == SOURCE_SELECTOR

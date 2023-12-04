@@ -17,12 +17,15 @@ contract SourceLocker is CCIPReceiver {
     uint64 public immutable destinationChainSelector;
     ERC20 public immutable LINK;
 
-    error SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error SourceLocker___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
+    error SourceLocker___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error SourceLocker___OnlyFactory();
+    error SourceLocker___TargetDestinationAlreadySet();
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != destinationChainSelector) revert SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != targetDestination) revert SenderNotAllowlisted(_sender);
+        if (_sourceChainSelector != destinationChainSelector)
+            revert SourceLocker___SourceChainNotAllowlisted(_sourceChainSelector);
+        if (_sender != targetDestination) revert SourceLocker___SenderNotAllowlisted(_sender);
         _;
     }
 
@@ -42,8 +45,8 @@ contract SourceLocker is CCIPReceiver {
     }
 
     function setTargetDestination(address _targetDestination) external {
-        if (msg.sender != factory) revert("no no no");
-        if (targetDestination != address(0)) revert("target already set");
+        if (msg.sender != factory) revert SourceLocker___OnlyFactory();
+        if (targetDestination != address(0)) revert SourceLocker___TargetDestinationAlreadySet();
 
         targetDestination = _targetDestination;
     }

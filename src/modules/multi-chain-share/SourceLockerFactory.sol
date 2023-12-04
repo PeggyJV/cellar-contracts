@@ -18,12 +18,13 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     uint64 public immutable destinationChainSelector;
     ERC20 public immutable LINK;
 
-    error SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error SourceLockerFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
+    error SourceLockerFactory___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != destinationChainSelector) revert SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != destinationMinterFactory) revert SenderNotAllowlisted(_sender);
+        if (_sourceChainSelector != destinationChainSelector)
+            revert SourceLockerFactory___SourceChainNotAllowlisted(_sourceChainSelector);
+        if (_sender != destinationMinterFactory) revert SourceLockerFactory___SenderNotAllowlisted(_sender);
         _;
     }
 
