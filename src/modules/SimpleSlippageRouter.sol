@@ -73,8 +73,9 @@ contract SimpleSlippageRouter {
     function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         _cellar.asset().safeTransferFrom(msg.sender, address(this), _assets);
-        uint256 shares = _cellar.deposit(_assets, msg.sender);
+        uint256 shares = _cellar.previewDeposit(_assets);
         if (shares < _minimumShares) revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shares);
+        _cellar.deposit(_assets, msg.sender);
     }
 
     /**
@@ -90,10 +91,7 @@ contract SimpleSlippageRouter {
         uint256 shares = _cellar.previewWithdraw(_assets);
         if (shares > _maxShares) revert SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(_maxShares, shares);
 
-        ERC20 cellarToken = ERC20(address(_cellar));
-
-        cellarToken.safeTransferFrom(msg.sender, address(this), shares);
-        _cellar.withdraw(_assets, msg.sender, address(this));
+        _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to send shares
     }
 
     /**
@@ -126,9 +124,6 @@ contract SimpleSlippageRouter {
         if (quotedAssetAmount < _minAssets)
             revert SimpleSlippageAdaptor__RedeemMaxSharesSurpassed(_maxShares, _minAssets, quotedAssetAmount);
 
-        ERC20 cellarToken = ERC20(address(_cellar));
-
-        cellarToken.safeTransferFrom(msg.sender, address(this), _maxShares);
-        _cellar.redeem(_maxShares, msg.sender, address(this));
+        _cellar.redeem(_maxShares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to send shares
     }
 }
