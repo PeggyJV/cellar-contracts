@@ -51,15 +51,15 @@ contract SimpleSlippageRouter {
 
     /**
      * @notice withdraws assets as long as tx returns more than minimumAssets and is done before deadline.
-     * @param _cellar specified cellar to deposit assets into
-     * @param _assets amount of cellar base assets to deposit
-     * @param _maxShares max amount of shares to redeemed from tx
+     * @param _cellar specified cellar to withdraw assets from
+     * @param _assets amount of cellar base assets to withdraw
+     * @param _maxShares max amount of shares to redeem from tx
      * @param _deadline block.timestamp that tx must be carried out by
      */
     function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
 
-        uint256 shares = cellar.previewWithdraw(_assets);
+        uint256 shares = _cellar.previewWithdraw(_assets);
         if (shares > _maxShares) revert SimpleSlippageAdaptor__MaxSharesSurpassed(_maxShares, shares);
 
         ERC20 cellarToken = ERC20(address(_cellar));
@@ -68,7 +68,19 @@ contract SimpleSlippageRouter {
         uint256 shares = _cellar.withdraw(_assets, msg.sender, address(this));
     }
 
-    function mint() public {}
+    /**
+     * @notice Mints shares from the cellar, and returns shares to receiver IF shares returned meet minimumShares specified by the specified deadline
+     * @param _cellar specified cellar to deposit assets into
+     * @param _assets amount of cellar base assets to deposit
+     * @param _minimumShares amount of shares required at min from tx
+     * @param _deadline block.timestamp that tx must be carried out by     */
+    function mint(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
+        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+        uint256 quotedAssetAmount = _cellar.previewMint(_minimumShares);
+        if (quotedAssetAmount > _assets) revert;
+        _cellar.asset().safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
+        _cellar.mint(_minimumShares, msg.sender);
+    }
 
     function redeem() public {}
 }
