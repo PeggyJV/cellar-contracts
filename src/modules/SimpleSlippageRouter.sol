@@ -36,6 +36,30 @@ contract SimpleSlippageRouter {
     error SimpleSlippageAdaptor__MaxSharesSurpassed(uint256 maxShares, uint256 actualSharesQuoted);
 
     /**
+     * @notice Attempted to carry out mint() tx with less than acceptable minted shares from tx.
+     * @param maxShares specified acceptable min shares amount
+     * @param maxAssets specified max assets to spend on mint
+     * @param actualAssetsQuoted actual amount of assets to come from proposed tx, indicating asset amount not enough for specified shares
+     */
+    error SimpleSlippageAdaptor__MintMinimumSharesSurpassed(
+        uint256 maxShares,
+        uint256 maxAssets,
+        uint256 actualAssetsQuoted
+    );
+
+    /**
+     * @notice Attempted to carry out redeem() tx where assets returned < minimumAssets.
+     * @param maxShares specified acceptable max shares amount
+     * @param minimumAssets specified minimum amount of assets to be returned
+     * @param actualAssetsQuoted actual amount of assets to come from proposed tx
+     */
+    error SimpleSlippageAdaptor__RedeemMaxSharesSurpassed(
+        uint256 maxShares,
+        uint256 minimumAssets,
+        uint256 actualAssetsQuoted
+    );
+
+    /**
      * @notice deposits assets into specified cellar w/ minimumShares expected and deadline specified
      * @param _cellar specified cellar to deposit assets into
      * @param _assets amount of cellar base assets to deposit
@@ -69,7 +93,7 @@ contract SimpleSlippageRouter {
     }
 
     /**
-     * @notice Mints shares from the cellar, and returns shares to receiver IF shares returned meet minimumShares specified by the specified deadline
+     * @notice Mints shares from the cellar and returns shares to receiver IF shares quoted cost are less than specified _assets amount by the specified deadline
      * @param _cellar specified cellar to deposit assets into
      * @param _assets amount of cellar base assets to deposit
      * @param _minimumShares amount of shares required at min from tx
@@ -77,10 +101,29 @@ contract SimpleSlippageRouter {
     function mint(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         uint256 quotedAssetAmount = _cellar.previewMint(_minimumShares);
-        if (quotedAssetAmount > _assets) revert;
+        if (quotedAssetAmount > _assets)
+            revert SimpleSlippageAdaptor__MintMinimumSharesSurpassed(_minimumShares, _assets, quotedAssetAmount);
         _cellar.asset().safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
         _cellar.mint(_minimumShares, msg.sender);
     }
 
-    function redeem() public {}
+    /**
+     * @notice Redeem shares to withdraw assets from the cellar IF withdrawn assets > minimumAssets & tx carried out before deadline.
+     * @param _cellar specified cellar to redeem shares for assets from
+     * @param _assets amount of cellar base assets to receive upon share redemption
+     * @param _maxShares max amount of shares to redeem from tx
+     * @param _deadline block.timestamp that tx must be carried out by
+     */
+    function redeem(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint64 _deadline) public {
+        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+
+        uint256 quotedAssetAmount = _cellar.previewRedeem(_maxShares);
+        if (quotedAssetAmount < _assets)
+            revert SimpleSlippageAdaptor__RedeemMaxSharesSurpassed(_maxShares, _assets, quotedAssetAmount);
+
+        ERC20 cellarToken = ERC20(address(_cellar));
+
+        cellarToken.safeTransferFrom(msg.sender, address(this), shares);
+        uint256 shares = _cellar.redeem(_assets, msg.sender, address(this));
+    }
 }
