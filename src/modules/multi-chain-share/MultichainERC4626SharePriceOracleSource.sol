@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { ERC4626SharePriceOracle, Math, ERC4626, ERC20 } from "src/base/ERC4626SharePriceOracle.sol";
-import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import { IRouterClient } from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 

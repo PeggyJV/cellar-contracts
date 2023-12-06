@@ -8,7 +8,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { DestinationMinter } from "./DestinationMinter.sol";
-import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import { IRouterClient } from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
 /**

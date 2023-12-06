@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { ERC4626SharePriceOracle, Math, ERC4626 } from "src/base/ERC4626SharePriceOracle.sol";
 import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
-import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import { IRouterClient } from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
 // TODO also there is nothing enforcing that the oracles on the two chains are configured with the same values.
 // But we would really need to enforce this using a CCIP creation method like the cross chain shares, but this is more complicated
