@@ -5,8 +5,8 @@ import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.s
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { ERC4626SharePriceOracle, IRegistry, IRegistrar } from "src/base/ERC4626SharePriceOracle.sol";
-import { MultiChainERC4626SharePriceOracleSource } from "src/modules/multi-chain-share/MultiChainERC4626SharePriceOracleSource.sol";
-import { MultiChainERC4626SharePriceOracleDestination } from "src/modules/multi-chain-share/MultiChainERC4626SharePriceOracleDestination.sol";
+import { MultiChainERC4626SharePriceOracleSource } from "src/modules/multi-chain-share/MultichainERC4626SharePriceOracleSource.sol";
+import { MultiChainERC4626SharePriceOracleDestination } from "src/modules/multi-chain-share/MultichainERC4626SharePriceOracleDestination.sol";
 import { MockCCIPRouter } from "src/mocks/MockCCIPRouter.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { DestinationMinter } from "src/modules/multi-chain-share/DestinationMinter.sol";
