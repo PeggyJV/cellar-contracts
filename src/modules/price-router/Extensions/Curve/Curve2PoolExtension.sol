@@ -168,6 +168,10 @@ contract Curve2PoolExtension is Extension {
         return address(coin) == CURVE_ETH ? WETH : coin;
     }
 
+    /**
+     * @notice Calculate the price of an Curve 2Pool LP token with changing center,
+     *         using priceRouter for underlying pricing.
+     */
     function getLpPrice(uint256 virtualPrice, ERC20 coins0, ERC20 coins1) public view returns (uint256 price) {
         uint256 coins0Usd = priceRouter.getPriceInUSD(coins0);
         uint256 coins1Usd = priceRouter.getPriceInUSD(coins1);
