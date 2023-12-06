@@ -767,7 +767,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     // In practice, usually cellars would have curve positions too (w/ curveAdaptor) but this test file just bypasses that since it is not in the scope of the Convex-Curve Platform development. You'll notice that in the `_createCellarWithCurveLPAsAsset()` helper paired w/ `setup()`
     // testing w/ EthFrxethPool for now
 
-    function testDepositEIN(uint256 assets) external {
+    function testDeposit(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
 
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
@@ -776,29 +776,35 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             EthFrxethToken
         );
 
+        ERC20 EthFrxethTokenERC20 = ERC20(EthFrxethToken);
+
         deal((EthFrxethToken), address(this), assets);
-        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
+        EthFrxethTokenERC20.safeApprove(address(newCellar), assets);
 
         IBaseRewardPool baseRewardPool = IBaseRewardPool(ethFrxethBaseRewardPool);
         ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
         uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(newCellar));
 
-        uint256 oldAssets = ERC20(EthFrxethToken).balanceOf(address(newCellar));
+        uint256 oldAssets = EthFrxethTokenERC20.balanceOf(address(newCellar));
+
+        uint256 userBalance1 = EthFrxethTokenERC20.balanceOf(address(this));
+        assertEq(userBalance1, assets, "Starting amount of CurveLPT in test contract should be `assets`.");
 
         newCellar.deposit(assets, address(this));
 
+        uint256 userBalance2 = EthFrxethTokenERC20.balanceOf(address(this));
         stakedLPTBalance1 = baseRewardPool.balanceOf(address(newCellar)); // not an erc20 balanceOf()
-        cellarLPTBalance1 = ERC20(EthFrxethToken).balanceOf(address(newCellar));
+        cellarLPTBalance1 = EthFrxethTokenERC20.balanceOf(address(newCellar));
         rewardTokenBalance1 = rewardToken.balanceOf(address(newCellar));
+
+        assertEq(userBalance2, 0, "All CurveLPT transferred from test contract to newCellar.");
         // check that correct amount was deposited for cellar
         assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
-
         assertEq(
             oldAssets,
             cellarLPTBalance1,
             "All assets must be transferred from newCellar to Convex-Curve Market except oldAssets upon cellar creation."
         );
-
         assertEq(rewardTokenBalance0, rewardTokenBalance1, "No rewards should have been claimed.");
     }
 
@@ -811,12 +817,22 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             EthFrxethToken
         );
 
+        ERC20 EthFrxethTokenERC20 = ERC20(EthFrxethToken);
+
         deal((EthFrxethToken), address(this), assets);
-        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
+        EthFrxethTokenERC20.safeApprove(address(newCellar), assets);
+
+        uint256 userBalance1 = EthFrxethTokenERC20.balanceOf(address(this));
 
         newCellar.deposit(assets, address(this));
-        newCellar.withdraw(assets - 2, address(this), address(this));
+        newCellar.withdraw(assets, address(this), address(this));
 
+        uint256 userBalance2 = EthFrxethTokenERC20.balanceOf(address(this));
+        assertEq(
+            userBalance2,
+            userBalance1,
+            "All assets should be withdrawn from the cellar position back to the test contract"
+        );
         // asserts, and make sure that rewardToken hasn't been claimed.
     }
 
@@ -1025,9 +1041,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // test claiming without any time past to show that rewards should not be accruing / no transferrance should occur to cellar.
 
-        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            _baseRewardPool,
-            true        );
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(_baseRewardPool, true);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -1041,12 +1055,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _skip(1 days);
 
         // claim rewards and show that reward accrual is actually getting lesser due to lesser amount deposited/staked
-        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            
-            _baseRewardPool,
-            true
-            
-        );
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(_baseRewardPool, true);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // repeat last getReward call
 
@@ -1099,12 +1108,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Now we have the initialAssets amount of LPT in again, we can test that after MORE time with the same mount, more rewards are accrued.
         _skip(10 days);
 
-        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            
-            _baseRewardPool,
-            true
-            
-        );
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(_baseRewardPool, true);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // repeat last getReward call
 
