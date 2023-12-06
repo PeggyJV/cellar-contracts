@@ -575,38 +575,42 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToAddLiquidityToCurve(
         address pool,
         ERC20 token,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmounts,
-        uint256 minLPAmount
+        uint256 minLPAmount,
+        address gauge,
+        bytes4 selector
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 CurveAdaptor.addLiquidity.selector,
                 pool,
                 token,
-                tokens,
                 orderedTokenAmounts,
-                minLPAmount
+                minLPAmount,
+                gauge,
+                selector
             );
     }
 
     function _createBytesDataToAddETHLiquidityToCurve(
         address pool,
         ERC20 token,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying
+        bool useUnderlying,
+        address gauge,
+        bytes4 selector
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 CurveAdaptor.addLiquidityETH.selector,
                 pool,
                 token,
-                tokens,
                 orderedTokenAmounts,
                 minLPAmount,
-                useUnderlying
+                useUnderlying,
+                gauge,
+                selector
             );
     }
 
@@ -614,8 +618,9 @@ contract AdaptorHelperFunctions {
         address pool,
         ERC20 token,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmountsOut
+        uint256[] memory orderedTokenAmountsOut,
+        address gauge,
+        bytes4 selector
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -623,8 +628,9 @@ contract AdaptorHelperFunctions {
                 pool,
                 token,
                 lpTokenAmount,
-                tokens,
-                orderedTokenAmountsOut
+                orderedTokenAmountsOut,
+                gauge,
+                selector
             );
     }
 
@@ -632,9 +638,10 @@ contract AdaptorHelperFunctions {
         address pool,
         ERC20 token,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmountsOut,
-        bool useUnderlying
+        bool useUnderlying,
+        address gauge,
+        bytes4 selector
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -642,18 +649,21 @@ contract AdaptorHelperFunctions {
                 pool,
                 token,
                 lpTokenAmount,
-                tokens,
                 orderedTokenAmountsOut,
-                useUnderlying
+                useUnderlying,
+                gauge,
+                selector
             );
     }
 
     function _createBytesDataToStakeCurveLP(
         address token,
         address gauge,
-        uint256 amount
+        uint256 amount,
+        address pool,
+        bytes4 selector
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CurveAdaptor.stakeInGauge.selector, token, gauge, amount);
+        return abi.encodeWithSelector(CurveAdaptor.stakeInGauge.selector, token, gauge, amount, pool, selector);
     }
 
     function _createBytesDataToUnStakeCurveLP(address gauge, uint256 amount) internal pure returns (bytes memory) {
@@ -704,11 +714,6 @@ contract AdaptorHelperFunctions {
         address _baseRewardPool,
         bool _claimExtras
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                ConvexCurveAdaptor.getRewards.selector,
-                _baseRewardPool,
-                _claimExtras
-            );
+        return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _baseRewardPool, _claimExtras);
     }
 }

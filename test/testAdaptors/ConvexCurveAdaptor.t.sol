@@ -828,7 +828,11 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         newCellar.withdraw(assets, address(this), address(this));
 
         uint256 userBalance2 = EthFrxethTokenERC20.balanceOf(address(this));
-        assertEq(userBalance2, userBalance1, "All assets should be withdrawn from the cellar position back to the test contract");
+        assertEq(
+            userBalance2,
+            userBalance1,
+            "All assets should be withdrawn from the cellar position back to the test contract"
+        );
         // asserts, and make sure that rewardToken hasn't been claimed.
     }
 

@@ -9,20 +9,65 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
-import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title Curve Helper
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
  * @author crispymangoes
  */
-contract CurveHelper is ReentrancyGuard {
+contract CurveHelper {
     using SafeTransferLib for ERC20;
     using Address for address;
     using Strings for uint256;
     using Math for uint256;
 
-    // TODO add mapping of address to bool to validate gauge and pool addresses. Only would be multisig.
+    //========================================= Reentrancy Guard Functions =======================================
+
+    /**
+     * @notice Attempted to read `locked` from unstructured storage, but found uninitialized value.
+     * @dev Most likely an external contract made a delegate call to this contract.
+     */
+    error CurveHelper___StorageSlotNotInitialized();
+
+    /**
+     * @notice Attempted to reenter into this contract.
+     */
+    error CurveHelper___Reentrancy();
+
+    /**
+     * @notice Helper function to read `locked` from unstructured storage.
+     */
+    function readLockedStorage() internal view returns (uint256 locked) {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            locked := sload(position)
+        }
+    }
+
+    /**
+     * @notice Helper function to set `locked` to unstructured storage.
+     */
+    function setLockedStorage(uint256 state) internal {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            sstore(position, state)
+        }
+    }
+
+    /**
+     * @notice nonReentrant modifier that uses unstructured storage.
+     */
+    modifier nonReentrant() virtual {
+        uint256 locked = readLockedStorage();
+        if (locked == 0) revert CurveHelper___StorageSlotNotInitialized();
+        if (locked != 1) revert CurveHelper___Reentrancy();
+
+        setLockedStorage(2);
+
+        _;
+
+        setLockedStorage(1);
+    }
 
     /**
      * @notice Attempted to call a function that requires caller implements `sharePriceOracle`.
@@ -39,7 +84,25 @@ contract CurveHelper is ReentrancyGuard {
      */
     error CurveHelper___MismatchedLengths();
 
+    /**
+     * @notice Attempted to interact with Curve LP tokens while the pool is in a re-entered state.
+     */
     error CurveHelper___PoolInReenteredState();
+
+    /**
+     * @notice While getting pool underlying tokens, more tokens were found than expected.
+     */
+    error CurveHelper___PoolHasMoreTokensThanExpected();
+
+    /**
+     * @notice Native asset repeated twice in add liquidity function.
+     */
+    error CurveHelper___NativeAssetRepeated();
+
+    /**
+     * @notice Attempted a token transfer with zero tokens.
+     */
+    error CurveHelper___ZeroTransferAmount();
 
     /**
      * @notice Native ETH(or token) address on current chain.
@@ -51,8 +114,19 @@ contract CurveHelper is ReentrancyGuard {
      */
     address public immutable nativeWrapper;
 
+    /**
+     * @notice The slot to store value needed to check for re-entrancy.
+     */
+    bytes32 public immutable lockedStoragePosition;
+
     constructor(address _nativeWrapper) {
         nativeWrapper = _nativeWrapper;
+        lockedStoragePosition =
+            keccak256(abi.encode(uint256(keccak256("curve.helper.storage")) - 1)) &
+            ~bytes32(uint256(0xff));
+
+        // Initialize locked storage to 1;
+        setLockedStorage(1);
     }
 
     //========================================= Native Helper Functions =======================================
@@ -62,7 +136,6 @@ contract CurveHelper is ReentrancyGuard {
      */
     receive() external payable {}
 
-    // TODO add nonReentrant
     /**
      * @notice Allows Cellars to interact with Curve pools that use native ETH, by using the adaptor as a middle man.
      * @param pool the curve pool address
@@ -78,10 +151,8 @@ contract CurveHelper is ReentrancyGuard {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying /**onReentrant*/
-    ) external returns (uint256 lpOut) {
-        _verifyCallerIsNotGravity();
-
+        bool useUnderlying
+    ) external nonReentrant returns (uint256 lpTokenDeltaBalance) {
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
 
         uint256 nativeEthAmount;
@@ -89,6 +160,8 @@ contract CurveHelper is ReentrancyGuard {
         // Transfer assets to the adaptor.
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) {
+                if (nativeEthAmount != 0) revert CurveHelper___NativeAssetRepeated();
+
                 // If token is CURVE_ETH, then approve adaptor to spend native wrapper.
                 ERC20(nativeWrapper).safeTransferFrom(msg.sender, address(this), orderedUnderlyingTokenAmounts[i]);
                 // Unwrap native.
@@ -102,18 +175,24 @@ contract CurveHelper is ReentrancyGuard {
             }
         }
 
+        // Generate `add_liquidity` function call data.
         bytes memory data = _curveAddLiquidityEncodedCallData(
             orderedUnderlyingTokenAmounts,
             minLPAmount,
             useUnderlying
         );
 
+        // Track the change in lpToken balance.
+        lpTokenDeltaBalance = lpToken.balanceOf(address(this));
+
         pool.functionCallWithValue(data, nativeEthAmount);
 
         // Send LP tokens back to caller.
-        lpOut = lpToken.balanceOf(address(this));
-        lpToken.safeTransfer(msg.sender, lpOut);
+        lpTokenDeltaBalance = lpToken.balanceOf(address(this)) - lpTokenDeltaBalance;
+        if (lpTokenDeltaBalance == 0) revert CurveHelper___ZeroTransferAmount();
+        lpToken.safeTransfer(msg.sender, lpTokenDeltaBalance);
 
+        // Revoke any unused approvals.
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) != CURVE_ETH) _zeroExternalApproval(underlyingTokens[i], address(this));
         }
@@ -134,12 +213,12 @@ contract CurveHelper is ReentrancyGuard {
         uint256 lpTokenAmount,
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
-        bool useUnderlying /**onReentrant*/
-    ) external returns (uint256[] memory tokensOut) {
-        _verifyCallerIsNotGravity();
-
+        bool useUnderlying
+    ) external nonReentrant returns (uint256[] memory balanceDelta) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
+
+        // Generate `remove_liquidity` function call data.
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
@@ -149,28 +228,36 @@ contract CurveHelper is ReentrancyGuard {
         // Transfer token in.
         lpToken.safeTransferFrom(msg.sender, address(this), lpTokenAmount);
 
-        pool.functionCall(data);
-
-        // Iterate through tokens, update tokensOut.
-        tokensOut = new uint256[](underlyingTokens.length);
-
+        // Track the changes in token balances.
+        balanceDelta = new uint256[](underlyingTokens.length);
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) {
-                // Wrap any ETH we have.
-                uint256 ethBalance = address(this).balance;
-                IWETH9(nativeWrapper).deposit{ value: ethBalance }();
-                // Send WETH back to caller.
-                ERC20(nativeWrapper).safeTransfer(msg.sender, ethBalance);
-                tokensOut[i] = ethBalance;
+                balanceDelta[i] = address(this).balance;
             } else {
-                // Send ERC20 back to caller
-                ERC20 t = ERC20(underlyingTokens[i]);
-                uint256 tBalance = t.balanceOf(address(this));
-                t.safeTransfer(msg.sender, tBalance);
-                tokensOut[i] = tBalance;
+                balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this));
             }
         }
 
+        pool.functionCall(data);
+
+        for (uint256 i; i < underlyingTokens.length; ++i) {
+            if (address(underlyingTokens[i]) == CURVE_ETH) {
+                balanceDelta[i] = address(this).balance - balanceDelta[i];
+                if (balanceDelta[i] == 0) revert CurveHelper___ZeroTransferAmount();
+                // Wrap any ETH we have.
+                IWETH9(nativeWrapper).deposit{ value: balanceDelta[i] }();
+                // Send WETH back to caller.
+                ERC20(nativeWrapper).safeTransfer(msg.sender, balanceDelta[i]);
+            } else {
+                balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this)) - balanceDelta[i];
+                if (balanceDelta[i] == 0) revert CurveHelper___ZeroTransferAmount();
+                // Send ERC20 back to caller
+                ERC20 token = ERC20(underlyingTokens[i]);
+                token.safeTransfer(msg.sender, balanceDelta[i]);
+            }
+        }
+
+        // Revoke any unused approval.
         _zeroExternalApproval(lpToken, pool);
     }
 
@@ -273,17 +360,6 @@ contract CurveHelper is ReentrancyGuard {
     }
 
     /**
-     * @notice If a strategist were somehow able to directly make calls to the proxy functions,
-     *         this internal function will revert, because `msg.sender` in such a scenario
-     *         would be gravity bridge, which does not implement `decimals()`.
-     */
-    function _verifyCallerIsNotGravity() internal view {
-        try Cellar(msg.sender).decimals() {} catch {
-            revert CurveHelper___CallerMustImplementDecimals();
-        }
-    }
-
-    /**
      * @notice Enforces that cellars using Curve positions, use a Share Price Oracle.
      * @dev This is done to help mitigate re-entrancy attacks that have historically targeted Curve Pools.
      */
@@ -310,5 +386,25 @@ contract CurveHelper is ReentrancyGuard {
      */
     function _zeroExternalApproval(ERC20 asset, address spender) private {
         if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
+    }
+
+    /**
+     * @notice Helper function to get the underlying tokens in a Curve pool.
+     */
+    function _getPoolUnderlyingTokens(
+        CurvePool pool,
+        uint256 expectedTokenCount
+    ) internal view returns (ERC20[] memory underlyingTokens) {
+        underlyingTokens = new ERC20[](expectedTokenCount);
+
+        // It is expected behavior that if expectedTokenCount is > than the actual token count, this will revert.
+        for (uint256 i; i < expectedTokenCount; ++i) underlyingTokens[i] = ERC20(pool.coins(i));
+
+        // Make sure expectedTokenCount is correct, and that there are not more tokens.
+        try pool.coins(expectedTokenCount) {
+            revert CurveHelper___PoolHasMoreTokensThanExpected();
+        } catch {
+            // Do nothing we expect this to revert here.
+        }
     }
 }

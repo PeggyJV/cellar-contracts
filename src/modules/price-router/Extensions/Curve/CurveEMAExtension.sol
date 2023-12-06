@@ -93,11 +93,8 @@ contract CurveEMAExtension is Extension {
         return address(coins0) == CURVE_ETH ? WETH : coins0;
     }
 
-    // TODO this code needs to change so that is can optionally handle tokens with rates, and basically take the price_oracle value and multiply by the rate.
-    // Examples are ETHx, sDAI, sFRAX.
     /**
      * @notice Helper function to get the price of an asset using a Curve EMA Oracle.
-     * There are plain pools, crypto pools (concentrated liquidity && non-correlated assets), 
      */
     function getPriceFromCurvePool(
         CurvePool pool,

@@ -77,6 +77,7 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     // ======================================= HAPPY PATH =======================================
     function testUsingExtensionWithUncorrelatedAssets() external {
         _addWethToPriceRouter();
+        _addRethToPriceRouter();
 
         Curve2PoolExtension.ExtensionStorage memory stor;
         PriceRouter.AssetSettings memory settings;
@@ -146,7 +147,16 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Add unsupported asset.
         _addWethToPriceRouter();
 
-        // Pricing call is successful.
+        // Pricing call still fails because coins1 is not supported.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_ASSET_NOT_SUPPORTED.selector))
+        );
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
+
+        // Add unsupported asset.
+        _addRethToPriceRouter();
+
+        // Pricing call is now successful.
         priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
     }
 
@@ -236,5 +246,18 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+    }
+
+    function _addRethToPriceRouter() internal {
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+        stor.inETH = true;
+
+        uint256 price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
+        priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
     }
 }
