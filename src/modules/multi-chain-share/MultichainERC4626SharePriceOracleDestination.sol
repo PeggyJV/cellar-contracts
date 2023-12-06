@@ -6,28 +6,55 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
-// TODO some important notes
-// if the CCIP network is substantially delayed, then state can exist where only 1 oracle is shutdown
-// additionally I could see situations in which the mainnet oracle could be shutdown from an update that was successful
-// on the source chain because the TWAA answers at time of udpate will be different, but
-// hopefully making the TWAA duration much longer than ccip send messages will mitigate this
-// Also by noting that only relativey stable cellars will be made crosschain, IE we would never have a cross chain trading cellar, or curve cellar
-// Also making the allowed answer change upper and lower a bit more generous.
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
 // TODO also there is nothing enforcing that the oracles on the two chains are configured with the same values.
 // But we would really need to enforce this using a CCIP creation method like the cross chain shares, but this is more complicated
 contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle, CCIPReceiver {
     using Math for uint256;
 
-    error SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    // ========================================= CONSTANTS =========================================
+
+    /**
+     * @notice CCIP Message data used to indicate source oracles killSwitch was activated,
+     *         so destination oracle should activate its killSwitch.
+     */
+    bytes public constant KILL_SWITCH_ACTIVATED_DATA = hex"DEAD";
+
+    //============================== ERRORS ===============================
+
+    error MultiChainERC4626SharePriceOracleDestination___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
+    error MultiChainERC4626SharePriceOracleDestination___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error MultiChainERC4626SharePriceOracleDestination___NotSupported(); /// TODO test
+
+    //============================== EVENTS ===============================
+
+    /**
+     * @notice Emitted when source oracle has its killSwitch activated, so this oracles killSwitch is activated.
+     * @param timestamp unix timestamp when killSwitch was activated
+     */
+    event KillSwitchActivatedOnSource(uint256 timestamp);
+
+    //============================== MODIFIERS ===============================
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != sourceChainSelector) revert SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != sourceOracle) revert SenderNotAllowlisted(_sender);
+        if (_sourceChainSelector != sourceChainSelector)
+            revert MultiChainERC4626SharePriceOracleDestination___SourceChainNotAllowlisted(_sourceChainSelector);
+        if (_sender != sourceOracle)
+            revert MultiChainERC4626SharePriceOracleDestination___SenderNotAllowlisted(_sender);
         _;
     }
 
+    //============================== IMMUTABLES ===============================
+
+    /**
+     * @notice The address on source chain sending performData.
+     */
     address public immutable sourceOracle;
+
+    /**
+     * @notice The CCIP chain selector of source chain.
+     */
     uint64 public immutable sourceChainSelector;
 
     constructor(
@@ -66,14 +93,25 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
 
     //============================== CHAINLINK AUTOMATION ===============================
 
+    /**
+     * @notice Automation is not supported
+     */
     function checkUpkeep(bytes calldata) public pure override returns (bool, bytes memory) {
-        revert("not supported");
+        revert MultiChainERC4626SharePriceOracleDestination___NotSupported();
     }
 
+    /**
+     * @notice Automation is not supported
+     */
     function performUpkeep(bytes calldata) public pure override {
-        revert("not supported");
+        revert MultiChainERC4626SharePriceOracleDestination___NotSupported();
     }
 
+    //============================== CCIP RECEIVER ===============================
+
+    /**
+     * @notice Implement internal _ccipRecevie function logic.
+     */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
     )
@@ -81,21 +119,14 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
         override
         onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
     {
-        (bytes memory performData, bool sourceKillSwitch) = abi.decode(any2EvmMessage.data, (bytes, bool));
-        if (sourceKillSwitch) {
-            // TODO emit an event
+        if (
+            any2EvmMessage.data.length == 2 && keccak256(any2EvmMessage.data) == keccak256(KILL_SWITCH_ACTIVATED_DATA)
+        ) {
             killSwitch = true;
+            emit KillSwitchActivatedOnSource(block.timestamp);
         } else {
-            _performUpkeep(performData);
-            // It is possible for this contracts killWwitch to be triggered, but not the sources.
-            // block timestamp of kill switch calcualtions differing between source and dest.
-            if (killSwitch) {
-                killSwitch = false;
-                // TODO emit an event that the kill switch was reset?
-            }
+            // Pass in false so we do not run killswitch checks.
+            _performUpkeep(any2EvmMessage.data, false);
         }
-        // Test ideas
-        // messages come in out of order
-        // handle scenarios where kill switch is triggered.
     }
 }

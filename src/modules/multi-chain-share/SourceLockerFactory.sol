@@ -10,16 +10,26 @@ import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterCl
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
+// TODO should we add a mapping from share to locker, and enforce shares are unique?
 contract SourceLockerFactory is Owned, CCIPReceiver {
     using SafeTransferLib for ERC20;
 
+    // ========================================= GLOBAL STATE =========================================
+
+    /**
+     * @notice Destination Minter Factory.
+     */
     address public destinationMinterFactory;
+
+    //============================== ERRORS ===============================
+
+    error SourceLockerFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector);
+    error SourceLockerFactory___SenderNotAllowlisted(address sender);
+    error SourceLockerFactory___NotEnoughLink(); // TODO check for revert
+
     uint64 public immutable sourceChainSelector;
     uint64 public immutable destinationChainSelector;
     ERC20 public immutable LINK;
-
-    error SourceLockerFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SourceLockerFactory___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != destinationChainSelector)
@@ -72,9 +82,9 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
         uint256 fees = router.getFee(destinationChainSelector, message);
 
-        if (fees > LINK.balanceOf(address(this))) revert("Not enough link");
+        if (fees > LINK.balanceOf(address(this))) revert SourceLockerFactory___NotEnoughLink();
 
-        LINK.approve(address(router), fees);
+        LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
         newLocker = address(locker);

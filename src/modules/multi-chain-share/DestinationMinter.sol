@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Owned } from "@solmate/auth/Owned.sol";
-import { Math } from "src/utils/Math.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
@@ -11,15 +9,20 @@ import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterCl
 
 contract DestinationMinter is ERC20, CCIPReceiver {
     using SafeTransferLib for ERC20;
-    address public immutable targetSource;
-    uint64 public immutable sourceChainSelector;
-    uint64 public immutable destinationChainSelector;
-    ERC20 public immutable LINK;
 
-    error DestinationMinter___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error DestinationMinter___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
-    error DestinationMinter___InvalidTo(); // Used when the sender has not been allowlisted by the contract owner.
-    error DestinationMinter___FeeTooHigh(); // Used when the sender has not been allowlisted by the contract owner.
+    //============================== ERRORS ===============================
+
+    error DestinationMinter___SourceChainNotAllowlisted(uint64 sourceChainSelector);
+    error DestinationMinter___SenderNotAllowlisted(address sender);
+    error DestinationMinter___InvalidTo();
+    error DestinationMinter___FeeTooHigh();
+
+    //============================== EVENTS ===============================
+
+    event BridgeToSource(uint256 amount, address to);
+    event BridgeFromSource(uint256 amount, address to);
+
+    //============================== MODIFIERS ===============================
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != sourceChainSelector)
@@ -27,6 +30,28 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         if (_sender != targetSource) revert DestinationMinter___SenderNotAllowlisted(_sender);
         _;
     }
+
+    //============================== IMMUTABLES ===============================
+
+    /**
+     * @notice The address of the SourceLocker on source chain.
+     */
+    address public immutable targetSource;
+
+    /**
+     * @notice The CCIP source chain selector.
+     */
+    uint64 public immutable sourceChainSelector;
+
+    /**
+     * @notice The CCIP destination chain selector.
+     */
+    uint64 public immutable destinationChainSelector;
+
+    /**
+     * @notice This networks LINK contract.
+     */
+    ERC20 public immutable LINK;
 
     // TODO add in value so we can set the message gas limit as an immutable
     constructor(
@@ -45,28 +70,11 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         LINK = ERC20(_link);
     }
 
-    // CCIP Receive, sender must be targetSource
-    // mint shares to some address
-    function _ccipReceive(
-        Client.Any2EVMMessage memory any2EvmMessage
-    )
-        internal
-        override
-        onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
-    {
-        (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
-        _mint(to, amount);
-    }
+    //============================== BRIDGE ===============================
 
-    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
-        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
-
-        IRouterClient router = IRouterClient(this.getRouter());
-
-        fee = router.getFee(sourceChainSelector, message);
-    }
-
-    // On token burn, send CCIP message to targetSource with amount, and to address
+    /**
+     * @notice Bridge shares back to source chain.
+     */
     function bridgeToSource(uint256 amount, address to, uint256 maxLinkToPay) external returns (bytes32 messageId) {
         if (to == address(0)) revert DestinationMinter___InvalidTo();
         _burn(msg.sender, amount);
@@ -81,11 +89,47 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
         LINK.safeTransferFrom(msg.sender, address(this), fees);
 
-        LINK.approve(address(router), fees);
+        LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(sourceChainSelector, message);
+        emit BridgeToSource(amount, to);
     }
 
+    //============================== VIEW FUNCTIONS ===============================
+
+    /**
+     * @notice Preview fee required to bridge shares back to source.
+     */
+    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        fee = router.getFee(sourceChainSelector, message);
+    }
+
+    //============================== CCIP RECEIVER ===============================
+
+    /**
+     * @notice Implement internal _ccipRecevie function logic.
+     */
+    function _ccipReceive(
+        Client.Any2EVMMessage memory any2EvmMessage
+    )
+        internal
+        override
+        onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
+    {
+        (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
+        _mint(to, amount);
+        emit BridgeFromSource(amount, to);
+    }
+
+    //============================== INTERNAL HELPER ===============================
+
+    /**
+     * @notice Build the CCIP message to send to source locker.
+     */
     function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
         message = Client.EVM2AnyMessage({
             receiver: abi.encode(targetSource),

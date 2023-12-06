@@ -11,18 +11,27 @@ import { DestinationMinter } from "./DestinationMinter.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
+// TODO a way to set gas limit for all these contracts sending CCIP messages. Maybe immutable maybe owner?
 contract DestinationMinterFactory is Owned, CCIPReceiver {
     using SafeTransferLib for ERC20;
 
-    address public immutable sourceLockerFactory;
-    uint64 public immutable sourceChainSelector;
-    uint64 public immutable destinationChainSelector;
-    ERC20 public immutable LINK;
+    // ========================================= GLOBAL STATE =========================================
+
+    mapping(bytes32 => bool) public canRetryFailedMessage;
+
+    //============================== ERRORS ===============================
+
+    error DestinationMinterFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector);
+    error DestinationMinterFactory___SenderNotAllowlisted(address sender);
+    error DestinationMinterFactory___NotEnoughLink(); // TODO check for revert
+    error DestinationMinterFactory___CanNotRetryCallback(); // TODO check for revert
+
+    //============================== EVENTS ===============================
 
     event CallBackMessageId(bytes32 id);
+    event FailedToSendCallBack(address source, address minter);
 
-    error DestinationMinterFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error DestinationMinterFactory___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    //============================== MODIFIERS ===============================
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != sourceChainSelector)
@@ -30,6 +39,28 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
         if (_sender != sourceLockerFactory) revert DestinationMinterFactory___SenderNotAllowlisted(_sender);
         _;
     }
+
+    //============================== IMMUTABLES ===============================
+
+    /**
+     * @notice The address of the SourceLockerFactory.
+     */
+    address public immutable sourceLockerFactory;
+
+    /**
+     * @notice The CCIP source chain selector.
+     */
+    uint64 public immutable sourceChainSelector;
+
+    /**
+     * @notice The CCIP destination chain selector.
+     */
+    uint64 public immutable destinationChainSelector;
+
+    /**
+     * @notice This networks LINK contract.
+     */
+    ERC20 public immutable LINK;
 
     // TODO add in value so we can set the message gas limit as an immutable
     constructor(
@@ -46,9 +77,46 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
         LINK = ERC20(_link);
     }
 
-    // CCIP Recieve accepts message from SourceLockerFactory with following values.
-    //new Source Target address, target.name(), target.symbol(), target.decimals()
-    // Deploys a new Destination Minter
+    //============================== ADMIN FUNCTIONS ===============================
+
+    /**
+     * @notice Allows admin to withdraw ERC20s from this factory contract.
+     */
+    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
+        token.safeTransfer(to, amount);
+    }
+
+    //============================== RETRY FUNCTIONS ===============================
+
+    // TODO test this functionality.
+    /**
+     * @notice Allows anyone to retry sending callback to source locker factory.
+     */
+    function retryCallback(address targetSource, address targetMinter) external {
+        bytes32 messageDataHash = keccak256(abi.encode(targetSource, targetMinter));
+        if (!canRetryFailedMessage[messageDataHash]) revert DestinationMinterFactory___CanNotRetryCallback();
+
+        canRetryFailedMessage[messageDataHash] = false;
+
+        Client.EVM2AnyMessage memory message = _buildMessage(targetSource, targetMinter);
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        uint256 fees = router.getFee(sourceChainSelector, message);
+
+        if (fees > LINK.balanceOf(address(this))) revert DestinationMinterFactory___NotEnoughLink();
+
+        LINK.safeApprove(address(router), fees);
+
+        bytes32 messageId = router.ccipSend(sourceChainSelector, message);
+        emit CallBackMessageId(messageId);
+    }
+
+    //============================== CCIP RECEIVER ===============================
+
+    /**
+     * @notice Implement internal _ccipRecevie function logic.
+     */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
     )
@@ -60,20 +128,52 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
             any2EvmMessage.data,
             (address, string, string, uint8)
         );
-        DestinationMinter minter = new DestinationMinter(
-            this.getRouter(),
-            targetSource,
-            name,
-            symbol,
-            decimals,
-            sourceChainSelector,
-            destinationChainSelector,
-            address(LINK)
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        address targetMinter = address(
+            new DestinationMinter(
+                address(router),
+                targetSource,
+                name,
+                symbol,
+                decimals,
+                sourceChainSelector,
+                destinationChainSelector,
+                address(LINK)
+            )
         );
         // CCIP sends message back to SourceLockerFactory with new DestinationMinter address, and corresponding source locker
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
+        Client.EVM2AnyMessage memory message = _buildMessage(targetSource, targetMinter);
+
+        uint256 fees = router.getFee(sourceChainSelector, message);
+
+        if (fees > LINK.balanceOf(address(this))) {
+            // Fees is larger than the LINK in contract, so update `canRetryFailedMessage`, and return.
+            bytes32 messageDataHash = keccak256(abi.encode(targetSource, targetMinter));
+            canRetryFailedMessage[messageDataHash] = true;
+            emit FailedToSendCallBack(targetSource, targetMinter);
+            return;
+        }
+
+        LINK.safeApprove(address(router), fees);
+
+        bytes32 messageId = router.ccipSend(sourceChainSelector, message);
+        emit CallBackMessageId(messageId);
+    }
+
+    //============================== INTERNAL HELPER FUNCTIONS ===============================
+
+    /**
+     * @notice Build the CCIP message to send to source locker factory.
+     */
+    function _buildMessage(
+        address targetSource,
+        address targetMinter
+    ) internal view returns (Client.EVM2AnyMessage memory message) {
+        message = Client.EVM2AnyMessage({
             receiver: abi.encode(sourceLockerFactory),
-            data: abi.encode(targetSource, address(minter)),
+            data: abi.encode(targetSource, targetMinter),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
@@ -81,20 +181,5 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
             ),
             feeToken: address(LINK)
         });
-
-        IRouterClient router = IRouterClient(this.getRouter());
-
-        uint256 fees = router.getFee(sourceChainSelector, message);
-
-        if (fees > LINK.balanceOf(address(this))) revert("Not enough link");
-
-        LINK.approve(address(router), fees);
-
-        bytes32 messageId = router.ccipSend(sourceChainSelector, message);
-        emit CallBackMessageId(messageId);
-    }
-
-    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
-        token.safeTransfer(to, amount);
     }
 }

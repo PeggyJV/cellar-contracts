@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Owned } from "@solmate/auth/Owned.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
@@ -10,19 +9,30 @@ import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterCl
 
 contract SourceLocker is CCIPReceiver {
     using SafeTransferLib for ERC20;
-    ERC20 public immutable shareToken;
-    address public immutable factory;
-    address public targetDestination;
-    uint64 public immutable sourceChainSelector;
-    uint64 public immutable destinationChainSelector;
-    ERC20 public immutable LINK;
 
-    error SourceLocker___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error SourceLocker___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    // ========================================= GLOBAL STATE =========================================
+
+    /**
+     * @notice The Destination Minter on destination chain.
+     */
+    address public targetDestination;
+
+    //============================== ERRORS ===============================
+
+    error SourceLocker___SourceChainNotAllowlisted(uint64 sourceChainSelector);
+    error SourceLocker___SenderNotAllowlisted(address sender);
     error SourceLocker___OnlyFactory();
     error SourceLocker___TargetDestinationAlreadySet();
     error SourceLocker___InvalidTo();
     error SourceLocker___FeeTooHigh();
+    error SourceLocker___TargetDestinationNotSet();
+
+    //============================== EVENTS ===============================
+
+    event BridgeToDestination(uint256 amount, address to);
+    event BridgeFromDestination(uint256 amount, address to);
+
+    //============================== MODIFIERS ===============================
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != destinationChainSelector)
@@ -30,6 +40,33 @@ contract SourceLocker is CCIPReceiver {
         if (_sender != targetDestination) revert SourceLocker___SenderNotAllowlisted(_sender);
         _;
     }
+
+    //============================== IMMUTABLES ===============================
+
+    /**
+     * @notice ERC20 share token to bridge.
+     */
+    ERC20 public immutable shareToken;
+
+    /**
+     * @notice The address of the SourceLockerFactory.
+     */
+    address public immutable factory;
+
+    /**
+     * @notice The CCIP source chain selector.
+     */
+    uint64 public immutable sourceChainSelector;
+
+    /**
+     * @notice The CCIP destination chain selector.
+     */
+    uint64 public immutable destinationChainSelector;
+
+    /**
+     * @notice This networks LINK contract.
+     */
+    ERC20 public immutable LINK;
 
     // TODO add in value so we can set the message gas limit as an immutable
     constructor(
@@ -47,6 +84,11 @@ contract SourceLocker is CCIPReceiver {
         LINK = ERC20(_link);
     }
 
+    //============================== ONLY FACTORY ===============================
+
+    /**
+     * @notice Allows factory to set target destination.
+     */
     function setTargetDestination(address _targetDestination) external {
         if (msg.sender != factory) revert SourceLocker___OnlyFactory();
         if (targetDestination != address(0)) revert SourceLocker___TargetDestinationAlreadySet();
@@ -54,29 +96,12 @@ contract SourceLocker is CCIPReceiver {
         targetDestination = _targetDestination;
     }
 
-    // CCIP Receieve sender must be targetDestination
-    // transfer shareToken amount and to to
-    function _ccipReceive(
-        Client.Any2EVMMessage memory any2EvmMessage
-    )
-        internal
-        override
-        onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
-    {
-        (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
-        shareToken.safeTransfer(to, amount);
-    }
+    //============================== BRIDGE ===============================
 
-    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
-        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
-
-        IRouterClient router = IRouterClient(this.getRouter());
-
-        fee = router.getFee(destinationChainSelector, message);
-    }
-
-    // TODO revert if target destination is not set
-    // on shareToken lock, transfer shareTokens in, and CCIP Send to targetDestination amount and to address
+    /**
+     * @notice Bridge shares to destination chain.
+     * @notice Reverts if target destination is not yet set.
+     */
     function bridgeToDestination(
         uint256 amount,
         address to,
@@ -95,14 +120,53 @@ contract SourceLocker is CCIPReceiver {
 
         LINK.safeTransferFrom(msg.sender, address(this), fees);
 
-        LINK.approve(address(router), fees);
+        LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
+        emit BridgeToDestination(amount, to);
     }
 
+    //============================== VIEW FUNCTIONS ===============================
+
+    /**
+     * @notice Preview fee required to bridge shares to destination.
+     */
+    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        fee = router.getFee(destinationChainSelector, message);
+    }
+
+    //============================== CCIP RECEIVER ===============================
+
+    /**
+     * @notice Implement internal _ccipRecevie function logic.
+     */
+    function _ccipReceive(
+        Client.Any2EVMMessage memory any2EvmMessage
+    )
+        internal
+        override
+        onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
+    {
+        (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
+        shareToken.safeTransfer(to, amount);
+        emit BridgeFromDestination(amount, to);
+    }
+
+    //============================== INTERNAL HELPER ===============================
+
+    /**
+     * @notice Build the CCIP message to send to destination minter.
+     * @notice Reverts if target destination is not yet set.
+     */
     function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
+        address _targetDestination = targetDestination;
+        if (_targetDestination == address(0)) revert SourceLocker___TargetDestinationNotSet();
         message = Client.EVM2AnyMessage({
-            receiver: abi.encode(targetDestination),
+            receiver: abi.encode(_targetDestination),
             data: abi.encode(amount, to),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
