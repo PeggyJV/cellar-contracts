@@ -270,16 +270,100 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
     // For revert tests, check that reversion occurs and then resolve it showing a passing tx.
 
-    function testBadDeadline() external {
+    function testBadDeadline(uint256 assets) external {
         // test revert in all functions
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // deal USDC assets to test contract
+        deal(address(USDC), address(this), assets);
+        deposit1 = assets / 2;
+        minShares1 = deposit1;
+        deadline1 = uint64(block.timestamp + 1 days);
+        _skip(2 days);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+            )
+        );
+        simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+            )
+        );
+        simpleSlippageRouter.withdraw(cellar, deposit1, minShares1, deadline1);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+            )
+        );
+        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+            )
+        );
+        simpleSlippageRouter.redeem(cellar, deposit1, minShares1, deadline1);
     }
 
-    function testDepositMinimumSharesUnmet() external {
+    function testDepositMinimumSharesUnmet(uint256 assets) external {
         // test revert in deposit()
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // deal USDC assets to test contract
+        deal(address(USDC), address(this), assets);
+        deposit1 = assets / 2;
+        minShares1 = deposit1;
+        deadline1 = uint64(block.timestamp + 1 days);
+
+        // manipulate cellar to have lots of USDC and thus not a 1:1 ratio anymore for shares
+        uint256 originalBalance = USDC.balanceOf(address(cellar));
+        deal(address(USDC), address(cellar), assets * 10);
+        uint256 quoteShares = cellar.previewDeposit(assets);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    SimpleSlippageRouter.SimpleSlippageAdaptor__DepositMinimumSharesUnmet.selector,
+                    minShares1,
+                    quoteShares
+                )
+            )
+        ); // TODO: bug - hard to outline what outline what actual shares reported in error will be because it relies on having a token transfer first in the actual deposit() function.
+        simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
+
+        // manipulate back so the deposit should resolve.
+        deal(address(USDC), address(cellar), originalBalance);
+        simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1); // TODO: make sure this is good
     }
 
     function testWithdrawMaxSharesSurpassed() external {
         // test revert in withdraw()
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // deal USDC assets to test contract
+        deal(address(USDC), address(this), assets);
+        deposit1 = assets / 2;
+        minShares1 = deposit1;
+        deadline1 = uint64(block.timestamp + 1 days);
+
+        simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
+
+        // manipulate cellar to have lots of shares and thus not a 1:1 ratio anymore for withdrawals
+        uint256 originalBalance = USDC.balanceOf(address(cellar));
+        deal(address(USDC), address(cellar), assets * 10);
+        uint256 quoteShares = cellar.previewDeposit(assets);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    SimpleSlippageRouter.SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed.selector,
+                    minShares1,
+                    quoteShares
+                )
+            )
+        ); // TODO: bug - hard to outline what outline what actual shares reported in error will be because it relies on having a token transfer first in the actual deposit() function.
     }
 
     function testMintMinimumSharesSurpassed() external {
@@ -295,4 +379,11 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
     // Test the deposit function combined with the withdraw, mint, and redeem functions. This would have multiple users in it. It's a more full integration test.
 
     //============================================ Helper Functions ===========================================
+
+    function _skip(uint256 time) internal {
+        uint256 blocksToRoll = time / 12; // Assumes an avg 12 second block time.
+        skip(time);
+        vm.roll(block.number + blocksToRoll);
+        mockUsdcUsd.setMockUpdatedAt(block.timestamp);
+    }
 }
