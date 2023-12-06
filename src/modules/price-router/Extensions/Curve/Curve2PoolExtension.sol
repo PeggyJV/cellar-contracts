@@ -105,7 +105,6 @@ contract Curve2PoolExtension is Extension {
         if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
             revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
 
-        // TODO is there a better check so we can validate if the pool center moves or not?
         // Make sure isCorrelated is correct.
         if (stor.isCorrelated) {
             // If this is true, then calling lp_price() should revert.
