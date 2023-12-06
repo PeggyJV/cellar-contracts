@@ -6,8 +6,9 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import { SafeCCIPReceiver } from "src/utils/SafeCCIPReceiver.sol";
 
-contract DestinationMinter is ERC20, CCIPReceiver {
+contract DestinationMinter is ERC20, SafeCCIPReceiver {
     using SafeTransferLib for ERC20;
 
     //============================== ERRORS ===============================
@@ -21,15 +22,6 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     event BridgeToSource(uint256 amount, address to);
     event BridgeFromSource(uint256 amount, address to);
-
-    //============================== MODIFIERS ===============================
-
-    modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
-        if (_sourceChainSelector != sourceChainSelector)
-            revert DestinationMinter___SourceChainNotAllowlisted(_sourceChainSelector);
-        if (_sender != targetSource) revert DestinationMinter___SenderNotAllowlisted(_sender);
-        _;
-    }
 
     //============================== IMMUTABLES ===============================
 
@@ -63,7 +55,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
         address _link
-    ) ERC20(_name, _symbol, _decimals) CCIPReceiver(_router) {
+    ) ERC20(_name, _symbol, _decimals) SafeCCIPReceiver(_router) {
         targetSource = _targetSource;
         sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
@@ -113,16 +105,18 @@ contract DestinationMinter is ERC20, CCIPReceiver {
     /**
      * @notice Implement internal _ccipRecevie function logic.
      */
-    function _ccipReceive(
-        Client.Any2EVMMessage memory any2EvmMessage
-    )
-        internal
-        override
-        onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
-    {
+    function _processMessage(Client.Any2EVMMessage memory any2EvmMessage) internal override {
         (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
         _mint(to, amount);
         emit BridgeFromSource(amount, to);
+    }
+
+    function _isSenderOk(bytes memory sender) internal view override returns (bool) {
+        return abi.decode(sender, (address)) == targetSource;
+    }
+
+    function _isSourceChainOk(uint64 _sourceChainSelector) internal view override returns (bool) {
+        return _sourceChainSelector == sourceChainSelector;
     }
 
     //============================== INTERNAL HELPER ===============================

@@ -97,8 +97,11 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         Client.Any2EVMMessage memory message = router.getLastMessage();
 
+        uint256 minSafeGas = minter.getMinimumGasToInsureSafeFailure();
         vm.prank(address(router));
-        minter.ccipReceive(message);
+        minter.ccipReceive{ gas: minSafeGas }(message);
+
+        minter.retryFailedMessage(message);
 
         assertEq(amountToDesintation, minter.balanceOf(address(this)), "Should have minted shares.");
         assertEq(0, cellar.balanceOf(address(this)), "Should have spent Cellar shares.");
@@ -288,5 +291,7 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         sourceLockerFactory.ccipReceive(message);
 
         minter = DestinationMinter(locker.targetDestination());
+
+        minter.initialize(2_100);
     }
 }
