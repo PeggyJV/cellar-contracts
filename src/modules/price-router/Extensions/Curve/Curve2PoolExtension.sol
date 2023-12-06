@@ -101,14 +101,22 @@ contract Curve2PoolExtension is Extension {
         if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent0)))
             revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
 
+        // Make sure underlyingOrConstituent1 is supported.
+        if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
+            revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
+
+        // TODO is there a better check so we can validate if the pool center moves or not?
+        // Make sure isCorrelated is correct.
         if (stor.isCorrelated) {
-            // pool.lp_price() not available
-            // Make sure coins[1] is also supported.
-            if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
-                revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
+            // If this is true, then calling lp_price() should revert.
+            try pool.lp_price() {
+                // If it was successful revert.
+                revert Curve2PoolExtension_POOL_NOT_SUPPORTED();
+            } catch {}
         } else {
-            // Make sure pool.lp_price() is available.
+            // else we should be able to call lp_price().
             try pool.lp_price() {} catch {
+                // If it was not successful revert.
                 revert Curve2PoolExtension_POOL_NOT_SUPPORTED();
             }
         }
@@ -142,9 +150,10 @@ contract Curve2PoolExtension is Extension {
             uint256 minPrice = price0 < price1 ? price0 : price1;
             price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
         } else {
-            price = pool.lp_price().mulDivDown(
-                priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0)),
-                10 ** curveDecimals
+            price = getLpPrice(
+                pool.get_virtual_price(),
+                ERC20(stor.underlyingOrConstituent0),
+                ERC20(stor.underlyingOrConstituent1)
             );
         }
     }
@@ -157,5 +166,28 @@ contract Curve2PoolExtension is Extension {
         ERC20 coin = ERC20(pool.coins(index));
         // Handle Curve Pools that use Curve ETH instead of WETH.
         return address(coin) == CURVE_ETH ? WETH : coin;
+    }
+
+    /**
+     * @notice Calculate the price of an Curve 2Pool LP token with changing center,
+     *         using priceRouter for underlying pricing.
+     */
+    function getLpPrice(uint256 virtualPrice, ERC20 coins0, ERC20 coins1) public view returns (uint256 price) {
+        uint256 coins0Usd = priceRouter.getPriceInUSD(coins0);
+        uint256 coins1Usd = priceRouter.getPriceInUSD(coins1);
+        price = 2 * virtualPrice.mulDivDown(_sqrt(coins1Usd), _sqrt(coins0Usd));
+        price = price.mulDivDown(coins0Usd, 10 ** curveDecimals);
+    }
+
+    /**
+     * @notice Calculates the square root of the input.
+     */
+    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
+        uint256 z = (_x + 1) / 2;
+        y = _x;
+        while (z < y) {
+            y = z;
+            z = (_x / z + z) / 2;
+        }
     }
 }
