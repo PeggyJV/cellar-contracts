@@ -29,6 +29,3 @@
 [submodule "lib/pendle-core-v2-public"]
 	path = lib/pendle-core-v2-public
 	url = https://github.com/pendle-finance/pendle-core-v2-public
-[submodule "lib/ccip"]
-	path = lib/ccip
-	url = https://github.com/smartcontractkit/ccip
