@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-interface CurvePool {
+interface CurvePoolETH {
     function price_oracle() external view returns (uint256);
 
     function price_oracle(uint256 k) external view returns (uint256);
@@ -22,5 +22,5 @@ interface CurvePool {
 
     function withdraw_admin_fees() external;
 
-    function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns (uint256);
+    function exchange(uint256 i, uint256 j, uint256 dx, uint256 min_dy) external payable returns (uint256);
 }

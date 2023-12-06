@@ -28,7 +28,8 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(uint256 pid, address baseRewardPool, ERC20 lpt, CurvePool pool, bytes4 selector)
     // Where:
-    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with, and `baseRewardPool` is the main base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it (that likely follow the same `BaseRewardPool` smart contract schematic). So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve.
+    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with
+    // `baseRewardPool` is the main base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it (that likely follow the same `BaseRewardPool` smart contract schematic). So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve.
     // `lpt` is the Curve LPT that is deposited into the respective Convex-Curve Platform market.
     // `pool` is the Curve liquidity pool adhering to the CurvePool interface
     // `selector` is the function signature specified within adaptorData to be triggered within the callee contract
@@ -238,10 +239,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
      */
     function withdrawFromBaseRewardPoolAsLPT(address _baseRewardPool, uint256 _amount, bool _claim) public {
         IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
-
-        if (_amount == type(uint256).max) {
-            _amount = baseRewardPool.balanceOf(address(this));
-        }
+        _amount = _maxAvailable(ERC20(_baseRewardPool), _amount);
         baseRewardPool.withdrawAndUnwrap(_amount, _claim);
     }
 

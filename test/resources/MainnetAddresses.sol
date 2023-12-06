@@ -19,6 +19,7 @@ contract MainnetAddresses {
     address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
 
     // DeFi Ecosystem
+    address public ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address public uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -81,6 +82,7 @@ contract MainnetAddresses {
     address public CRV_USD_FEED = 0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f;
     address public CVX_USD_FEED = 0xd962fC30A72A84cE50161031391756Bf2876Af5D;
     address public CVX_ETH_FEED = 0xC9CbF687f43176B302F03f5e58470b77D07c61c6;
+    address public CRVUSD_USD_FEED = 0xEEf0C605546958c1f899b6fB336C20671f9cD49F;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
