@@ -11,13 +11,29 @@ import { DestinationMinter } from "./DestinationMinter.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
-// TODO a way to set gas limit for all these contracts sending CCIP messages. Maybe immutable maybe owner?
+/**
+ * @title DestinationMinterFactory
+ * @notice Works with SourceLockerFactory to create new bridgeable ERC4626 Shares.
+ * @author crispymangoes
+ */
 contract DestinationMinterFactory is Owned, CCIPReceiver {
     using SafeTransferLib for ERC20;
 
     // ========================================= GLOBAL STATE =========================================
-
+    /**
+     * @notice Mapping to keep track of failed CCIP messages, and retry them at a later time.
+     */
     mapping(bytes32 => bool) public canRetryFailedMessage;
+
+    /**
+     * @notice The message gas limit to use for CCIP messages.
+     */
+    uint256 public messageGasLimit;
+
+    /**
+     * @notice The message gas limit DestinationMinter's will use to send messages to their SourceLockers.
+     */
+    uint256 public minterMessageGasLimit;
 
     //============================== ERRORS ===============================
 
@@ -62,19 +78,22 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
      */
     ERC20 public immutable LINK;
 
-    // TODO add in value so we can set the message gas limit as an immutable
     constructor(
         address _owner,
         address _router,
         address _sourceLockerFactory,
         uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
-        address _link
+        address _link,
+        uint256 _messageGasLimit,
+        uint256 _minterMessageGasLimit
     ) Owned(_owner) CCIPReceiver(_router) {
         sourceLockerFactory = _sourceLockerFactory;
         sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
+        messageGasLimit = _messageGasLimit;
+        minterMessageGasLimit = _minterMessageGasLimit;
     }
 
     //============================== ADMIN FUNCTIONS ===============================
@@ -84,6 +103,23 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
      */
     function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
         token.safeTransfer(to, amount);
+    }
+
+    /**
+     * @notice Allows admin to set this factories callback CCIP message gas limit.
+     * @dev Note Owner can set a gas limit that is too low, and cause the callback messages to run out of gas.
+     *           If this happens the owner should raise gas limit, and call `deploy` on SourceLockerFactory again.
+     */
+    function setMessageGasLimit(uint256 limit) external onlyOwner {
+        messageGasLimit = limit;
+    }
+
+    /**
+     * @notice Allows admin to set newly deployed DestinationMinter message gas limits
+     * @dev Note This only effects newly deployed DestinationMinters.
+     */
+    function setMinterMessageGasLimit(uint256 limit) external onlyOwner {
+        minterMessageGasLimit = limit;
     }
 
     //============================== RETRY FUNCTIONS ===============================
@@ -140,7 +176,8 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
                 decimals,
                 sourceChainSelector,
                 destinationChainSelector,
-                address(LINK)
+                address(LINK),
+                minterMessageGasLimit
             )
         );
         // CCIP sends message back to SourceLockerFactory with new DestinationMinter address, and corresponding source locker
@@ -177,7 +214,7 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: messageGasLimit /*, strict: false*/ })
             ),
             feeToken: address(LINK)
         });

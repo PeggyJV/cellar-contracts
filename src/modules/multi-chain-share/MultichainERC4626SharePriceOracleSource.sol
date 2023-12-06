@@ -5,8 +5,12 @@ import { ERC4626SharePriceOracle, Math, ERC4626, ERC20 } from "src/base/ERC4626S
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { console } from "@forge-std/Test.sol"; //TODO remove
 
+/**
+ * @title MultiChainERC4626SharePriceOracleSource
+ * @notice Uses CCIP to relay share pricing data to a destination chain.
+ * @author crispymangoes
+ */
 contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
     using Math for uint256;
     using SafeTransferLib for ERC20;

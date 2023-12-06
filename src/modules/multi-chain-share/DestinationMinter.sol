@@ -7,6 +7,12 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
+/**
+ * @title DestinationMinter
+ * @notice Receives CCIP messages from SourceLocker, to mint ERC20 shares that
+ *         represent ERC4626 shares locked on source chain.
+ * @author crispymangoes
+ */
 contract DestinationMinter is ERC20, CCIPReceiver {
     using SafeTransferLib for ERC20;
 
@@ -53,7 +59,11 @@ contract DestinationMinter is ERC20, CCIPReceiver {
      */
     ERC20 public immutable LINK;
 
-    // TODO add in value so we can set the message gas limit as an immutable
+    /**
+     * @notice The message gas limit to use for CCIP messages.
+     */
+    uint256 public immutable messageGasLimit;
+
     constructor(
         address _router,
         address _targetSource,
@@ -62,12 +72,14 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         uint8 _decimals,
         uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
-        address _link
+        address _link,
+        uint256 _messageGasLimit
     ) ERC20(_name, _symbol, _decimals) CCIPReceiver(_router) {
         targetSource = _targetSource;
         sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
+        messageGasLimit = _messageGasLimit;
     }
 
     //============================== BRIDGE ===============================
@@ -137,7 +149,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: messageGasLimit /*, strict: false*/ })
             ),
             feeToken: address(LINK)
         });

@@ -9,6 +9,7 @@ import { MultiChainERC4626SharePriceOracleSource } from "src/modules/multi-chain
 import { MultiChainERC4626SharePriceOracleDestination } from "src/modules/multi-chain-share/MultiChainERC4626SharePriceOracleDestination.sol";
 import { MockCCIPRouter } from "src/mocks/MockCCIPRouter.sol";
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
+import { DestinationMinter } from "src/modules/multi-chain-share/DestinationMinter.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -27,6 +28,7 @@ contract ERC4626SharePriceOracleXChainTest is MainnetStarterTest, AdaptorHelperF
     Cellar private cellar;
     MultiChainERC4626SharePriceOracleSource private sourceOracle;
     MultiChainERC4626SharePriceOracleDestination private destinationOracle;
+    DestinationMinter private destinationMinter;
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -122,9 +124,21 @@ contract ERC4626SharePriceOracleXChainTest is MainnetStarterTest, AdaptorHelperF
             10e4
         );
 
+        // Deploy DestinationMinter.
+        destinationMinter = new DestinationMinter(
+            address(router),
+            address(0),
+            cellar.name(),
+            cellar.symbol(),
+            cellar.decimals(),
+            router.SOURCE_SELECTOR(),
+            router.DESTINATION_SELECTOR(),
+            address(LINK),
+            200_000
+        );
         // Setup destination share price oracle.
         destinationOracle = new MultiChainERC4626SharePriceOracleDestination(
-            _target,
+            ERC4626(address(destinationMinter)),
             _heartbeat,
             _deviationTrigger,
             _gracePeriod,

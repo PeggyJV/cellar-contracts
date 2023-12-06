@@ -7,6 +7,12 @@ import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
+/**
+ * @title SourceLocker
+ * @notice Receives CCIP messages from DestinationMinter, to release ERC4626 shares that
+ *         were previously bridged to destination chain.
+ * @author crispymangoes
+ */
 contract SourceLocker is CCIPReceiver {
     using SafeTransferLib for ERC20;
 
@@ -68,20 +74,26 @@ contract SourceLocker is CCIPReceiver {
      */
     ERC20 public immutable LINK;
 
-    // TODO add in value so we can set the message gas limit as an immutable
+    /**
+     * @notice The message gas limit to use for CCIP messages.
+     */
+    uint256 public immutable messageGasLimit;
+
     constructor(
         address _router,
         address _shareToken,
         address _factory,
         uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
-        address _link
+        address _link,
+        uint256 _messageGasLimit
     ) CCIPReceiver(_router) {
         shareToken = ERC20(_shareToken);
         factory = _factory;
         sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
+        messageGasLimit = _messageGasLimit;
     }
 
     //============================== ONLY FACTORY ===============================
@@ -171,7 +183,7 @@ contract SourceLocker is CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: messageGasLimit /*, strict: false*/ })
             ),
             feeToken: address(LINK)
         });

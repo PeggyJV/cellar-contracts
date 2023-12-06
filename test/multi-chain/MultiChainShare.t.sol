@@ -39,7 +39,9 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
             address(router),
             router.SOURCE_SELECTOR(),
             router.DESTINATION_SELECTOR(),
-            address(LINK)
+            address(LINK),
+            2_000_000,
+            200_000
         );
 
         destinationMinterFactory = new DestinationMinterFactory(
@@ -48,7 +50,9 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
             address(sourceLockerFactory),
             router.SOURCE_SELECTOR(),
             router.DESTINATION_SELECTOR(),
-            address(LINK)
+            address(LINK),
+            200_000,
+            200_000
         );
 
         sourceLockerFactory.setDestinationMinterFactory(address(destinationMinterFactory));

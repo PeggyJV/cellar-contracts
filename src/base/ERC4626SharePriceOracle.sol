@@ -10,8 +10,11 @@ import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/int
 import { IRegistrar } from "src/interfaces/external/Chainlink/IRegistrar.sol";
 import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove
-
+/**
+ * @title ERC4626SharePriceOracle
+ * @notice Acts as a safer Oracle to get an ERC4626's Share Price, by using up to date answers, and time weighted average answers.
+ * @author crispymangoes
+ */
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
     using SafeTransferLib for ERC20;
@@ -204,7 +207,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable allowedAnswerChangeUpper;
 
-    // TODO call to target.decimals will revert for destination share price oracle since target is on a different chain.
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
@@ -225,7 +227,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 _allowedAnswerChangeUpper
     ) {
         target = _target;
-        targetDecimals = target.decimals();
+        targetDecimals = _target.decimals();
         ONE_SHARE = 10 ** targetDecimals;
         heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;

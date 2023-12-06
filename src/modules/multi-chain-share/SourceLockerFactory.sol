@@ -10,7 +10,11 @@ import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterCl
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
-// TODO should we add a mapping from share to locker, and enforce shares are unique?
+/**
+ * @title SourceLockerFactory
+ * @notice Works with DestinationMinterFactory to create new bridgeable ERC4626 Shares.
+ * @author crispymangoes
+ */
 contract SourceLockerFactory is Owned, CCIPReceiver {
     using SafeTransferLib for ERC20;
 
@@ -21,15 +25,28 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
      */
     address public destinationMinterFactory;
 
+    /**
+     * @notice The message gas limit to use for CCIP messages.
+     */
+    uint256 public messageGasLimit;
+
+    /**
+     * @notice The message gas limit SourceLockers's will use to send messages to their DestinationMinters.
+     */
+    uint256 public lockerMessageGasLimit;
+
     //============================== ERRORS ===============================
 
     error SourceLockerFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector);
     error SourceLockerFactory___SenderNotAllowlisted(address sender);
     error SourceLockerFactory___NotEnoughLink(); // TODO check for revert
+    error SourceLockerFactory___FactoryAlreadySet(); // TODO check for revert
 
-    uint64 public immutable sourceChainSelector;
-    uint64 public immutable destinationChainSelector;
-    ERC20 public immutable LINK;
+    //============================== EVENTS ===============================
+
+    event DeploySuccess(address share, address locker, address minter);
+
+    //============================== MODIFIERS ===============================
 
     modifier onlyAllowlisted(uint64 _sourceChainSelector, address _sender) {
         if (_sourceChainSelector != destinationChainSelector)
@@ -38,24 +55,76 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         _;
     }
 
-    function setDestinationMinterFactory(address _destinationMinterFactory) external onlyOwner {
-        if (destinationMinterFactory != address(0)) revert("Factory already set");
-        destinationMinterFactory = _destinationMinterFactory;
-    }
+    //============================== IMMUTABLES ===============================
 
-    // TODO add in value so we can set the message gas limit as an immutable
+    /**
+     * @notice The CCIP source chain selector.
+     */
+    uint64 public immutable sourceChainSelector;
+
+    /**
+     * @notice The CCIP destination chain selector.
+     */
+    uint64 public immutable destinationChainSelector;
+
+    /**
+     * @notice This networks LINK contract.
+     */
+    ERC20 public immutable LINK;
+
     constructor(
         address _owner,
         address _router,
         uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
-        address _link
+        address _link,
+        uint256 _messageGasLimit,
+        uint256 _lockerMessageGasLimit
     ) Owned(_owner) CCIPReceiver(_router) {
         sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
+        messageGasLimit = _messageGasLimit;
+        lockerMessageGasLimit = _lockerMessageGasLimit;
     }
 
+    //============================== ADMIN FUNCTIONS ===============================
+
+    /**
+     * @notice Allows admin to withdraw ERC20s from this factory contract.
+     */
+    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
+        token.safeTransfer(to, amount);
+    }
+
+    /**
+     * @notice Allows admin to link DestinationMinterFactory to this factory.
+     */
+    function setDestinationMinterFactory(address _destinationMinterFactory) external onlyOwner {
+        if (destinationMinterFactory != address(0)) revert SourceLockerFactory___FactoryAlreadySet();
+        destinationMinterFactory = _destinationMinterFactory;
+    }
+
+    /**
+     * @notice Allows admin to set this factories CCIP message gas limit.
+     * @dev Note Owner can set a gas limit that is too low, and cause the message to run out of gas.
+     *           If this happens the owner should raise gas limit, and call `deploy` on SourceLockerFactory again.
+     */
+    function setMessageGasLimit(uint256 limit) external onlyOwner {
+        messageGasLimit = limit;
+    }
+
+    /**
+     * @notice Allows admin to set newly deployed SourceLocker message gas limits
+     * @dev Note This only effects newly deployed SourceLockers.
+     */
+    function setLockerMessageGasLimit(uint256 limit) external onlyOwner {
+        lockerMessageGasLimit = limit;
+    }
+
+    /**
+     * @notice Allows admin to deploy a new SourceLocker and DestinationMinter, for a given `share`.
+     */
     function deploy(ERC20 target) external onlyOwner returns (bytes32 messageId, address newLocker) {
         // Deploy a new Source Target
         SourceLocker locker = new SourceLocker(
@@ -64,7 +133,8 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
             address(this),
             sourceChainSelector,
             destinationChainSelector,
-            address(LINK)
+            address(LINK),
+            lockerMessageGasLimit
         );
         // CCIP Send new Source Target address, target.name(), target.symbol(), target.decimals() to DestinationMinterFactory.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
@@ -73,7 +143,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 2_000_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: messageGasLimit /*, strict: false*/ })
             ),
             feeToken: address(LINK)
         });
@@ -90,8 +160,11 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         newLocker = address(locker);
     }
 
-    // CCIP Receive function will accept new DestinationMinter address, and corresponding source locker, and call SourceLocker:setTargetDestination()
-    // TODO we could add in a mapping assignment here so that people can map the Cellar share to the source locker? It would be possible for the owner to accidentally send 2 deploys back 2 back though
+    //============================== CCIP RECEIVER ===============================
+
+    /**
+     * @notice Implement internal _ccipRecevie function logic.
+     */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
     )
@@ -104,9 +177,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         SourceLocker locker = SourceLocker(targetLocker);
 
         locker.setTargetDestination(targetDestination);
-    }
 
-    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
-        token.safeTransfer(to, amount);
+        emit DeploySuccess(address(locker.shareToken()), targetLocker, targetDestination);
     }
 }

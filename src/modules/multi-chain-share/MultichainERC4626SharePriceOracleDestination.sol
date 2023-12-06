@@ -6,10 +6,13 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove
-
 // TODO also there is nothing enforcing that the oracles on the two chains are configured with the same values.
 // But we would really need to enforce this using a CCIP creation method like the cross chain shares, but this is more complicated
+/**
+ * @title MultiChainERC4626SharePriceOracleDestination
+ * @notice Receives CCIP messages, and reports share pricing data.
+ * @author crispymangoes
+ */
 contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle, CCIPReceiver {
     using Math for uint256;
 
@@ -23,8 +26,8 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
 
     //============================== ERRORS ===============================
 
-    error MultiChainERC4626SharePriceOracleDestination___SourceChainNotAllowlisted(uint64 sourceChainSelector); // Used when the source chain has not been allowlisted by the contract owner.
-    error MultiChainERC4626SharePriceOracleDestination___SenderNotAllowlisted(address sender); // Used when the sender has not been allowlisted by the contract owner.
+    error MultiChainERC4626SharePriceOracleDestination___SourceChainNotAllowlisted(uint64 sourceChainSelector);
+    error MultiChainERC4626SharePriceOracleDestination___SenderNotAllowlisted(address sender);
     error MultiChainERC4626SharePriceOracleDestination___NotSupported(); /// TODO test
 
     //============================== EVENTS ===============================
@@ -57,6 +60,9 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
      */
     uint64 public immutable sourceChainSelector;
 
+    /**
+     * @dev _target should be the DestinationMinter contract that was deployed from calling `SourceLockerFactory:deploy()`.
+     */
     constructor(
         ERC4626 _target,
         uint64 _heartbeat,
