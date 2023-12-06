@@ -31,6 +31,16 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
     uint256 private initialAssets;
     uint256 private initialShares;
 
+    // vars used to check within tests
+    uint256 deposit1;
+    uint256 minShares1;
+    uint64 deadline1;
+    uint256 shareBalance1;
+    uint256 deposit2;
+    uint256 minShares2;
+    uint64 deadline2;
+    uint256 shareBalance2;
+
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
@@ -55,7 +65,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
-        mockUsdcUsd.setMockAnswer(1e6);
+        // mockUsdcUsd.setMockAnswer(1e6);
 
         // Add adaptors and ERC20 positions to the registry.
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
@@ -91,10 +101,21 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
     function testDeposit(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
 
-        // deal USDC to test contract
+        // deal USDC assets to test contract
+        deal(address(USDC), address(this), assets);
+        deposit1 = assets / 2;
+        minShares1 = deposit1;
+        deadline1 = uint64(block.timestamp + 1 days);
+
+        console.log("Total Cellar Shares: %s", cellar.totalSupply());
 
         // deposit half using the SSR
+        simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
 
+        shareBalance1 = cellar.balanceOf(address(this));
+
+        assertEq(shareBalance1, minShares1); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
+        assertEq(USDC.balanceOf(address(this)), assets - deposit1);
         // check that cellar balances are proper (new balance = deposit + initialAssets)
 
         // the other half using the SSR

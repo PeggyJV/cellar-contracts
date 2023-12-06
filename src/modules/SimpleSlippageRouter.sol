@@ -72,9 +72,11 @@ contract SimpleSlippageRouter {
      */
     function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+
         _cellar.asset().safeTransferFrom(msg.sender, address(this), _assets);
         uint256 shares = _cellar.previewDeposit(_assets);
         if (shares < _minimumShares) revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shares);
+        _cellar.asset().approve(address(_cellar), _assets);
         _cellar.deposit(_assets, msg.sender);
     }
 
