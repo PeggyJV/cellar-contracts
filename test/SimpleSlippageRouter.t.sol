@@ -38,6 +38,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
+        // Get a cellar w/ usdc holding position, deploy a SlippageRouter to work with it.
         _setUp();
 
         mockUsdcUsd = new MockDataFeed(USDC_USD_FEED);
@@ -54,10 +55,9 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
-        mockUsdcUsd.setMockAnswer(1e8);
+        mockUsdcUsd.setMockAnswer(1e6);
 
         // Add adaptors and ERC20 positions to the registry.
-        registry.trustAdaptor(address(cellarAdaptor));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
 
         // Create Dummy Cellars.
@@ -70,13 +70,11 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         platformCut = 0.75e18;
         cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        cellar.setStrategistPayoutAddress(strategist);
-
         vm.label(address(cellar), "cellar");
-        vm.label(strategist, "strategist");
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
+        USDC.approve(address(simpleSlippageRouter), type(uint256).max);
 
         initialAssets = cellar.totalAssets();
         initialShares = cellar.totalSupply();
@@ -90,69 +88,58 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
     // ========================================= HAPPY PATH TEST =========================================
 
     // test depositing using SimpleSlippageRouter
-    function testDeposit() external {}
+    function testDeposit(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // deal USDC to test contract
+
+        // deposit half using the SSR
+
+        // check that cellar balances are proper (new balance = deposit + initialAssets)
+
+        // the other half using the SSR
+
+        // check that cellar balances are proper (new balance = totalDeposit + initialAssets)
+    }
 
     // test withdrawing using SimpleSlippageRouter
-    function testWithdraw() external {}
+    function testWithdraw() external {
+        // deal USDC to test contract
+        // deposit half using the SSR
+        // withdraw a quarter using the SSR
+        // check that cellar balances are proper (new balance = (deposit + initialAssets) - withdraw)
+        // withdraw the rest using the SSR
+        // check that cellar balances are proper (assets + initialAssets)
+    }
 
     // test minting using SimpleSlippageRouter
-    function testMint() external {}
+    function testMint() external {
+        // deal USDC to test contract
+        // mint with half of the assets using the SSR
+        // check that cellar balances are proper (new balance = assetsUsedInMint + initialAssets)
+        // mint using the other half using the SSR
+        // check that cellar balances are proper (new balance = totalAssetsUsedInMint + initialAssets)
+    }
 
     // test redeeming using SimpleSlippageRouter
-    function testRedeem() external {}
+    function testRedeem() external {
+        // deal USDC to test contract
+        // deposit half using the SSR
+        // redeem half of the shares test contract has using the SSR
+        // check that cellar balances are proper
+        // redeem the rest using the SSR
+        // check that cellar balances are proper
+    }
 
     // ========================================= REVERSION TEST =========================================
 
-    function testBadDeadline() external {
+    function testBadDeadline() external {}
 
-    }
+    function testDepositMinimumSharesUnmet() external {}
 
-    function testDepositMinimumSharesUnmet() external {
-        
-    }
+    function testWithdrawMaxSharesSurpassed() external {}
 
-    function testDepositMinimumSharesUnmet() external {
-        
-    }
-
-    function testDepositMinimumSharesUnmet() external {
-        
-    }
-
-
+    function testMintMinimumSharesSurpassed() external {}
 
     //============================================ Helper Functions ===========================================
-
-    function _depositToCellar(Cellar targetFrom, Cellar targetTo, uint256 amountIn) internal {
-        ERC20 assetIn = targetFrom.asset();
-        ERC20 assetOut = targetTo.asset();
-
-        uint256 amountTo = priceRouter.getValue(assetIn, amountIn, assetOut);
-
-        // Update targetFrom ERC20 balances.
-        deal(address(assetIn), address(targetFrom), assetIn.balanceOf(address(targetFrom)) - amountIn);
-        deal(address(assetOut), address(targetFrom), assetOut.balanceOf(address(targetFrom)) + amountTo);
-
-        // Rebalance into targetTo.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToDepositToCellar(address(targetTo), amountTo);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
-        }
-
-        // Perform callOnAdaptor.
-        targetFrom.callOnAdaptor(data);
-    }
-
-    // Used to act like malicious price router under reporting assets.
-    function getValuesDelta(
-        ERC20[] calldata,
-        uint256[] calldata,
-        ERC20[] calldata,
-        uint256[] calldata,
-        ERC20
-    ) external pure returns (uint256) {
-        return 50e6;
-    }
 }
