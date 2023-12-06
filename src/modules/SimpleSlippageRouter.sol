@@ -109,6 +109,7 @@ contract SimpleSlippageRouter {
         if (quotedAssetAmount > _maxAssets)
             revert SimpleSlippageAdaptor__MintMinimumSharesSurpassed(_minimumShares, _maxAssets, quotedAssetAmount);
         _cellar.asset().safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
+        _cellar.asset().approve(address(_cellar), quotedAssetAmount);
         _cellar.mint(_minimumShares, msg.sender);
     }
 
