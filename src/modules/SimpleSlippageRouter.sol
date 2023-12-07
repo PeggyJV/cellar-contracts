@@ -12,6 +12,7 @@ import { Cellar } from "src/base/Cellar.sol";
 /**
  * @title Sommelier Simple Slippage Router
  * @notice A Simple Utility Contract to allow Users to call functions: deposit, withdraw, mint, and redeem with Sommelier Cellar contracts w/ respective specified slippage params.
+ * TODO: Add revokeApproval?
  * @author crispymangoes, 0xEinCodes
  */
 contract SimpleSlippageRouter {
