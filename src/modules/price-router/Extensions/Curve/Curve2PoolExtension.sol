@@ -131,11 +131,11 @@ contract Curve2PoolExtension is Extension {
         ExtensionStorage memory stor = extensionStorage[asset];
         CurvePool pool = CurvePool(stor.pool);
 
-        if (stor.isCorrelated) {
-            // Find the minimum price of coins.
-            uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
-            uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
+        uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
+        uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
+        uint256 virtualPrice = pool.get_virtual_price();
 
+        if (stor.isCorrelated) {
             // Handle rates if needed.
             if (stor.divideRate0 || stor.divideRate1) {
                 uint256[2] memory rates = pool.stored_rates();
@@ -146,14 +146,11 @@ contract Curve2PoolExtension is Extension {
                     price1 = price1.mulDivDown(10 ** curveDecimals, rates[1]);
                 }
             }
+            // Find the minimum price of coins.
             uint256 minPrice = price0 < price1 ? price0 : price1;
-            price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
+            price = minPrice.mulDivDown(virtualPrice, 10 ** curveDecimals);
         } else {
-            price = getLpPrice(
-                pool.get_virtual_price(),
-                ERC20(stor.underlyingOrConstituent0),
-                ERC20(stor.underlyingOrConstituent1)
-            );
+            price = getLpPrice(virtualPrice, price0, price1);
         }
     }
 
@@ -171,9 +168,11 @@ contract Curve2PoolExtension is Extension {
      * @notice Calculate the price of an Curve 2Pool LP token with changing center,
      *         using priceRouter for underlying pricing.
      */
-    function getLpPrice(uint256 virtualPrice, ERC20 coins0, ERC20 coins1) public view returns (uint256 price) {
-        uint256 coins0Usd = priceRouter.getPriceInUSD(coins0);
-        uint256 coins1Usd = priceRouter.getPriceInUSD(coins1);
+    function getLpPrice(
+        uint256 virtualPrice,
+        uint256 coins0Usd,
+        uint256 coins1Usd
+    ) public view returns (uint256 price) {
         price = 2 * virtualPrice.mulDivDown(_sqrt(coins1Usd), _sqrt(coins0Usd));
         price = price.mulDivDown(coins0Usd, 10 ** curveDecimals);
     }
