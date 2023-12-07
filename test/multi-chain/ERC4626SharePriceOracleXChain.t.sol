@@ -171,7 +171,6 @@ contract ERC4626SharePriceOracleXChainTest is MainnetStarterTest, AdaptorHelperF
         );
     }
 
-    // TODO test where we try to call performUpkeep on source oracle from an address that is not forwarder.
     function testHappyPath() external {
         _makeOraclesSafeToUse();
 
@@ -378,8 +377,146 @@ contract ERC4626SharePriceOracleXChainTest is MainnetStarterTest, AdaptorHelperF
         vm.stopPrank();
     }
 
-    // TODO remaining reverts in source
-    // TODO remaining reverts in destination\, like try calling ccipRecevie from a non router address
+    function testWithdrawingLinkFromSourceOracle() external {
+        uint256 sourceLinkBalance = 100e18;
+        deal(address(LINK), address(sourceOracle), sourceLinkBalance);
+        deal(address(LINK), address(this), 0);
+
+        vm.startPrank(vm.addr(1));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyAdmin.selector))
+        );
+        sourceOracle.withdrawLink();
+        vm.stopPrank();
+
+        // But admin can call it.
+        sourceOracle.withdrawLink();
+
+        assertEq(LINK.balanceOf(address(this)), sourceLinkBalance, "Admin should have received all of oracles LINK.");
+    }
+
+    function testInitializeReverts() external {
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__AlreadyInitialized.selector))
+        );
+        sourceOracle.initializeWithCcipArgs(1e18, address(0), address(0), 0);
+
+        // Trying to call initialize on destination reverts.
+        LINK.approve(address(destinationOracle), 1e18);
+        deal(address(LINK), address(this), 1e18);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyAdmin.selector))
+        );
+        destinationOracle.initialize(1e18);
+
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 1 days / 6; // 4 hr
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
+
+        // Setup source share price oracle.
+        sourceOracle = new MultiChainERC4626SharePriceOracleSource(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
+            1e18,
+            0.01e4,
+            10e4
+        );
+
+        LINK.approve(address(sourceOracle), 1e18);
+        deal(address(LINK), address(this), 1e18);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MultiChainERC4626SharePriceOracleSource.MultiChainERC4626SharePriceOracleSource___BadRouter.selector
+                )
+            )
+        );
+        sourceOracle.initializeWithCcipArgs(1e18, address(0), address(0), 0);
+    }
+
+    function testCallingUpkeepFunctionsOnDestination() external {
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MultiChainERC4626SharePriceOracleDestination
+                        .MultiChainERC4626SharePriceOracleDestination___NotSupported
+                        .selector
+                )
+            )
+        );
+        destinationOracle.checkUpkeep(abi.encode(0));
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MultiChainERC4626SharePriceOracleDestination
+                        .MultiChainERC4626SharePriceOracleDestination___NotSupported
+                        .selector
+                )
+            )
+        );
+        destinationOracle.performUpkeep(abi.encode(0));
+    }
+
+    function testPerformUpkeepRevert() external {
+        _makeOraclesSafeToUse();
+
+        // Have whale deposit into Cellar.
+        deal(address(USDC), address(this), 1_000_000e6);
+        cellar.deposit(1_000_000e6, address(this));
+
+        _runOraclesForNDays(7);
+
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        (upkeepNeeded, performData) = sourceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+
+        // But if source oracle runs out of link.
+        deal(address(LINK), address(sourceOracle), 0);
+        // CheckUpkeep returns false.
+        (upkeepNeeded, ) = sourceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+
+        // And trying to call performUpkeep will revert.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MultiChainERC4626SharePriceOracleSource
+                        .MultiChainERC4626SharePriceOracleSource___NotEnoughLink
+                        .selector
+                )
+            )
+        );
+        sourceOracle.performUpkeep(performData);
+
+        deal(address(LINK), address(sourceOracle), 100e18);
+
+        vm.startPrank(vm.addr(1));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder.selector
+                )
+            )
+        );
+        sourceOracle.performUpkeep(performData);
+        vm.stopPrank();
+    }
 
     function _makeOraclesSafeToUse() internal {
         bool upkeepNeeded;

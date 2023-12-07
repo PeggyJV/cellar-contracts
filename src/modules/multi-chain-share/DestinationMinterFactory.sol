@@ -39,8 +39,8 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
 
     error DestinationMinterFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector);
     error DestinationMinterFactory___SenderNotAllowlisted(address sender);
-    error DestinationMinterFactory___NotEnoughLink(); // TODO check for revert
-    error DestinationMinterFactory___CanNotRetryCallback(); // TODO check for revert
+    error DestinationMinterFactory___NotEnoughLink();
+    error DestinationMinterFactory___CanNotRetryCallback();
 
     //============================== EVENTS ===============================
 
@@ -124,7 +124,6 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
 
     //============================== RETRY FUNCTIONS ===============================
 
-    // TODO test this functionality.
     /**
      * @notice Allows anyone to retry sending callback to source locker factory.
      */

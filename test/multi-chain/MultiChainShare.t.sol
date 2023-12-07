@@ -229,6 +229,78 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.stopPrank();
     }
 
+    function testSourceLockerFactoryReverts() external {
+        // Trying to set factory again reverts.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SourceLockerFactory.SourceLockerFactory___FactoryAlreadySet.selector))
+        );
+        sourceLockerFactory.setDestinationMinterFactory(address(0));
+
+        // Calling deploy when sourceLockerFactory does not have enough Link.
+        deal(address(LINK), address(sourceLockerFactory), 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SourceLockerFactory.SourceLockerFactory___NotEnoughLink.selector))
+        );
+        sourceLockerFactory.deploy(cellar);
+    }
+
+    function testDestinationMinterFactoryRetryCallback() external {
+        SourceLocker locker;
+        DestinationMinter minter;
+
+        (, address lockerAddress) = sourceLockerFactory.deploy(cellar);
+
+        locker = SourceLocker(lockerAddress);
+
+        // Zero out destination minter facotry Link balance so CCIP call reverts.
+        deal(address(LINK), address(destinationMinterFactory), 0);
+
+        // Simulate CCIP Message to destination factory.
+        Client.Any2EVMMessage memory message = router.getLastMessage();
+        vm.prank(address(router));
+        destinationMinterFactory.ccipReceive(message);
+
+        address expectedMinterAddress = 0x5B0091f49210e7B2A57B03dfE1AB9D08289d9294;
+
+        bytes32 messageDataHash = keccak256(abi.encode(address(locker), expectedMinterAddress));
+        assertTrue(
+            destinationMinterFactory.canRetryFailedMessage(messageDataHash),
+            "Should have updated mapping to true."
+        );
+
+        // Try retrying callback without sending link to factory.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(DestinationMinterFactory.DestinationMinterFactory___NotEnoughLink.selector))
+        );
+        destinationMinterFactory.retryCallback(address(locker), expectedMinterAddress);
+
+        // Callback failed, send destination minter link, and retry.
+        deal(address(LINK), address(destinationMinterFactory), 1e18);
+
+        destinationMinterFactory.retryCallback(address(locker), expectedMinterAddress);
+
+        // Calling retryCallback again should revert.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(DestinationMinterFactory.DestinationMinterFactory___CanNotRetryCallback.selector)
+            )
+        );
+        destinationMinterFactory.retryCallback(address(locker), expectedMinterAddress);
+
+        assertTrue(
+            !destinationMinterFactory.canRetryFailedMessage(messageDataHash),
+            "Should have updated mapping to false."
+        );
+
+        // Calll can continue as normal.
+        // Simulate CCIP message to source factory.
+        message = router.getLastMessage();
+        vm.prank(address(router));
+        sourceLockerFactory.ccipReceive(message);
+
+        minter = DestinationMinter(locker.targetDestination());
+    }
+
     function testSourceLockerReverts() external {
         (SourceLocker locker, ) = _runDeploy();
 
@@ -255,6 +327,15 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(SourceLocker.SourceLocker___FeeTooHigh.selector)));
         locker.bridgeToDestination(amountToDesintation, address(this), 0);
+
+        (, address lockerAddress) = sourceLockerFactory.deploy(cellar);
+
+        locker = SourceLocker(lockerAddress);
+
+        cellar.approve(address(lockerAddress), amountToDesintation);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(SourceLocker.SourceLocker___TargetDestinationNotSet.selector)));
+        locker.bridgeToDestination(amountToDesintation, address(this), fee);
     }
 
     function testDestinationMinterReverts() external {

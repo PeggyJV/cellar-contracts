@@ -6,8 +6,6 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
-// TODO also there is nothing enforcing that the oracles on the two chains are configured with the same values.
-// But we would really need to enforce this using a CCIP creation method like the cross chain shares, but this is more complicated
 /**
  * @title MultiChainERC4626SharePriceOracleDestination
  * @notice Receives CCIP messages, and reports share pricing data.
@@ -28,7 +26,7 @@ contract MultiChainERC4626SharePriceOracleDestination is ERC4626SharePriceOracle
 
     error MultiChainERC4626SharePriceOracleDestination___SourceChainNotAllowlisted(uint64 sourceChainSelector);
     error MultiChainERC4626SharePriceOracleDestination___SenderNotAllowlisted(address sender);
-    error MultiChainERC4626SharePriceOracleDestination___NotSupported(); /// TODO test
+    error MultiChainERC4626SharePriceOracleDestination___NotSupported();
 
     //============================== EVENTS ===============================
 

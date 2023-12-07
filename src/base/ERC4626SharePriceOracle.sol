@@ -94,7 +94,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__AlreadyInitialized();
     error ERC4626SharePriceOracle__ParamHashDiffers();
     error ERC4626SharePriceOracle__NoPendingUpkeepToHandle();
-    error ERC4626SharePriceOracle__OnlyAdmin(); // TODO add test to check this.
+    error ERC4626SharePriceOracle__OnlyAdmin();
 
     //============================== EVENTS ===============================
 

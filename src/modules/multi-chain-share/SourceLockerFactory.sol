@@ -39,8 +39,8 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
     error SourceLockerFactory___SourceChainNotAllowlisted(uint64 sourceChainSelector);
     error SourceLockerFactory___SenderNotAllowlisted(address sender);
-    error SourceLockerFactory___NotEnoughLink(); // TODO check for revert
-    error SourceLockerFactory___FactoryAlreadySet(); // TODO check for revert
+    error SourceLockerFactory___NotEnoughLink();
+    error SourceLockerFactory___FactoryAlreadySet();
 
     //============================== EVENTS ===============================
 

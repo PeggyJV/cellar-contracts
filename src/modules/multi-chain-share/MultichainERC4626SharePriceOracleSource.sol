@@ -43,9 +43,8 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
     //============================== ERRORS ===============================
 
     error MultiChainERC4626SharePriceOracleSource___KillSwitchNotActivated();
-    error MultiChainERC4626SharePriceOracleSource___AlreadyInitialized(); // TODO check for revert
-    error MultiChainERC4626SharePriceOracleSource___BadRouter(); // TODO check for revert
-    error MultiChainERC4626SharePriceOracleSource___NotEnoughLink(); // TODO check for revert
+    error MultiChainERC4626SharePriceOracleSource___BadRouter();
+    error MultiChainERC4626SharePriceOracleSource___NotEnoughLink();
 
     //============================== EVENTS ===============================
 
@@ -116,13 +115,14 @@ contract MultiChainERC4626SharePriceOracleSource is ERC4626SharePriceOracle {
         initialize(initialUpkeepFunds);
 
         if (_router == address(0)) revert MultiChainERC4626SharePriceOracleSource___BadRouter();
-        if (address(router) != address(0)) revert MultiChainERC4626SharePriceOracleSource___AlreadyInitialized();
         router = IRouterClient(_router);
         destinationOracle = _destinationOracle;
         destinationChainSelector = _destinationChainSelector;
     }
 
-    // TODO add test for this and natspec
+    /**
+     * @notice Allows automation admin to withdraw LINK from this contract.
+     */
     function withdrawLink() external {
         if (msg.sender != automationAdmin) revert ERC4626SharePriceOracle__OnlyAdmin();
 
