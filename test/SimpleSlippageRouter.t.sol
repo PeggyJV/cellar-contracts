@@ -90,11 +90,6 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         initialShares = cellar.totalSupply();
     }
 
-    // ========================================= INITIALIZATION TEST =========================================
-
-    // simpleSlippageRouter should not have any assets, any approvals, etc.
-    function testInitialization() external {}
-
     // ========================================= HAPPY PATH TEST =========================================
 
     // test depositing using SimpleSlippageRouter
@@ -277,7 +272,8 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         deposit1 = assets / 2;
         minShares1 = deposit1;
         deadline1 = uint64(block.timestamp + 1 days);
-        _skip(2 days);
+        skip(2 days);
+        mockUsdcUsd.setMockUpdatedAt(block.timestamp);
 
         vm.expectRevert(
             bytes(
@@ -305,19 +301,17 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         simpleSlippageRouter.redeem(cellar, deposit1, minShares1, deadline1);
     }
 
+    //I would simplify this test a bit. You know the share price starts out as 1:1. So instead of manipulating the cellars balances, make the minAmountOfShares be assets + 1, then deposit assets into cellar.
     function testDepositMinimumSharesUnmet(uint256 assets) external {
         // test revert in deposit()
         assets = bound(assets, 1e6, 100_000e6);
 
         // deal USDC assets to test contract
         deal(address(USDC), address(this), assets);
-        deposit1 = assets / 2;
-        minShares1 = deposit1;
+        deposit1 = assets;
+        minShares1 = assets + 1; // input param so it will revert
         deadline1 = uint64(block.timestamp + 1 days);
 
-        // manipulate cellar to have lots of USDC and thus not a 1:1 ratio anymore for shares
-        uint256 originalBalance = USDC.balanceOf(address(cellar));
-        deal(address(USDC), address(cellar), assets * 10);
         uint256 quoteShares = cellar.previewDeposit(assets);
 
         vm.expectRevert(
@@ -328,11 +322,11 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
                     quoteShares
                 )
             )
-        ); // TODO: bug - hard to outline what outline what actual shares reported in error will be because it relies on having a token transfer first in the actual deposit() function.
+        );
         simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
 
         // manipulate back so the deposit should resolve.
-        deal(address(USDC), address(cellar), originalBalance);
+        minShares1 = assets;
         simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
     }
 
@@ -372,7 +366,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         simpleSlippageRouter.withdraw(cellar, withdraw1, maxShares1, deadline1);
     }
 
-    function testMintMinimumSharesSurpassed(uint256 assets) external {
+    function testMintMaxAssetsRqdSurpassed(uint256 assets) external {
         // test revert in mint()
         assets = bound(assets, 1e6, 100_000e6);
 
@@ -391,7 +385,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__MintMinimumSharesSurpassed.selector,
+                    SimpleSlippageRouter.SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed.selector,
                     minShares1,
                     deposit1,
                     quotedAssetAmount
@@ -406,7 +400,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
     }
 
     // TODO: underflow/overflow bug
-    function testRedeemMaxSharesSurpassed(uint256 assets) external {
+    function testRedeemMinAssetsUnmet(uint256 assets) external {
         // test revert in redeem()
         assets = bound(assets, 1e6, 100_000e6);
 
@@ -422,38 +416,29 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         uint256 withdraw1 = deposit1 / 2;
         uint256 maxShares1 = withdraw1; // assume 1:1 USDC:Shares shareprice
 
-        ///
         // manipulate cellar to have lots of shares and thus not a 1:1 ratio anymore for shares
         uint256 originalBalance = cellar.balanceOf(address(cellar));
         deal(address(cellar), address(cellar), assets * 10);
         uint256 quotedAssetAmount = cellar.previewRedeem(maxShares1);
+        // TODO: add a line to approve the SSR to spend shares
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__RedeemMaxSharesSurpassed.selector,
+                    SimpleSlippageRouter.SimpleSlippageAdaptor__RedeemMinAssetsUnmet.selector,
                     maxShares1,
                     withdraw1,
                     quotedAssetAmount
                 )
             )
         );
-        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1); 
+        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1);
 
         // manipulate back so the deposit should resolve.
         deal(address(cellar), address(cellar), originalBalance);
-        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1); 
+        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1);
     }
 
     // ========================================= INTEGRATION TEST =========================================
 
     // TODO: Test the deposit function combined with the withdraw, mint, and redeem functions. This would have multiple users in it. It's a more full integration test.
-
-    //============================================ Helper Functions ===========================================
-
-    function _skip(uint256 time) internal {
-        uint256 blocksToRoll = time / 12; // Assumes an avg 12 second block time.
-        skip(time);
-        vm.roll(block.number + blocksToRoll);
-        mockUsdcUsd.setMockUpdatedAt(block.timestamp);
-    }
 }

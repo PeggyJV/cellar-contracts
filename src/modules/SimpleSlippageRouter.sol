@@ -40,12 +40,12 @@ contract SimpleSlippageRouter {
     error SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(uint256 maxShares, uint256 actualSharesQuoted);
 
     /**
-     * @notice attempted to carry out mint() tx where resultant minted shares is less than user-specified acceptable minted shares amount.
+     * @notice attempted to carry out mint() tx where resultant required assets for requested shares is too much.
      * @param minShares specified acceptable min shares amount.
      * @param maxAssets specified max assets to spend on mint.
      * @param actualAssetsQuoted actual amount of assets to come from proposed tx, indicating asset amount not enough for specified shares.
      */
-    error SimpleSlippageAdaptor__MintMinimumSharesSurpassed(
+    error SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed(
         uint256 minShares,
         uint256 maxAssets,
         uint256 actualAssetsQuoted
@@ -57,7 +57,7 @@ contract SimpleSlippageRouter {
      * @param minimumAssets specified minimum amount of assets to be returned.
      * @param actualAssetsQuoted actual amount of assets to come from proposed tx.
      */
-    error SimpleSlippageAdaptor__RedeemMaxSharesSurpassed(
+    error SimpleSlippageAdaptor__RedeemMinAssetsUnmet(
         uint256 maxShares,
         uint256 minimumAssets,
         uint256 actualAssetsQuoted
@@ -93,40 +93,40 @@ contract SimpleSlippageRouter {
         uint256 shares = _cellar.previewWithdraw(_assets);
         if (shares > _maxShares) revert SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(_maxShares, shares);
 
-        _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to send shares
+        _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
     }
 
     /**
      * @notice mints shares from the cellar and returns shares to receiver IF shares quoted cost are less than specified _assets amount by the specified _deadline.
      * @param _cellar specified cellar to deposit assets into.
      * @param _maxAssets max amount of cellar base assets to deposit.
-     * @param _minimumShares amount of shares required at min from tx.
+     * @param _shares amount of shares required at min from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function mint(Cellar _cellar, uint256 _maxAssets, uint256 _minimumShares, uint64 _deadline) public {
+    function mint(Cellar _cellar, uint256 _maxAssets, uint256 _shares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
-        uint256 quotedAssetAmount = _cellar.previewMint(_minimumShares);
+        uint256 quotedAssetAmount = _cellar.previewMint(_shares);
         if (quotedAssetAmount > _maxAssets)
-            revert SimpleSlippageAdaptor__MintMinimumSharesSurpassed(_minimumShares, _maxAssets, quotedAssetAmount);
+            revert SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed(_shares, _maxAssets, quotedAssetAmount);
         _cellar.asset().safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
         _cellar.asset().approve(address(_cellar), quotedAssetAmount);
-        _cellar.mint(_minimumShares, msg.sender);
+        _cellar.mint(_shares, msg.sender);
     }
 
     /**
      * @notice redeem shares to withdraw assets from the cellar IF withdrawn quotedAssetAmount > _minAssets & tx carried out before _deadline.
      * @param _cellar specified cellar to redeem shares for assets from.
      * @param _minAssets amount of cellar base assets to receive upon share redemption.
-     * @param _maxShares max amount of shares to redeem from tx.
+     * @param _shares max amount of shares to redeem from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function redeem(Cellar _cellar, uint256 _minAssets, uint256 _maxShares, uint64 _deadline) public {
+    function redeem(Cellar _cellar, uint256 _minAssets, uint256 _shares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
 
-        uint256 quotedAssetAmount = _cellar.previewRedeem(_maxShares);
+        uint256 quotedAssetAmount = _cellar.previewRedeem(_shares);
         if (quotedAssetAmount < _minAssets)
-            revert SimpleSlippageAdaptor__RedeemMaxSharesSurpassed(_maxShares, _minAssets, quotedAssetAmount);
+            revert SimpleSlippageAdaptor__RedeemMinAssetsUnmet(_shares, _minAssets, quotedAssetAmount);
 
-        _cellar.redeem(_maxShares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to send shares
+        _cellar.redeem(_shares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
     }
 }
