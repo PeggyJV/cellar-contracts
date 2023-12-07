@@ -25,9 +25,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     using Math for uint256;
     using Address for address;
 
-    // ========================================= Slot0 Values =========================================
+    // ========================================= One Slot Values =========================================
     // Below values are frequently accessed in the same TXs. By moving them to the top
     // they will be stored in the same slot, reducing cold access reads.
+
+    /**
+     * @notice The maximum amount of shares that can be in circulation.
+     * @dev Can be decreased by the strategist.
+     * @dev Can be increased by Sommelier Governance.
+     */
+    uint192 public shareSupplyCap;
 
     /**
      * @notice `locked` is public, so that the state can be checked even during view function calls.
@@ -53,13 +60,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Stores the position id of the holding position in the creditPositions array.
      */
     uint32 public holdingPosition;
-
-    /**
-     * @notice The maximum amount of shares that can be in circulation.
-     * @dev Can be decreased by the strategist.
-     * @dev Can be increased by Sommelier Governance.
-     */
-    uint192 public shareSupplyCap;
 
     // ========================================= MULTICALL =========================================
 
