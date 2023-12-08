@@ -117,6 +117,14 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         assertApproxEqAbs(shareBalance2, assets, 2, "deposit(): Test contract USDC should be all shares"); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
         assertApproxEqAbs(USDC.balanceOf(address(this)), 0, 2, "deposit(): All USDC deposited to Cellar");
+
+        // check allowance SSR given to cellar is zeroed out
+        ERC20 cellarERC20 = ERC20(address(cellar));
+        assertEq(
+            cellarERC20.allowance(address(simpleSlippageRouter), address(cellar)),
+            0,
+            "cellar's approval to spend SSR cellarToken should be zeroed out."
+        );
     }
 
     function testWithdraw(uint256 assets) external {
@@ -198,6 +206,14 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         assertApproxEqAbs(shareBalance2, assets, 2, "mint(): Test contract USDC should be all shares"); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
         assertApproxEqAbs(USDC.balanceOf(address(this)), 0, 2, "mint(): All USDC deposited to Cellar");
+
+        // check allowance SSR given to cellar is zeroed out
+        ERC20 cellarERC20 = ERC20(address(cellar));
+        assertEq(
+            cellarERC20.allowance(address(simpleSlippageRouter), address(cellar)),
+            0,
+            "cellar's approval to spend SSR cellarToken should be zeroed out."
+        );
     }
 
     function testRedeem(uint256 assets) external {
@@ -418,8 +434,4 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Use a value for withdraw1 that will pass the conditional logic.
         simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1);
     }
-
-    // ========================================= INTEGRATION TEST =========================================
-
-    // TODO: Test the deposit function combined with the withdraw, mint, and redeem functions. This would have multiple users in it. It's a more full integration test.
 }

@@ -73,12 +73,13 @@ contract SimpleSlippageRouter {
      */
     function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
-
-        _cellar.asset().safeTransferFrom(msg.sender, address(this), _assets);
+        ERC20 baseAsset = _cellar.asset();
+        baseAsset.safeTransferFrom(msg.sender, address(this), _assets);
         uint256 shares = _cellar.previewDeposit(_assets);
         if (shares < _minimumShares) revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shares);
-        _cellar.asset().approve(address(_cellar), _assets);
+        baseAsset.approve(address(_cellar), _assets);
         _cellar.deposit(_assets, msg.sender);
+        _revokeExternalApproval(baseAsset, address(_cellar));
     }
 
     /**
@@ -109,9 +110,11 @@ contract SimpleSlippageRouter {
         uint256 quotedAssetAmount = _cellar.previewMint(_shares);
         if (quotedAssetAmount > _maxAssets)
             revert SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed(_shares, _maxAssets, quotedAssetAmount);
-        _cellar.asset().safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
-        _cellar.asset().approve(address(_cellar), quotedAssetAmount);
+        ERC20 baseAsset = _cellar.asset();
+        baseAsset.safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
+        baseAsset.approve(address(_cellar), quotedAssetAmount);
         _cellar.mint(_shares, msg.sender);
+        _revokeExternalApproval(baseAsset, address(_cellar));
     }
 
     /**
@@ -129,5 +132,14 @@ contract SimpleSlippageRouter {
             revert SimpleSlippageAdaptor__RedeemMinAssetsUnmet(_shares, _minAssets, quotedAssetAmount);
 
         _cellar.redeem(_shares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
+    }
+
+    /// Helper Functions
+
+    /**
+     * @notice Helper function that checks if `spender` has any more approval for `asset`, and if so revokes it.
+     */
+    function _revokeExternalApproval(ERC20 asset, address spender) internal {
+        if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
     }
 }
