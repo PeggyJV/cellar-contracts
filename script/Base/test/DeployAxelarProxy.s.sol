@@ -4,16 +4,16 @@ pragma solidity 0.8.21;
 import { AxelarProxy } from "src/AxelarProxy.sol";
 import { Deployer } from "src/Deployer.sol";
 
-import { ArbitrumAddresses } from "test/resources/Arbitrum/ArbitrumAddresses.sol";
+import { BaseAddresses } from "test/resources/Base/BaseAddresses.sol";
 
 import "forge-std/Script.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/Arbitrum/test/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $ARBITRUM_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $ARBISCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/Base/test/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $BASE_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $BASESCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract DeployAxelarProxyScript is Script, ArbitrumAddresses {
+contract DeployAxelarProxyScript is Script, BaseAddresses {
     Deployer public deployer = Deployer(deployerAddress);
 
     function run() external {

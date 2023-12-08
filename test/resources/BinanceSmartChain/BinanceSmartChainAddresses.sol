@@ -7,7 +7,7 @@ import { CErc20 } from "src/interfaces/external/ICompound.sol";
 contract BinanceSmartChainAddresses {
     // Sommelier
     address public axelarProxyV0_0 = address(0);
-    address public axelarGateway = 0x6f015F16De9fC8791b234eF68D486d2bF203FBA8;
+    address public axelarGateway = 0x304acf330bbE08d1e512eefaa92F6a57871fD895;
     string public axelarSommelierSender = "";
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public devStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
