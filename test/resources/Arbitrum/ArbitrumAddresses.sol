@@ -11,6 +11,7 @@ contract ArbitrumAddresses {
     string public axelarSommelierSender = "";
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public devStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
+    address public deployerDeployerAddress = 0x61bfcdAFA35999FA93C10Ec746589EB93817a8b9;
     address public cosmos = address(0xCAAA);
     address public multisig = address(0);
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
