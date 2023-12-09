@@ -42,6 +42,10 @@ contract CurveEMAExtension is Extension {
         uint8 rateIndex;
         bool handleRate;
     }
+    // TODO add in 2 uint32 values that represent the min and max possible virtual price values
+    // Each min/max should have 4 decimals IE FRXETH can not be worth more than 1.1000e4 ETH
+
+    // TODO maybe the bounds checks should be an internal function, that errors with a specific error.
 
     /**
      * @notice Curve EMA Extension Storage
@@ -63,7 +67,7 @@ contract CurveEMAExtension is Extension {
 
         // Make sure we can query the price.
         getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
-
+        // TODO get price from pool and add bounds check
         // Save extension storage.
         extensionStorage[asset] = stor;
     }
@@ -78,6 +82,8 @@ contract CurveEMAExtension is Extension {
 
         ERC20 coins0 = getCoinsZero(pool);
         uint256 priceInAsset = getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
+
+        // TODO get price from pool and add bounds check
 
         uint256 assetPrice = priceRouter.getPriceInUSD(coins0);
         price = assetPrice.mulDivDown(priceInAsset, 10 ** curveEMADecimals);

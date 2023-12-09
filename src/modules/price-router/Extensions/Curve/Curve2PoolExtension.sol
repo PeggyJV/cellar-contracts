@@ -70,7 +70,10 @@ contract Curve2PoolExtension is Extension {
         bool divideRate1; // If we only new the safe price of sDAI, then we need to divide out the rate stored in the curve pool
         bool isCorrelated; // but if we know the safe market price of DAI then we can just use that.
     }
+    // TODO add in 2 uint32 values that represent the min and max possible answers the price oracle can provide
+    // Each min/max should have 4 decimals IE the virtual price can not be less than 0.9980e4
 
+    // TODO maybe the bounds checks should be an internal function, that errors with a specific error.
     /**
      * @notice Curve EMA Extension Storage
      */
@@ -105,6 +108,8 @@ contract Curve2PoolExtension is Extension {
         if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
             revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
 
+        // TODO add in bounds check on virtual price
+
         // Make sure isCorrelated is correct.
         if (stor.isCorrelated) {
             // If this is true, then calling lp_price() should revert.
@@ -134,6 +139,8 @@ contract Curve2PoolExtension is Extension {
         uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
         uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
         uint256 virtualPrice = pool.get_virtual_price();
+
+        // TODO add in bounds check on virtual price
 
         if (stor.isCorrelated) {
             // Handle rates if needed.
