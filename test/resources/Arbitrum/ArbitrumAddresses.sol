@@ -6,12 +6,14 @@ import { CErc20 } from "src/interfaces/external/ICompound.sol";
 
 contract ArbitrumAddresses {
     // Sommelier
-    address public axelarProxyV0_0 = address(0);
+    address public axelarProxyV0_0 = 0xEe75bA2C81C04DcA4b0ED6d1B7077c188FEde4d2;
     address public axelarGateway = 0xe432150cce91c13a887f7D836923d5597adD8E31;
     string public axelarSommelierSender = "somm1lrneqhq4rq8nz2nk6vn3sanrxva7zuns8aa45g";
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public devStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address public deployerDeployerAddress = 0x61bfcdAFA35999FA93C10Ec746589EB93817a8b9;
+    address public dev0Address = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+    address public dev1Address = 0x6d3655EE04820f4385a910FD1898d4Ec6241F520;
     address public cosmos = address(0xCAAA);
     address public multisig = address(0);
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
