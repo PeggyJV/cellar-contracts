@@ -4,10 +4,10 @@ pragma solidity 0.8.21;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CErc20 } from "src/interfaces/external/ICompound.sol";
 
-contract ArbitrumAddresses {
+contract AvalancheAddresses {
     // Sommelier
     address public axelarProxyV0_0 = address(0);
-    address public axelarGateway = 0xe432150cce91c13a887f7D836923d5597adD8E31;
+    address public axelarGateway = 0x5029C0EFf6C34351a0CEc334542cDb22c7928f78;
     string public axelarSommelierSender = "somm1lrneqhq4rq8nz2nk6vn3sanrxva7zuns8aa45g";
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public devStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;

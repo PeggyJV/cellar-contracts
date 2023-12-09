@@ -10,7 +10,7 @@ import "forge-std/Script.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/BinanceSmartChain/production/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $BNB_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $BSCSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/BinanceSmartChain/production/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $BNB_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 3000000000 --verify --etherscan-api-key $BSCSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployAxelarProxyScript is Script, BinanceSmartChainAddresses {

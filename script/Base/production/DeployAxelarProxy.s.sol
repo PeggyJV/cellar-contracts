@@ -10,7 +10,7 @@ import "forge-std/Script.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/Base/production/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $MATIC_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $BASESCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/Base/production/DeployAxelarProxy.s.sol:DeployAxelarProxyScript --evm-version london --rpc-url $BASE_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 8612736 --verify --etherscan-api-key $BASESCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployAxelarProxyScript is Script, BaseAddresses {
