@@ -7,6 +7,7 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 /**
  * @title Sommelier Price Router Curve EMA Extension
  * @notice Allows the Price Router to price assets using Curve EMA oracles.
+ * @dev This extension should only use pools that are correlated.
  * @author crispymangoes
  */
 contract CurveEMAExtension is Extension {
@@ -28,12 +29,19 @@ contract CurveEMAExtension is Extension {
     error CurveEMAExtension_ASSET_NOT_SUPPORTED();
 
     /**
+     * @notice While getting the price from the pool, the price was outside of normal safe bounds.
+     */
+    error CurveEMAExtension_BOUNDS_EXCEEDED();
+
+    /**
      * @notice Extension storage
      * @param pool address of the curve pool to use as an oracle
      * @param index what index to use when querying the price
      * @param needIndex bool indicating whether or not price_oracle should or should not be called with an index variable
      * @param rateIndex what index to use when querying the stored_rate
      * @param handleRate bool indicating whether or not price_oracle needs to account for a rate
+     * @param upperBound the upper bound `price_oracle` can be, in terms of coins[0] with 4 decimals.
+     * @param lowerBound the lower bound `price_oracle` can be, in terms of coins[0] with 4 decimals.
      */
     struct ExtensionStorage {
         address pool;
@@ -41,11 +49,9 @@ contract CurveEMAExtension is Extension {
         bool needIndex;
         uint8 rateIndex;
         bool handleRate;
+        uint32 upperBound;
+        uint32 lowerBound;
     }
-    // TODO add in 2 uint32 values that represent the min and max possible virtual price values
-    // Each min/max should have 4 decimals IE FRXETH can not be worth more than 1.1000e4 ETH
-
-    // TODO maybe the bounds checks should be an internal function, that errors with a specific error.
 
     /**
      * @notice Curve EMA Extension Storage
@@ -66,8 +72,11 @@ contract CurveEMAExtension is Extension {
             revert CurveEMAExtension_ASSET_NOT_SUPPORTED();
 
         // Make sure we can query the price.
-        getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
-        // TODO get price from pool and add bounds check
+        uint256 answer = getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
+
+        // Make sure answer is reasonable.
+        _enforceBounds(answer, stor.lowerBound, stor.upperBound);
+
         // Save extension storage.
         extensionStorage[asset] = stor;
     }
@@ -83,7 +92,8 @@ contract CurveEMAExtension is Extension {
         ERC20 coins0 = getCoinsZero(pool);
         uint256 priceInAsset = getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
 
-        // TODO get price from pool and add bounds check
+        // Make sure priceInAsset is reasonable.
+        _enforceBounds(priceInAsset, stor.lowerBound, stor.upperBound);
 
         uint256 assetPrice = priceRouter.getPriceInUSD(coins0);
         price = assetPrice.mulDivDown(priceInAsset, 10 ** curveEMADecimals);
@@ -111,5 +121,14 @@ contract CurveEMAExtension is Extension {
     ) public view returns (uint256 price) {
         price = needIndex ? pool.price_oracle(index) : pool.price_oracle();
         if (handleRate) price = price.mulDivDown(pool.stored_rates()[rateIndex], 10 ** curveEMADecimals);
+    }
+
+    /**
+     * @notice Helper function to check if a provided answer is within a reasonable bound.
+     */
+    function _enforceBounds(uint256 providedAnswer, uint32 lowerBound, uint32 upperBound) internal view {
+        uint32 providedAnswerConvertedToBoundDecimals = uint32(providedAnswer.changeDecimals(curveEMADecimals, 4));
+        if (providedAnswerConvertedToBoundDecimals < lowerBound || providedAnswerConvertedToBoundDecimals > upperBound)
+            revert CurveEMAExtension_BOUNDS_EXCEEDED();
     }
 }
