@@ -79,10 +79,7 @@ contract Curve2PoolExtension is Extension {
         uint32 upperBound;
         uint32 lowerBound;
     }
-    // TODO add in 2 uint32 values that represent the min and max possible answers the price oracle can provide
-    // Each min/max should have 4 decimals IE the virtual price can not be less than 0.9980e4
 
-    // TODO maybe the bounds checks should be an internal function, that errors with a specific error.
     /**
      * @notice Curve EMA Extension Storage
      */

@@ -56,8 +56,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        cStor.upperBound = uint32(1.05e4); //TODO:
-        cStor.lowerBound = uint32(.95e4); //TODO:
+        cStor.upperBound = uint32(1.05e4);
+        cStor.lowerBound = uint32(.95e4);
 
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
@@ -68,7 +68,7 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         price = price.mulDivDown(priceRouter.getPriceInUSD(USDC), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-        priceRouter.addAsset(CRVUSD, settings, abi.encode(cStor), price); // TODO: I believe this is where the setup is failing currently.
+        priceRouter.addAsset(CRVUSD, settings, abi.encode(cStor), price);
 
         ERC4626 sDaiVault = ERC4626(savingsDaiAddress);
         ERC20 sDAI = ERC20(savingsDaiAddress);
@@ -77,8 +77,6 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         price = priceRouter.getPriceInUSD(DAI).mulDivDown(sDaiShareInDai, 10 ** DAI.decimals());
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(erc4626Extension));
         priceRouter.addAsset(sDAI, settings, abi.encode(0), price);
-
-        // TODO: add a mockCurvePricingSource (setup extension, add asset to priceRouter, trust Curve position with asset, trust ConvexCurve position with asset, test reverts)
     }
 
     // ======================================= HAPPY PATH =======================================
@@ -268,7 +266,6 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         _addWethToPriceRouter();
         _addRethToPriceRouter();
 
-        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
         Curve2PoolExtension.ExtensionStorage memory stor;
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
@@ -297,7 +294,6 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         _addWethToPriceRouter();
         _addRethToPriceRouter();
 
-        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
         Curve2PoolExtension.ExtensionStorage memory stor;
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
@@ -325,7 +321,7 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testEnforceBounds() external {
         _addWethToPriceRouter();
         _addRethToPriceRouter();
-        
+
         address[2] memory _coins = [
             0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
             0xae78736Cd615f374D3085123A210448E74Fc6393
@@ -333,7 +329,6 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256[2] memory _rates;
 
         mockCurvePricingSource = new MockCurvePricingSource(_coins, _rates, 2e18, 1e18);
-        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
         Curve2PoolExtension.ExtensionStorage memory stor;
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
