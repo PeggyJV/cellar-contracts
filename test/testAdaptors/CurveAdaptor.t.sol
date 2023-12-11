@@ -532,7 +532,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -1625,7 +1625,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max

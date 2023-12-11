@@ -72,7 +72,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
