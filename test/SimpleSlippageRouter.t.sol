@@ -190,7 +190,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         console.log("BEFORE: Cellar Shares Belonging to Test Contract: %s", cellar.balanceOf(address(this)));
 
         // mint with half of the assets using the SSR
-        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
         console.log("AFTER: Cellar Shares Belonging to Test Contract: %s", cellar.balanceOf(address(this)));
         console.log("AFTER: Total Cellar Shares: %s", cellar.totalSupply());
 
@@ -200,7 +200,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         assertEq(USDC.balanceOf(address(this)), assets - deposit1);
 
         // mint using the other half using the SSR
-        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
 
         shareBalance2 = cellar.balanceOf(address(this));
 
@@ -232,7 +232,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         uint256 maxShares1 = withdraw1; // assume 1:1 USDC:Shares shareprice
         cellar.approve(address(simpleSlippageRouter), withdraw1);
 
-        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1);
+        simpleSlippageRouter.redeem(cellar, maxShares1, withdraw1, deadline1);
 
         shareBalance1 = cellar.balanceOf(address(this));
 
@@ -299,13 +299,13 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
                 abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
             )
         );
-        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
             )
         );
-        simpleSlippageRouter.redeem(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.redeem(cellar, minShares1, deposit1, deadline1);
     }
 
     function testDepositMinimumSharesUnmet(uint256 assets) external {
@@ -394,11 +394,11 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
                 )
             )
         );
-        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
 
         // manipulate back so the mint should resolve.
         deal(address(USDC), address(cellar), originalBalance);
-        simpleSlippageRouter.mint(cellar, deposit1, minShares1, deadline1);
+        simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
     }
 
     function testRedeemMinAssetsUnmet(uint256 assets) external {
@@ -429,9 +429,9 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
                 )
             )
         );
-        simpleSlippageRouter.redeem(cellar, withdraw1 + 1, maxShares1, deadline1);
+        simpleSlippageRouter.redeem(cellar, maxShares1, withdraw1 + 1, deadline1);
 
         // Use a value for withdraw1 that will pass the conditional logic.
-        simpleSlippageRouter.redeem(cellar, withdraw1, maxShares1, deadline1);
+        simpleSlippageRouter.redeem(cellar, maxShares1, withdraw1, deadline1);
     }
 }
