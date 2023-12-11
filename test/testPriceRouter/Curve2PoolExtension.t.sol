@@ -5,6 +5,7 @@ import { Curve2PoolExtension, CurvePool, Extension } from "src/modules/price-rou
 import { CurveEMAExtension, CurvePool } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
 import { ERC4626Extension } from "src/modules/price-router/Extensions/ERC4626Extension.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+import { MockCurvePricingSource } from "src/mocks/MockCurvePricingSource.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -19,6 +20,7 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     Curve2PoolExtension private curve2PoolExtension;
     CurveEMAExtension private curveEMAExtension;
     ERC4626Extension private erc4626Extension;
+    MockCurvePricingSource private mockCurvePricingSource;
 
     function setUp() external {
         // Setup forked environment.
@@ -54,6 +56,9 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = uint32(1.05e4); //TODO:
+        cStor.upperBound = uint32(.95e4); //TODO:
+
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -63,7 +68,7 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         price = price.mulDivDown(priceRouter.getPriceInUSD(USDC), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-        priceRouter.addAsset(CRVUSD, settings, abi.encode(cStor), price);
+        priceRouter.addAsset(CRVUSD, settings, abi.encode(cStor), price); // TODO: I believe this is where the setup is failing currently.
 
         ERC4626 sDaiVault = ERC4626(savingsDaiAddress);
         ERC20 sDAI = ERC20(savingsDaiAddress);
@@ -72,6 +77,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         price = priceRouter.getPriceInUSD(DAI).mulDivDown(sDaiShareInDai, 10 ** DAI.decimals());
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(erc4626Extension));
         priceRouter.addAsset(sDAI, settings, abi.encode(0), price);
+
+        // TODO: add a mockCurvePricingSource (setup extension, add asset to priceRouter, trust Curve position with asset, trust ConvexCurve position with asset, test reverts)
     }
 
     // ======================================= HAPPY PATH =======================================
@@ -236,6 +243,16 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testCallingSetupFromWrongAddress() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(Extension.Extension__OnlyPriceRouter.selector)));
         curve2PoolExtension.setupSource(USDC, abi.encode(0));
+    }
+
+    /**
+     * TODO: test the new pricing bounds applied to curve pricing extensions (applies to curve 2pool, and curve ema pricing extensions)
+     * NOTE: uses mockCurvePricingSource.sol to assess how the extensions respond to different scenarios from curve pool.
+     */
+    function testEnforceBounds() external {
+        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
+        // test reversion
+        // test resolution of reversion
     }
 
     function _addWethToPriceRouter() internal {
