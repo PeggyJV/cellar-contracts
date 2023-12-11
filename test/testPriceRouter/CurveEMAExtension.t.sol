@@ -45,6 +45,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -65,6 +67,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.pool = EthFrxEthCurvePool;
         stor.index = 0;
         stor.needIndex = false;
+        stor.lowerBound = 0;
+        stor.upperBound = 10e4;
         PriceRouter.AssetSettings memory settings;
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(stor.pool),
@@ -91,6 +95,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.pool = triCrypto2;
         stor.index = 0;
         stor.needIndex = true;
+        stor.lowerBound = 0;
+        stor.upperBound = 10e8;
         PriceRouter.AssetSettings memory settings;
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(stor.pool),
@@ -117,6 +123,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.needIndex = false;
         stor.rateIndex = 1;
         stor.handleRate = true;
+        stor.lowerBound = 0;
+        stor.upperBound = 10e4;
         PriceRouter.AssetSettings memory settings;
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(stor.pool),
@@ -146,6 +154,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.needIndex = false;
         stor.rateIndex = 1;
         stor.handleRate = true;
+        stor.lowerBound = 0;
+        stor.upperBound = 10e4;
         PriceRouter.AssetSettings memory settings;
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(stor.pool),
@@ -172,6 +182,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.pool = EthFrxEthCurvePool;
         stor.index = 0;
         stor.needIndex = false;
+        stor.lowerBound = 0;
+        stor.upperBound = 10e4;
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
 

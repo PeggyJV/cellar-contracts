@@ -49,8 +49,8 @@ contract CurveEMAExtension is Extension {
         bool needIndex;
         uint8 rateIndex;
         bool handleRate;
-        uint32 upperBound;
         uint32 lowerBound;
+        uint32 upperBound;
     }
 
     /**
@@ -73,7 +73,6 @@ contract CurveEMAExtension is Extension {
 
         // Make sure we can query the price.
         uint256 answer = getPriceFromCurvePool(pool, stor.index, stor.needIndex, stor.rateIndex, stor.handleRate);
-
         // Make sure answer is reasonable.
         _enforceBounds(answer, stor.lowerBound, stor.upperBound);
 

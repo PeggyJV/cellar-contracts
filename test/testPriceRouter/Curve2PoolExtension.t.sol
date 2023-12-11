@@ -56,8 +56,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        cStor.lowerBound = uint32(1.05e4); //TODO:
-        cStor.upperBound = uint32(.95e4); //TODO:
+        cStor.upperBound = uint32(1.05e4); //TODO:
+        cStor.lowerBound = uint32(.95e4); //TODO:
 
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
@@ -94,6 +94,9 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent0 = address(WETH);
         stor.underlyingOrConstituent1 = address(rETH);
 
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
+
         priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
 
         uint256 price = priceRouter.getValue(ERC20(WethRethToken), 1e18, WETH);
@@ -110,6 +113,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent0 = address(FRAX);
         stor.underlyingOrConstituent1 = address(CRVUSD);
         stor.isCorrelated = true;
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
 
         priceRouter.addAsset(ERC20(FraxCrvUsdToken), settings, abi.encode(stor), 1e8);
 
@@ -128,6 +133,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent1 = address(sDAI);
         stor.isCorrelated = true;
         stor.divideRate1 = true;
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
 
         priceRouter.addAsset(ERC20(CrvUsdSdaiToken), settings, abi.encode(stor), 1e8);
 
@@ -145,6 +152,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.pool = WethRethPool;
         stor.underlyingOrConstituent0 = address(WETH);
         stor.underlyingOrConstituent1 = address(rETH);
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
 
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_ASSET_NOT_SUPPORTED.selector))
@@ -178,6 +187,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent0 = address(WETH);
         stor.underlyingOrConstituent1 = address(FRXETH);
         stor.isCorrelated = true;
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
 
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_ASSET_NOT_SUPPORTED.selector))
@@ -190,6 +201,9 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethFrxethPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
+
         uint256 price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -215,6 +229,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent1 = address(CRVUSD);
         // isCorrelated should be true.
         stor.isCorrelated = false;
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4;
 
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_POOL_NOT_SUPPORTED.selector))

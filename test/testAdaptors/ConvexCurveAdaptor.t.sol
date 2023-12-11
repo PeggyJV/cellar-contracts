@@ -202,6 +202,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -217,7 +219,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethFrxethPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(
+        cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;        price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
             cStor.needIndex,
@@ -232,6 +235,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethMkUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+                cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -247,6 +252,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethYethPool;
         cStor.index = 0;
         cStor.needIndex = false;
+                cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -264,6 +271,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
+                cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -281,6 +290,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
+                cStor.lowerBound = 0;
+        cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -301,7 +312,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // FRAX-crvUSD
         // frxETH-ETH
 
-        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false);
+        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false, 0, 10e4);
 
         // mkUsdFraxUsdcPool
         // mkUsdFraxUsdcToken
@@ -314,27 +325,29 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             MKUSD,
             ERC20(FraxUsdcToken),
             false,
-            false
+            false,
+            0,
+            10e4
         );
 
         // EthStethNgPool
         // EthStethNgToken
         // EthStethNgGauge
-        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 2_100e8, WETH, STETH, false, false);
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 2_100e8, WETH, STETH, false, false, 0, 10e4);
 
         // WethYethPool
         // WethYethToken
         // WethYethGauge
-        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 2_100e8, WETH, YETH, false, false);
+        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 2_100e8, WETH, YETH, false, false, 0, 10e4);
         // EthEthxPool
         // EthEthxToken
         // EthEthxGauge
-        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 2_100e8, WETH, ETHX, false, true);
+        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 2_100e8, WETH, ETHX, false, true, 0, 10e4);
 
         // CrvUsdSfraxPool
         // CrvUsdSfraxToken
         // CrvUsdSfraxGauge
-        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false);
+        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false, 0, 10e4);
 
         // Likely going to be in the frax platform adaptor tests but will test here in case we need to go into the convex-curve platform tests
 
@@ -345,15 +358,15 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // WethFrxethPool
         // WethFrxethToken
         // WethFrxethGauge
-        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 2100e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 2100e8, WETH, FRXETH, false, false, 0, 10e4);
         // EthFrxethPool
         // EthFrxethToken
         // EthFrxethGauge
-        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 2100e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 2100e8, WETH, FRXETH, false, false, 0, 10e4);
         // FraxCrvUsdPool
         // FraxCrvUsdToken
         // FraxCrvUsdGauge
-        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false);
+        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false, 0, 10e4);
 
         convexCurveAdaptor = new ConvexCurveAdaptor(convexCurveMainnetBooster, address(WETH));
 
@@ -1163,7 +1176,9 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         ERC20 underlyingOrConstituent0,
         ERC20 underlyingOrConstituent1,
         bool divideRate0,
-        bool divideRate1
+        bool divideRate1,
+        uint32 lowerBound,
+        uint32 upperBound
     ) internal {
         Curve2PoolExtension.ExtensionStorage memory stor;
         stor.pool = pool;
@@ -1172,6 +1187,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent1 = address(underlyingOrConstituent1);
         stor.divideRate0 = divideRate0;
         stor.divideRate1 = divideRate1;
+        stor.lowerBound = lowerBound;
+        stor.upperBound = upperBound;
         PriceRouter.AssetSettings memory settings;
         settings.derivative = EXTENSION_DERIVATIVE;
         settings.source = address(curve2PoolExtension);
