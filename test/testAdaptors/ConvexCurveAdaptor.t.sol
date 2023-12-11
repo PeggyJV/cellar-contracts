@@ -220,7 +220,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.index = 0;
         cStor.needIndex = false;
         cStor.lowerBound = 0;
-        cStor.upperBound = 10e4;        price = curveEMAExtension.getPriceFromCurvePool(
+        cStor.upperBound = 10e4;
+        price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
             cStor.needIndex,
@@ -235,7 +236,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethMkUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
-                cStor.lowerBound = 0;
+        cStor.lowerBound = 0;
         cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
@@ -252,7 +253,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethYethPool;
         cStor.index = 0;
         cStor.needIndex = false;
-                cStor.lowerBound = 0;
+        cStor.lowerBound = 0;
         cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
@@ -271,7 +272,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
-                cStor.lowerBound = 0;
+        cStor.lowerBound = 0;
         cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
@@ -290,7 +291,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
-                cStor.lowerBound = 0;
+        cStor.lowerBound = 0;
         cStor.upperBound = 10e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),

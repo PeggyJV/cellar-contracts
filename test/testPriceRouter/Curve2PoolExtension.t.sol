@@ -42,8 +42,8 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
 
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
-        // priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
         priceRouter.addAsset(DAI, settings, abi.encode(stor), 1e8);
@@ -262,13 +262,106 @@ contract Curve2PoolExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     /**
-     * TODO: test the new pricing bounds applied to curve pricing extensions (applies to curve 2pool, and curve ema pricing extensions)
-     * NOTE: uses mockCurvePricingSource.sol to assess how the extensions respond to different scenarios from curve pool.
+     * test the new pricing bounds (_enforceBounds()) applied to a asset being setup - upperBound focus
+     */
+    function testEnforceBoundsSetupUpperBound() external {
+        _addWethToPriceRouter();
+        _addRethToPriceRouter();
+
+        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
+        Curve2PoolExtension.ExtensionStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
+
+        stor.pool = WethRethPool;
+        stor.underlyingOrConstituent0 = address(WETH);
+        stor.underlyingOrConstituent1 = address(rETH);
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1e4; // Purposely set up with a failing upperBound
+
+        // should revert because of upperBound
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_BOUNDS_EXCEEDED.selector))
+        );
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
+
+        stor.upperBound = 1.05e4; // Fix the upperBound
+
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8); // now should be able to add asset
+    }
+
+    /**
+     * test the new pricing bounds (_enforceBounds()) applied to a asset being setup - lowerBound focus
+     */
+    function testEnforceBoundsSetupLowerBound() external {
+        _addWethToPriceRouter();
+        _addRethToPriceRouter();
+
+        // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
+        Curve2PoolExtension.ExtensionStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
+
+        stor.pool = WethRethPool;
+        stor.underlyingOrConstituent0 = address(WETH);
+        stor.underlyingOrConstituent1 = address(rETH);
+        stor.lowerBound = 1.05e4; // Purposely set up with a failing upperBound
+        stor.upperBound = 10e4;
+
+        // should revert because of lowerBound
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_BOUNDS_EXCEEDED.selector))
+        );
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
+
+        stor.lowerBound = .95e4; // Fix the lowerBound
+
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8); // now should be able to add asset
+    }
+
+    /**
+     * test the new pricing bounds applied to curve 2pool pricing extensions with MockCurvePricingSource manipulation
      */
     function testEnforceBounds() external {
+        _addWethToPriceRouter();
+        _addRethToPriceRouter();
+        
+        address[2] memory _coins = [
+            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            0xae78736Cd615f374D3085123A210448E74Fc6393
+        ];
+        uint256[2] memory _rates;
+
+        mockCurvePricingSource = new MockCurvePricingSource(_coins, _rates, 2e18, 1e18);
         // setup should have a mockCurvePool setup to work with one asset already registered with priceRouter, registry, curveAdaptor, and convexCurveAdaptor
-        // test reversion
-        // test resolution of reversion
+        Curve2PoolExtension.ExtensionStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curve2PoolExtension));
+        stor.pool = address(mockCurvePricingSource);
+        stor.underlyingOrConstituent0 = address(WETH);
+        stor.underlyingOrConstituent1 = address(rETH);
+        stor.lowerBound = .95e4;
+        stor.upperBound = 1.05e4; // Purposely set up with a failing upperBound
+        // should revert because of upperBound
+        stor.isCorrelated = false;
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_BOUNDS_EXCEEDED.selector))
+        );
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
+
+        mockCurvePricingSource.setMockVirtualPrice(1e18);
+        priceRouter.addAsset(ERC20(WethRethToken), settings, abi.encode(stor), 4_076e8);
+
+        // ensure getPriceInUSD does not revert
+        priceRouter.getPriceInUSD(ERC20(WethRethToken));
+
+        // Check that bad virtual price causes revert due to LOWER bound
+        mockCurvePricingSource.setMockVirtualPrice(0.9e18);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Curve2PoolExtension.Curve2PoolExtension_BOUNDS_EXCEEDED.selector))
+        );
+        priceRouter.getPriceInUSD(ERC20(WethRethToken));
     }
 
     function _addWethToPriceRouter() internal {

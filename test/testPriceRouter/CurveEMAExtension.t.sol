@@ -8,6 +8,7 @@ import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+import { MockCurvePricingSource } from "src/mocks/MockCurvePricingSource.sol";
 
 contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     using Math for uint256;
@@ -15,6 +16,8 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // Deploy the extension.
     CurveEMAExtension private curveEMAExtension;
+
+    MockCurvePricingSource private mockCurvePricingSource;
 
     function setUp() external {
         // Setup forked environment.
@@ -174,6 +177,152 @@ contract CurveEMAExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 sDaiPrice = priceRouter.getValue(ERC20(sDAI), 1e18, DAI);
         uint256 expectedPrice = ERC4626(sDAI).previewRedeem(1e18);
         assertApproxEqRel(sDaiPrice, expectedPrice, 0.002e18, "sDAI price should approximately equal the sDAI rate.");
+    }
+
+    /**
+     * test the new pricing bounds (_enforceBounds()) applied to a asset being setup - upperBound focus
+     */
+    function testEnforceBoundsSetupUpperBound() external {
+        _addWethToPriceRouter();
+
+        // Add FrxEth mock pricing source
+        CurveEMAExtension.ExtensionStorage memory cStor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+
+        uint256 price;
+
+        address[2] memory _coins = [
+            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            0x5E8422345238F34275888049021821E8E08CAa1f
+        ];
+        uint256[2] memory _rates;
+
+        mockCurvePricingSource = new MockCurvePricingSource(_coins, _rates, 1e18, 1e18);
+
+        cStor.pool = address(mockCurvePricingSource); // was WethFrxethPool originally
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.lowerBound = 0;
+        cStor.upperBound = .8e4; // purposely set upperBound low
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveEMAExtension.CurveEMAExtension_BOUNDS_EXCEEDED.selector)));
+        priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
+
+        cStor.lowerBound = 0;
+        cStor.upperBound = 1e4; // resolve upperBound
+        priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
+    }
+
+    /**
+     * test the new pricing bounds (_enforceBounds()) applied to a asset being setup - lowerBound focus
+     */
+    function testEnforceBoundsSetupLowerBound() external {
+        _addWethToPriceRouter();
+
+        // Add FrxEth mock pricing source
+        CurveEMAExtension.ExtensionStorage memory cStor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+
+        uint256 price;
+
+        address[2] memory _coins = [
+            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            0x5E8422345238F34275888049021821E8E08CAa1f
+        ];
+        uint256[2] memory _rates;
+
+        mockCurvePricingSource = new MockCurvePricingSource(_coins, _rates, 1e18, 1e18);
+
+        cStor.pool = address(mockCurvePricingSource); // was WethFrxethPool originally
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.lowerBound = 2e4; // purposely set lowerBound high
+        cStor.upperBound = 1.05e4;
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveEMAExtension.CurveEMAExtension_BOUNDS_EXCEEDED.selector)));
+        priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
+
+        cStor.lowerBound = .95e4; // resolve lowerBound
+        cStor.upperBound = 1.05e4;
+        priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
+    }
+
+    // add mock
+    // add asset
+    // trigger upper revert with getPriceInUSD
+    // resolve
+    // trigger lower revert with getPriceInUSD
+    // resolve
+    function testEnforceBounds() external {
+        _addWethToPriceRouter();
+
+        // Add FrxEth mock pricing source
+        CurveEMAExtension.ExtensionStorage memory cStor;
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+
+        uint256 price;
+
+        address[2] memory _coins = [
+            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            0x5E8422345238F34275888049021821E8E08CAa1f
+        ];
+        uint256[2] memory _rates;
+
+        mockCurvePricingSource = new MockCurvePricingSource(_coins, _rates, 1e18, 1e18);
+
+        cStor.pool = address(mockCurvePricingSource); // was WethFrxethPool originally
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1e4;
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
+
+        // ensure getPriceInUSD does not revert
+        priceRouter.getPriceInUSD(FRXETH);
+
+        mockCurvePricingSource.setMockPriceOraclePrice(.5e18); //should trigger lowerbound
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveEMAExtension.CurveEMAExtension_BOUNDS_EXCEEDED.selector)));
+        priceRouter.getPriceInUSD(FRXETH);
+
+        mockCurvePricingSource.setMockPriceOraclePrice(1e18); // resolve and show that getPriceInUSD works now
+        priceRouter.getPriceInUSD(FRXETH);
+
+        mockCurvePricingSource.setMockPriceOraclePrice(10e18); //should trigger upperbound
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveEMAExtension.CurveEMAExtension_BOUNDS_EXCEEDED.selector)));
+        priceRouter.getPriceInUSD(FRXETH);
+
+        mockCurvePricingSource.setMockPriceOraclePrice(1e18); // resolve and show that getPriceInUSD works now
+        priceRouter.getPriceInUSD(FRXETH);
     }
 
     // ======================================= REVERTS =======================================

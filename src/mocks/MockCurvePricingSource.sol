@@ -34,6 +34,7 @@ contract MockCurvePricingSource {
         rates = _rates;
         mockVirtualPrice = _mockVirtualPrice;
         mockPriceOraclePrice = _mockPriceOraclePrice;
+        
     }
 
     /**
