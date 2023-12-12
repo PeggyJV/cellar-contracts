@@ -16,7 +16,8 @@ contract ERC20Adaptor is BaseAdaptor {
     // Where:
     // `token` is the underling ERC20 token this adaptor is working with
     //================= Configuration Data Specification =================
-    // NOT USED
+    // isLiquid bool
+    // Indicates whether the position is liquid or not.
     //====================================================================
 
     //============================================ Global Functions ===========================================
@@ -27,7 +28,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("ERC20 Adaptor V 0.0"));
+        return keccak256(abi.encode("ERC20 Adaptor V 1.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -43,10 +44,19 @@ contract ERC20Adaptor is BaseAdaptor {
      * @param assets amount of `token` to send to receiver
      * @param receiver address to send assets to
      * @param adaptorData data needed to withdraw from this position
-     * @dev configurationData is NOT used
+     * @param configurationData data needed to determine if this position is liquid or not
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public override {
         _externalReceiverCheck(receiver);
+
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
         ERC20 token = abi.decode(adaptorData, (ERC20));
         token.safeTransfer(receiver, assets);
     }
@@ -55,9 +65,15 @@ contract ERC20Adaptor is BaseAdaptor {
      * @notice Identical to `balanceOf`, if an asset is used with a non ERC20 standard locking logic,
      *         then a NEW adaptor contract is needed.
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        return token.balanceOf(msg.sender);
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public view override returns (uint256) {
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (isLiquid) {
+            ERC20 token = abi.decode(adaptorData, (ERC20));
+            return token.balanceOf(msg.sender);
+        } else return 0;
     }
 
     /**

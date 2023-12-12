@@ -85,7 +85,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
 
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -95,10 +95,10 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.addPositionToCatalogue(usdcDaiPosition);
         cellar.addPositionToCatalogue(usdcWethPosition);
 
-        cellar.addPosition(1, daiPosition, abi.encode(0), false);
-        cellar.addPosition(1, wethPosition, abi.encode(0), false);
-        cellar.addPosition(1, usdcDaiPosition, abi.encode(0), false);
-        cellar.addPosition(1, usdcWethPosition, abi.encode(0), false);
+        cellar.addPosition(1, daiPosition, abi.encode(true), false);
+        cellar.addPosition(1, wethPosition, abi.encode(true), false);
+        cellar.addPosition(1, usdcDaiPosition, abi.encode(true), false);
+        cellar.addPosition(1, usdcWethPosition, abi.encode(true), false);
 
         cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));

@@ -83,7 +83,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
 
         cellar.addPositionToCatalogue(usdcPosition);
-        cellar.addPosition(1, usdcPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcPosition, abi.encode(true), false);
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -1011,7 +1011,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         string memory cellarName = "WETH Cellar V0.0";
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), assets, platformCut);
+        cellar = _createCellar(cellarName, WETH, wethPosition, abi.encode(true), assets, platformCut);
 
         // Create new share price oracle for it.
         {

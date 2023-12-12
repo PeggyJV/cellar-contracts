@@ -55,7 +55,7 @@ contract CellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
 
         cellar.setRebalanceDeviation(0.01e18);
 
@@ -69,7 +69,14 @@ contract CellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        Cellar metaCellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        Cellar metaCellar = _createCellar(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
         uint256 initialAssets = metaCellar.totalAssets();
 
         metaCellar.addPositionToCatalogue(cellarPosition);

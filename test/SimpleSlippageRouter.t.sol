@@ -70,7 +70,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         cellarName = "Cellar V0.0";
         initialDeposit = 1e6;
         platformCut = 0.75e18;
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
 
         vm.label(address(cellar), "cellar");
 
