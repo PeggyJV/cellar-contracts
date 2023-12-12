@@ -110,6 +110,9 @@ contract PricingCurveLpTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethFrxethPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
+
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -122,16 +125,16 @@ contract PricingCurveLpTest is MainnetStarterTest, AdaptorHelperFunctions {
         priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
 
         // Add in 2pool assets.
-        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, USDC, CRVUSD, false, false);
-        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, WETH, CVX, false, false);
-        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, WETH, STETH, false, false);
-        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, USDT, CRVUSD, false, false);
-        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, WETH, STETH, false, false);
-        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, FRAX, CRVUSD, false, false);
-        _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, CRVUSD, sDAI, false, true); // Since we are using sDAI as the underlying, the second bool must be true so we account for rate.
-        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, CRVUSD, FRAX, false, false); // Since we are using FRAX as the underlying, the second bool should be false.
-        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, WETH, FRXETH, false, false);
-        _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, STETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, USDC, CRVUSD, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, WETH, CVX, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, WETH, STETH, false, false, .95e4, 1.1e4);
+        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, USDT, CRVUSD, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, WETH, STETH, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, FRAX, CRVUSD, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, CRVUSD, sDAI, false, true, 0, 10e4); // Since we are using sDAI as the underlying, the second bool must be true so we account for rate.
+        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, CRVUSD, FRAX, false, false, 0, 10e4); // Since we are using FRAX as the underlying, the second bool should be false.
+        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, WETH, FRXETH, false, false, 0, 10e4);
+        _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, STETH, FRXETH, false, false, 0, 10e4);
 
         pricingData.push(
             PricingData({
@@ -423,7 +426,9 @@ contract PricingCurveLpTest is MainnetStarterTest, AdaptorHelperFunctions {
         ERC20 underlyingOrConstituent0,
         ERC20 underlyingOrConstituent1,
         bool divideRate0,
-        bool divideRate1
+        bool divideRate1,
+        uint32 lowerBound,
+        uint32 upperBound
     ) internal {
         Curve2PoolExtension.ExtensionStorage memory stor;
         stor.pool = pool;
@@ -439,6 +444,8 @@ contract PricingCurveLpTest is MainnetStarterTest, AdaptorHelperFunctions {
         PriceRouter.AssetSettings memory settings;
         settings.derivative = EXTENSION_DERIVATIVE;
         settings.source = address(curve2PoolExtension);
+        stor.lowerBound = lowerBound;
+        stor.upperBound = upperBound;
 
         priceRouter.addAsset(
             ERC20(token),
