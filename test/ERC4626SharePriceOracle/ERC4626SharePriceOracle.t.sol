@@ -1120,6 +1120,15 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         assertTrue(sharePriceOracle.automationForwarder() == address(0), "Automation Forwarder should not be set.");
 
         uint96 initialUpkeepFunds = 10e18;
+
+        // If non admin tries initializing, it should revert.
+        vm.startPrank(vm.addr(1));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyAdmin.selector))
+        );
+        sharePriceOracle.initialize(initialUpkeepFunds);
+        vm.stopPrank();
+
         deal(address(LINK), address(this), initialUpkeepFunds);
         LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
         sharePriceOracle.initialize(initialUpkeepFunds);

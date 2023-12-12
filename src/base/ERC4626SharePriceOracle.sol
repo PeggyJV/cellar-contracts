@@ -10,6 +10,11 @@ import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/int
 import { IRegistrar } from "src/interfaces/external/Chainlink/IRegistrar.sol";
 import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
 
+/**
+ * @title ERC4626SharePriceOracle
+ * @notice Acts as a safer Oracle to get an ERC4626's Share Price, by using up to date answers, and time weighted average answers.
+ * @author crispymangoes
+ */
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
     using SafeTransferLib for ERC20;
@@ -89,6 +94,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__AlreadyInitialized();
     error ERC4626SharePriceOracle__ParamHashDiffers();
     error ERC4626SharePriceOracle__NoPendingUpkeepToHandle();
+    error ERC4626SharePriceOracle__OnlyAdmin();
 
     //============================== EVENTS ===============================
 
@@ -221,7 +227,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 _allowedAnswerChangeUpper
     ) {
         target = _target;
-        targetDecimals = target.decimals();
+        targetDecimals = _target.decimals();
         ONE_SHARE = 10 ** targetDecimals;
         heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;
@@ -254,7 +260,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Should be called after contract creation.
      * @dev Creates a Chainlink Automation Upkeep, and set the `automationForwarder` address.
      */
-    function initialize(uint96 initialUpkeepFunds) external {
+    function initialize(uint96 initialUpkeepFunds) public {
+        if (msg.sender != automationAdmin) revert ERC4626SharePriceOracle__OnlyAdmin();
+
         // This function is only callable once.
         if (automationForwarder != address(0) || pendingUpkeepParamHash != bytes32(0))
             revert ERC4626SharePriceOracle__AlreadyInitialized();
@@ -339,7 +347,69 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Leverages Automation V2 secure offchain computation to run expensive share price calculations offchain,
      *         then inject them onchain using `performUpkeep`.
      */
-    function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
+    function checkUpkeep(
+        bytes calldata checkData
+    ) external view virtual returns (bool upkeepNeeded, bytes memory performData) {
+        (upkeepNeeded, performData) = _checkUpkeep(checkData);
+    }
+
+    /**
+     * @notice Save answer on chain, and update observations if needed.
+     */
+    function performUpkeep(bytes calldata performData) external virtual {
+        if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
+        _performUpkeep(performData, true);
+    }
+
+    //============================== ORACLE VIEW FUNCTIONS ===============================
+
+    /**
+     * @notice Get the latest answer, time weighted average answer, and bool indicating whether they can be safely used.
+     */
+    function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
+        // Read state from one slot.
+        ans = answer;
+        uint16 _currentIndex = currentIndex;
+        uint16 _observationsLength = observationsLength;
+        bool _killSwitch = killSwitch;
+
+        if (_killSwitch) return (0, 0, true);
+
+        // Check if answer is stale, if so set notSafeToUse to true, and return.
+        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
+        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
+        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, 0, true);
+
+        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(
+            ans,
+            _currentIndex,
+            _observationsLength
+        );
+        if (notSafeToUse) return (0, 0, true);
+    }
+
+    /**
+     * @notice Get the latest answer, and bool indicating whether answer is safe to use or not.
+     */
+    function getLatestAnswer() external view returns (uint256, bool) {
+        uint256 _answer = answer;
+        bool _killSwitch = killSwitch;
+
+        if (_killSwitch) return (0, true);
+
+        // Check if answer is stale, if so set notSafeToUse to true, and return.
+        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
+        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
+        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, true);
+
+        return (_answer, false);
+    }
+
+    //============================== INTERNAL HELPER FUNCTIONS ===============================
+    /**
+     * @notice Contains the core oracle logic used by extending contracts on `checkUpkeep`.
+     */
+    function _checkUpkeep(bytes calldata) internal view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
         uint216 sharePrice = _getTargetSharePrice();
         // Read state from one slot.
@@ -370,10 +440,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     /**
-     * @notice Save answer on chain, and update observations if needed.
+     * @notice Contains the core oracle logic used by extending contracts on `performUpkeep`.
      */
-    function performUpkeep(bytes calldata performData) external {
-        if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
+    function _performUpkeep(bytes memory performData, bool checkKillSwitch) internal {
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
@@ -388,7 +457,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (_killSwitch) revert ERC4626SharePriceOracle__ContractKillSwitch();
 
         // See if kill switch should be activated based on change between answers.
-        if (_checkIfKillSwitchShouldBeTriggered(sharePrice, _answer)) return;
+        if (checkKillSwitch && _checkIfKillSwitchShouldBeTriggered(sharePrice, _answer)) return;
 
         // See if we are upkeeping because of deviation.
         if (
@@ -441,55 +510,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         );
 
         // See if kill switch should be activated based on change between proposed answer and time weighted average answer.
-        if (!isNotSafeToUse && _checkIfKillSwitchShouldBeTriggered(sharePrice, timeWeightedAverageAnswer)) return;
+        if (
+            checkKillSwitch &&
+            !isNotSafeToUse &&
+            _checkIfKillSwitchShouldBeTriggered(sharePrice, timeWeightedAverageAnswer)
+        ) return;
         emit OracleUpdated(block.timestamp, currentTime, sharePrice, timeWeightedAverageAnswer, isNotSafeToUse);
     }
-
-    //============================== ORACLE VIEW FUNCTIONS ===============================
-
-    /**
-     * @notice Get the latest answer, time weighted average answer, and bool indicating whether they can be safely used.
-     */
-    function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
-        // Read state from one slot.
-        ans = answer;
-        uint16 _currentIndex = currentIndex;
-        uint16 _observationsLength = observationsLength;
-        bool _killSwitch = killSwitch;
-
-        if (_killSwitch) return (0, 0, true);
-
-        // Check if answer is stale, if so set notSafeToUse to true, and return.
-        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
-        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
-        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, 0, true);
-
-        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(
-            ans,
-            _currentIndex,
-            _observationsLength
-        );
-        if (notSafeToUse) return (0, 0, true);
-    }
-
-    /**
-     * @notice Get the latest answer, and bool indicating whether answer is safe to use or not.
-     */
-    function getLatestAnswer() external view returns (uint256, bool) {
-        uint256 _answer = answer;
-        bool _killSwitch = killSwitch;
-
-        if (_killSwitch) return (0, true);
-
-        // Check if answer is stale, if so set notSafeToUse to true, and return.
-        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
-        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
-        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, true);
-
-        return (_answer, false);
-    }
-
-    //============================== INTERNAL HELPER FUNCTIONS ===============================
 
     /**
      * @notice Get the next index of observations array.
@@ -531,6 +558,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 maxDuration = minDuration + gracePeriod;
         // Data is too new
         if (timeDelta < minDuration) return (0, true);
+
         // Data is too old
         if (timeDelta > maxDuration) return (0, true);
 
@@ -560,25 +588,36 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     /**
-     * @notice Activate the kill switch if `proposedAnswer` is extreme when compared to `answerToCompareAgainst`
-     * @return bool indicating whether calling function should immediately exit or not.
+     * @notice View function that returns true or false indicating whether the proposed arguments would trigger the killSwitch.
      */
-    function _checkIfKillSwitchShouldBeTriggered(
+    function _checkIfKillSwitchShouldBeTriggeredView(
         uint256 proposedAnswer,
         uint256 answerToCompareAgainst
-    ) internal returns (bool) {
+    ) internal view returns (bool) {
         if (
             proposedAnswer < answerToCompareAgainst.mulDivDown(allowedAnswerChangeLower, 1e4) ||
             proposedAnswer > answerToCompareAgainst.mulDivDown(allowedAnswerChangeUpper, 1e4)
         ) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @notice Activate the kill switch if `proposedAnswer` is extreme when compared to `answerToCompareAgainst`
+     * @return result bool indicating whether calling function should immediately exit or not.
+     */
+    function _checkIfKillSwitchShouldBeTriggered(
+        uint256 proposedAnswer,
+        uint256 answerToCompareAgainst
+    ) internal returns (bool result) {
+        if (result = _checkIfKillSwitchShouldBeTriggeredView(proposedAnswer, answerToCompareAgainst)) {
             killSwitch = true;
             emit KillSwitchActivated(
                 proposedAnswer,
                 answerToCompareAgainst.mulDivDown(allowedAnswerChangeLower, 1e4),
                 answerToCompareAgainst.mulDivDown(allowedAnswerChangeUpper, 1e4)
             );
-            return true;
         }
-        return false;
     }
 }
