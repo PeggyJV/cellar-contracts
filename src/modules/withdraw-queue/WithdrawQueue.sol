@@ -200,8 +200,7 @@ contract WithdrawQueue is ReentrancyGuard {
             share.safeTransferFrom(users[i], solver, request.sharesToWithdraw);
         }
 
-        // TODO could add an initiator address?
-        ISolver(solver).finishSolve(runData, sharesToSolver, requiredAssets);
+        ISolver(solver).finishSolve(runData, msg.sender, sharesToSolver, requiredAssets);
 
         for (uint256 i; i < users.length; ++i) {
             WithdrawRequest storage request = userWithdrawRequest[users[i]][share];
