@@ -11,9 +11,6 @@ import { SimpleSlippageRouter } from "src/modules/SimpleSlippageRouter.sol";
 import "test/resources/MainnetStarter.t.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-/**
- * TODO: initialShares belongs to  this test contract since it created the cellar no? --> this comment is outlined multiple times because I just want to double check. If it does apply and there is a fix then the asserts marked with this comment need to be adjusted.
- */
 contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -107,7 +104,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         shareBalance1 = cellar.balanceOf(address(this));
 
-        assertEq(shareBalance1, minShares1); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
+        assertEq(shareBalance1, minShares1);
         assertEq(USDC.balanceOf(address(this)), assets - deposit1);
 
         // deposit the other half using the SSR
@@ -115,7 +112,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         shareBalance2 = cellar.balanceOf(address(this));
 
-        assertApproxEqAbs(shareBalance2, assets, 2, "deposit(): Test contract USDC should be all shares"); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
+        assertApproxEqAbs(shareBalance2, assets, 2, "deposit(): Test contract USDC should be all shares");
         assertApproxEqAbs(USDC.balanceOf(address(this)), 0, 2, "deposit(): All USDC deposited to Cellar");
 
         // check allowance SSR given to cellar is zeroed out
@@ -196,7 +193,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         shareBalance1 = cellar.balanceOf(address(this));
 
-        assertEq(shareBalance1, minShares1); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
+        assertEq(shareBalance1, minShares1);
         assertEq(USDC.balanceOf(address(this)), assets - deposit1);
 
         // mint using the other half using the SSR
@@ -204,7 +201,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         shareBalance2 = cellar.balanceOf(address(this));
 
-        assertApproxEqAbs(shareBalance2, assets, 2, "mint(): Test contract USDC should be all shares"); // shares and assets are 1:1 right now because it's just USDC in a holding position - TODO: initialShares belongs to  this test contract since it created the cellar no?
+        assertApproxEqAbs(shareBalance2, assets, 2, "mint(): Test contract USDC should be all shares");
         assertApproxEqAbs(USDC.balanceOf(address(this)), 0, 2, "mint(): All USDC deposited to Cellar");
 
         // check allowance SSR given to cellar is zeroed out
