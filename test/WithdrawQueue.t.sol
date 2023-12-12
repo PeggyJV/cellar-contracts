@@ -13,7 +13,7 @@ import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolver {
+contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolver, ERC20 {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
@@ -448,12 +448,20 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         uint256[] memory expectedSharesToSolve,
         uint256[] memory expectedRequiredAssets
     ) internal {
-        (WithdrawQueue.SolveMetaData[] memory metaData, , ) = queue.viewSolveMetaData(share, users);
+        (WithdrawQueue.SolveMetaData[] memory metaData, uint256 totalAssets, uint256 totalShares) = queue
+            .viewSolveMetaData(share, users);
 
         for (uint256 i; i < metaData.length; ++i) {
             assertEq(expectedSharesToSolve[i], metaData[i].sharesToSolve, "sharesToSolve does not equal expected.");
             assertEq(expectedRequiredAssets[i], metaData[i].requiredAssets, "requiredAssets does not equal expected.");
             assertEq(expectedFlags[i], metaData[i].flags, "flags does not equal expected.");
+            if (metaData[i].flags == 0) {
+                assertEq(totalAssets, metaData[i].requiredAssets, "Total Assets should be greater than zero.");
+                assertEq(totalShares, metaData[i].sharesToSolve, "Total Shares should be greater than zero.");
+            } else {
+                assertEq(totalAssets, 0, "Total Assets should be zero.");
+                assertEq(totalShares, 0, "Total Shares should be zero.");
+            }
         }
     }
 
@@ -465,40 +473,41 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         uint256[] memory expectedSharesToSolve = new uint256[](1);
         uint256[] memory expectedRequiredAssets = new uint256[](1);
         users[0] = userA;
+
         vm.startPrank(userA);
 
         WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
             deadline: uint64(block.timestamp - 1),
             inSolve: false,
-            executionSharePrice: 0,
+            executionSharePrice: 1e6,
             sharesToWithdraw: 0
         });
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1);
+        expectedFlags[0] = uint8(3); // Flags = 00000011
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         req.deadline = uint64(block.timestamp + 1);
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1) << 1;
+        expectedFlags[0] = uint8(2); // Flags = 00000010
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         req.sharesToWithdraw = uint96(sharesToWithdraw);
+        expectedSharesToSolve[0] = sharesToWithdraw;
+        expectedRequiredAssets[0] = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1) << 2;
+        expectedFlags[0] = uint8(12); // Flags = 00001100
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
-        // Give both users enough USDC to cover their actions.
+        // Give user enough USDC to cover their actions.
         deal(address(USDC), userA, sharesToWithdraw);
 
         USDC.approve(address(cellar), sharesToWithdraw);
         cellar.mint(sharesToWithdraw, userA);
-        expectedFlags[0] = uint8(1) << 3;
+        expectedFlags[0] = uint8(8); // Flags = 00001000
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         cellar.approve(address(queue), sharesToWithdraw);
-        expectedFlags[0] = 0;
-        expectedSharesToSolve[0] = sharesToWithdraw;
-        expectedRequiredAssets[0] = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
+        expectedFlags[0] = 0; // Flags = 00000000
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         vm.stopPrank();
@@ -706,7 +715,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
 
         // Calling `finishSolve` on SimpleSolver directly should revert.
         vm.expectRevert(bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___OnlyQueue.selector)));
-        simpleSolver.finishSolve(bareBonesData, 0, 0);
+        simpleSolver.finishSolve(bareBonesData, address(0), 0, 0);
 
         // Malicious user targets user B who has a large asset approval for Simple Solver.
         address userA = vm.addr(0xA);
@@ -739,20 +748,77 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         address[] memory users = new address[](1);
         users[0] = userA;
         vm.startPrank(userA);
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___NotInSolveContextOrNotActiveSolver.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___WrongInitiator.selector)));
         queue.solve(cellar, users, runData, address(simpleSolver));
         vm.stopPrank();
     }
 
-    function finishSolve(bytes calldata runData, uint256, uint256 assetApprovalAmount) external {
+    function testSimpleSolverReentrancy() external {
+        uint256 sharesToWithdraw = 1e6;
+        address attacker = vm.addr(0xA);
+        deal(address(this), attacker, sharesToWithdraw);
+
+        ERC4626 maliciousERC4626 = ERC4626(address(this));
+
+        // Attacker deposits into this malicious ERC4626, and joins queue.
+        vm.startPrank(attacker);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6, // attacker sets a ridiculous execution share price.
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        ERC20(address(this)).safeApprove(address(queue), sharesToWithdraw);
+        queue.updateWithdrawRequest(maliciousERC4626, req);
+        vm.stopPrank();
+
+        address[] memory users = new address[](1);
+        users[0] = attacker;
+
+        vm.startPrank(attacker);
+
+        // Call p2pSolve on reentrancy.
+        simpleSolverFunctionToReenter = 1;
+        vm.expectRevert(bytes("REENTRANCY"));
+        simpleSolver.redeemSolve(maliciousERC4626, users, 0, type(uint256).max);
+
+        // Call redeemSolve on reentrancy.
+        simpleSolverFunctionToReenter = 2;
+        vm.expectRevert(bytes("REENTRANCY"));
+        simpleSolver.redeemSolve(maliciousERC4626, users, 0, type(uint256).max);
+
+        // Call finishSolve on reentrancy.
+        simpleSolverFunctionToReenter = 3;
+        vm.expectRevert(bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___OnlyQueue.selector)));
+        simpleSolver.redeemSolve(maliciousERC4626, users, 0, type(uint256).max);
+        vm.stopPrank();
+    }
+
+    // -------------------------------- ISolver Implementation --------------------------------------
+
+    function finishSolve(bytes calldata runData, address initiator, uint256, uint256 assetApprovalAmount) external {
+        assertEq(initiator, address(this), "Initiator should be address(this)");
         if (solverIsCheapskate) {
             // Malicious solver only approves half the amount needed.
             assetApprovalAmount /= 2;
         }
-        (, ERC20 asset) = abi.decode(runData, (ERC4626, ERC20));
-        deal(address(asset), address(this), assetApprovalAmount);
-        asset.approve(msg.sender, assetApprovalAmount);
+        (, ERC20 shareAsset) = abi.decode(runData, (ERC4626, ERC20));
+        deal(address(shareAsset), address(this), assetApprovalAmount);
+        shareAsset.approve(msg.sender, assetApprovalAmount);
+    }
+
+    // -------------------------------- ERC4626 Attacker Implementation --------------------------------------
+
+    uint256 public simpleSolverFunctionToReenter;
+    ERC20 public asset = USDC;
+
+    constructor() ERC20("test", "t", 6) {}
+
+    function redeem(uint256, address, address) external {
+        address[] memory users;
+        bytes memory runData;
+        if (simpleSolverFunctionToReenter == 1) simpleSolver.p2pSolve(cellar, users, 0, 0);
+        if (simpleSolverFunctionToReenter == 2) simpleSolver.redeemSolve(cellar, users, 0, 0);
+        if (simpleSolverFunctionToReenter == 3) simpleSolver.finishSolve(runData, address(simpleSolver), 0, 0);
     }
 }

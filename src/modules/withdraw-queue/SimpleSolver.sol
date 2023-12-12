@@ -26,25 +26,9 @@ contract SimpleSolver is ISolver, ReentrancyGuard {
         REDEEM
     }
 
-    // ========================================= CONSTANTS =========================================
-
-    /**
-     * @notice The dead address to set activeSolver to when not in use.
-     */
-    address private DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
-
-    // ========================================= GLOBAL STATE =========================================
-
-    /**
-     * @notice Address that is currently performing a solve.
-     * @dev Important so that users who give approval to this contract, can not have
-     *      their funds spent unless they are the ones actively solving.
-     */
-    address private activeSolver;
-
     //============================== ERRORS ===============================
 
-    error SimpleSolver___NotInSolveContextOrNotActiveSolver();
+    error SimpleSolver___WrongInitiator();
     error SimpleSolver___AlreadyInSolveContext();
     error SimpleSolver___OnlyQueue();
     error SimpleSolver___SolveMaxAssetsExceeded(uint256 actualAssets, uint256 maxAssets);
@@ -59,7 +43,6 @@ contract SimpleSolver is ISolver, ReentrancyGuard {
     WithdrawQueue public immutable queue;
 
     constructor(address _queue) {
-        activeSolver = DEAD_ADDRESS;
         queue = WithdrawQueue(_queue);
     }
 
@@ -68,14 +51,16 @@ contract SimpleSolver is ISolver, ReentrancyGuard {
      * @notice Solver wants to exchange p2p share.asset() for withdraw queue shares.
      * @dev Solver should approve this contract to spend share.asset().
      */
-    function p2pSolve(ERC4626 share, address[] calldata users, uint256 minSharesReceived, uint256 maxAssets) external {
+    function p2pSolve(
+        ERC4626 share,
+        address[] calldata users,
+        uint256 minSharesReceived,
+        uint256 maxAssets
+    ) external nonReentrant {
         bytes memory runData = abi.encode(SolveType.P2P, msg.sender, share, minSharesReceived, maxAssets);
 
         // Solve for `users`.
-        if (activeSolver != DEAD_ADDRESS) revert SimpleSolver___AlreadyInSolveContext();
-        activeSolver = msg.sender;
         queue.solve(share, users, runData, address(this));
-        activeSolver = address(DEAD_ADDRESS);
     }
 
     /**
@@ -85,32 +70,38 @@ contract SimpleSolver is ISolver, ReentrancyGuard {
      *      share.asset(). In these cases the solver should know, and have enough share.asset() to cover shortfall.
      * @dev It is extremely likely that this TX will be MEVed, private mem pools should be used to send it.
      */
-    function redeemSolve(ERC4626 share, address[] calldata users, uint256 minAssetDelta, uint256 maxAssets) external {
+    function redeemSolve(
+        ERC4626 share,
+        address[] calldata users,
+        uint256 minAssetDelta,
+        uint256 maxAssets
+    ) external nonReentrant {
         bytes memory runData = abi.encode(SolveType.REDEEM, msg.sender, share, minAssetDelta, maxAssets);
 
         // Solve for `users`.
-        if (activeSolver != DEAD_ADDRESS) revert SimpleSolver___AlreadyInSolveContext();
-        activeSolver = msg.sender;
         queue.solve(share, users, runData, address(this));
-        activeSolver = address(DEAD_ADDRESS);
     }
 
     //============================== ISOLVER FUNCTIONS ===============================
 
     /**
      * @notice Implement the finishSolve function WithdrawQueue expects to call.
+     * @dev nonReentrant is not needed on this function because it is impossible to reenter,
+     *      because the above solve functions have the nonReentrant modifier.
+     *      The only way to have the first 2 checks pass is if the msg.sender is the queue,
+     *      and this contract is msg.sender of `Queue.solve()`, which is only called in the above
+     *      functions.
      */
     function finishSolve(
         bytes calldata runData,
+        address initiator,
         uint256 sharesReceived,
         uint256 assetApprovalAmount
-    ) external nonReentrant {
+    ) external {
         if (msg.sender != address(queue)) revert SimpleSolver___OnlyQueue();
-        (SolveType _type, address solver) = abi.decode(runData, (SolveType, address));
+        if (initiator != address(this)) revert SimpleSolver___WrongInitiator();
 
-        address _activeSolver = activeSolver;
-        if (_activeSolver == DEAD_ADDRESS || solver != _activeSolver)
-            revert SimpleSolver___NotInSolveContextOrNotActiveSolver();
+        SolveType _type = abi.decode(runData, (SolveType));
 
         if (_type == SolveType.P2P) _p2pSolve(runData, sharesReceived, assetApprovalAmount);
         else if (_type == SolveType.REDEEM) _redeemSolve(runData, sharesReceived, assetApprovalAmount);
