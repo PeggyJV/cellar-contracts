@@ -257,19 +257,15 @@ contract WithdrawQueue is ReentrancyGuard {
 
             if (block.timestamp > request.deadline) {
                 metaData[i].flags |= uint8(1);
-                continue; //TODO should this not call continue? If continue was removed, then flags could have more than 1 flag which could be useful.
             }
             if (request.sharesToWithdraw == 0) {
                 metaData[i].flags |= uint8(1) << 1;
-                continue;
             }
             if (share.balanceOf(users[i]) < request.sharesToWithdraw) {
                 metaData[i].flags |= uint8(1) << 2;
-                continue;
             }
             if (share.allowance(users[i], address(this)) < request.sharesToWithdraw) {
                 metaData[i].flags |= uint8(1) << 3;
-                continue;
             }
 
             metaData[i].sharesToSolve = request.sharesToWithdraw;
@@ -282,9 +278,11 @@ contract WithdrawQueue is ReentrancyGuard {
             );
             metaData[i].requiredAssets = userAssets;
 
-            // TODO if continues removed, only run below code if flags == 0.
-            totalRequiredAssets += userAssets;
-            totalSharesToSolve += request.sharesToWithdraw;
+            // If flags is zero, no errors occurred.
+            if (metaData[i].flags == 0) {
+                totalRequiredAssets += userAssets;
+                totalSharesToSolve += request.sharesToWithdraw;
+            }
         }
     }
 

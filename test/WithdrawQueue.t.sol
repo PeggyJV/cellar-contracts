@@ -448,12 +448,20 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         uint256[] memory expectedSharesToSolve,
         uint256[] memory expectedRequiredAssets
     ) internal {
-        (WithdrawQueue.SolveMetaData[] memory metaData, , ) = queue.viewSolveMetaData(share, users);
+        (WithdrawQueue.SolveMetaData[] memory metaData, uint256 totalAssets, uint256 totalShares) = queue
+            .viewSolveMetaData(share, users);
 
         for (uint256 i; i < metaData.length; ++i) {
             assertEq(expectedSharesToSolve[i], metaData[i].sharesToSolve, "sharesToSolve does not equal expected.");
             assertEq(expectedRequiredAssets[i], metaData[i].requiredAssets, "requiredAssets does not equal expected.");
             assertEq(expectedFlags[i], metaData[i].flags, "flags does not equal expected.");
+            if (metaData[i].flags == 0) {
+                assertEq(totalAssets, metaData[i].requiredAssets, "Total Assets should be greater than zero.");
+                assertEq(totalShares, metaData[i].sharesToSolve, "Total Shares should be greater than zero.");
+            } else {
+                assertEq(totalAssets, 0, "Total Assets should be zero.");
+                assertEq(totalShares, 0, "Total Shares should be zero.");
+            }
         }
     }
 
@@ -465,40 +473,41 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         uint256[] memory expectedSharesToSolve = new uint256[](1);
         uint256[] memory expectedRequiredAssets = new uint256[](1);
         users[0] = userA;
+
         vm.startPrank(userA);
 
         WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
             deadline: uint64(block.timestamp - 1),
             inSolve: false,
-            executionSharePrice: 0,
+            executionSharePrice: 1e6,
             sharesToWithdraw: 0
         });
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1);
+        expectedFlags[0] = uint8(3); // Flags = 00000011
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         req.deadline = uint64(block.timestamp + 1);
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1) << 1;
+        expectedFlags[0] = uint8(2); // Flags = 00000010
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         req.sharesToWithdraw = uint96(sharesToWithdraw);
+        expectedSharesToSolve[0] = sharesToWithdraw;
+        expectedRequiredAssets[0] = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
         queue.updateWithdrawRequest(cellar, req);
-        expectedFlags[0] = uint8(1) << 2;
+        expectedFlags[0] = uint8(12); // Flags = 00001100
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
-        // Give both users enough USDC to cover their actions.
+        // Give user enough USDC to cover their actions.
         deal(address(USDC), userA, sharesToWithdraw);
 
         USDC.approve(address(cellar), sharesToWithdraw);
         cellar.mint(sharesToWithdraw, userA);
-        expectedFlags[0] = uint8(1) << 3;
+        expectedFlags[0] = uint8(8); // Flags = 00001000
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         cellar.approve(address(queue), sharesToWithdraw);
-        expectedFlags[0] = 0;
-        expectedSharesToSolve[0] = sharesToWithdraw;
-        expectedRequiredAssets[0] = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
+        expectedFlags[0] = 0; // Flags = 00000000
         _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
 
         vm.stopPrank();
