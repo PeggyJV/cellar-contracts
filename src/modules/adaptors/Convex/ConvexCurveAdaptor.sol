@@ -5,7 +5,6 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.sol";
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
-import { console } from "@forge-std/Test.sol";
 import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
 /**

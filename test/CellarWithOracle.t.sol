@@ -86,7 +86,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -393,9 +393,9 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         depositGas1Asset -= gasleft();
 
         // Rebalance Cellar so it has assets in 4 positions.
-        cellar.addPosition(1, usdtPosition, abi.encode(0), false);
-        cellar.addPosition(2, daiPosition, abi.encode(0), false);
-        cellar.addPosition(3, fraxPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdtPosition, abi.encode(true), false);
+        cellar.addPosition(2, daiPosition, abi.encode(true), false);
+        cellar.addPosition(3, fraxPosition, abi.encode(true), false);
 
         uint256 usdcAmount = (2 * assets) / 4;
         uint256 usdtAmount = priceRouter.getValue(USDC, usdcAmount, USDT);
@@ -553,7 +553,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Strategist can still manage the cellar.
         cellar.setRebalanceDeviation(0.01e18);
-        cellar.addPosition(1, usdtPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdtPosition, abi.encode(true), false);
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);

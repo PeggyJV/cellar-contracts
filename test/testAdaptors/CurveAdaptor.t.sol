@@ -164,6 +164,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -179,6 +181,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethFrxethPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -194,6 +198,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethCvxPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 1e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -209,6 +215,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = EthOethPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -224,6 +232,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethMkUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -256,6 +266,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
+        cStor.lowerBound = .95e4;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -273,6 +285,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -290,6 +304,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.needIndex = false;
         cStor.handleRate = true;
         cStor.rateIndex = 1;
+        cStor.lowerBound = 0;
+        cStor.upperBound = 1.05e4;
         price = curveEMAExtension.getPriceFromCurvePool(
             CurvePool(cStor.pool),
             cStor.index,
@@ -305,51 +321,62 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // UsdcCrvUsdPool
         // UsdcCrvUsdToken
         // UsdcCrvUsdGauge
-        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, true, 1e8, USDC, CRVUSD, false, false);
+        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, true, 1e8, USDC, CRVUSD, false, false, 0, 10e4);
         // WethRethPool
         // WethRethToken
         // WethRethGauge
-        _add2PoolAssetToPriceRouter(WethRethPool, WethRethToken, false, 3_863e8, WETH, rETH, false, false);
+        _add2PoolAssetToPriceRouter(WethRethPool, WethRethToken, false, 3_863e8, WETH, rETH, false, false, 0, 10e4);
         // UsdtCrvUsdPool
         // UsdtCrvUsdToken
         // UsdtCrvUsdGauge
-        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, true, 1e8, USDT, CRVUSD, false, false);
+        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, true, 1e8, USDT, CRVUSD, false, false, 0, 10e4);
         // EthStethPool
         // EthStethToken
         // EthStethGauge
-        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, true, 1956e8, WETH, STETH, false, false);
+        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, true, 1956e8, WETH, STETH, false, false, 0, 10e4);
         // FraxUsdcPool
         // FraxUsdcToken
         // FraxUsdcGauge
-        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false);
+        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false, 0, 10e4);
         // WethFrxethPool
         // WethFrxethToken
         // WethFrxethGauge
-        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 1800e8, WETH, FRXETH, false, false, 0, 10e4);
         // EthFrxethPool
         // EthFrxethToken
         // EthFrxethGauge
-        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 1800e8, WETH, FRXETH, false, false, 0, 10e4);
         // StethFrxethPool
         // StethFrxethToken
         // StethFrxethGauge
-        _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, true, 1825e8, STETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(
+            StethFrxethPool,
+            StethFrxethToken,
+            true,
+            1825e8,
+            STETH,
+            FRXETH,
+            false,
+            false,
+            0,
+            10e4
+        );
         // WethCvxPool
         // WethCvxToken
         // WethCvxGauge
-        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8, WETH, CVX, false, false);
+        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8, WETH, CVX, false, false, 0, 10e4);
         // EthStethNgPool
         // EthStethNgToken
         // EthStethNgGauge
-        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8, WETH, STETH, false, false);
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8, WETH, STETH, false, false, 0, 10e4);
         // EthOethPool
         // EthOethToken
         // EthOethGauge
-        _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8, WETH, OETH, false, false);
+        _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8, WETH, OETH, false, false, 0, 10e4);
         // FraxCrvUsdPool
         // FraxCrvUsdToken
         // FraxCrvUsdGauge
-        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false);
+        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false, 0, 10e4);
         // mkUsdFraxUsdcPool
         // mkUsdFraxUsdcToken
         // mkUsdFraxUsdcGauge
@@ -361,25 +388,27 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             MKUSD,
             ERC20(FraxUsdcToken),
             false,
-            false
+            false,
+            0,
+            10e4
         );
         // WethYethPool
         // WethYethToken
         // WethYethGauge
-        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8, WETH, YETH, false, false);
+        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8, WETH, YETH, false, false, 0, 10e4);
         // EthEthxPool
         // EthEthxToken
         // EthEthxGauge
-        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 1_800e8, WETH, ETHX, false, true);
+        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 1_800e8, WETH, ETHX, false, true, 0, 10e4);
 
         // CrvUsdSdaiPool
         // CrvUsdSdaiToken
         // CrvUsdSdaiGauge
-        _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, true, 1e8, CRVUSD, DAI, false, false);
+        _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, true, 1e8, CRVUSD, DAI, false, false, 0, 10e4);
         // CrvUsdSfraxPool
         // CrvUsdSfraxToken
         // CrvUsdSfraxGauge
-        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false);
+        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false, 0, 10e4);
 
         // Add positions to registry.
         registry.trustAdaptor(address(curveAdaptor));
@@ -532,7 +561,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -1625,7 +1654,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -2374,7 +2403,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         ERC20 underlyingOrConstituent0,
         ERC20 underlyingOrConstituent1,
         bool divideRate0,
-        bool divideRate1
+        bool divideRate1,
+        uint32 lowerBound,
+        uint32 upperBound
     ) internal {
         Curve2PoolExtension.ExtensionStorage memory stor;
         stor.pool = pool;
@@ -2383,6 +2414,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stor.underlyingOrConstituent1 = address(underlyingOrConstituent1);
         stor.divideRate0 = divideRate0;
         stor.divideRate1 = divideRate1;
+        stor.lowerBound = lowerBound;
+        stor.upperBound = upperBound;
         PriceRouter.AssetSettings memory settings;
         settings.derivative = EXTENSION_DERIVATIVE;
         settings.source = address(curve2PoolExtension);

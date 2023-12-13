@@ -90,7 +90,7 @@ contract CellarWithShareLockPeriodTest is MainnetStarterTest, AdaptorHelperFunct
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -100,9 +100,9 @@ contract CellarWithShareLockPeriodTest is MainnetStarterTest, AdaptorHelperFunct
 
         // Set up remaining cellar positions.
         cellar.addPositionToCatalogue(wethPosition);
-        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+        cellar.addPosition(1, wethPosition, abi.encode(true), false);
         cellar.addPositionToCatalogue(wbtcPosition);
-        cellar.addPosition(2, wbtcPosition, abi.encode(0), false);
+        cellar.addPosition(2, wbtcPosition, abi.encode(true), false);
 
         cellar.setStrategistPayoutAddress(strategist);
 
@@ -213,7 +213,7 @@ contract CellarWithShareLockPeriodTest is MainnetStarterTest, AdaptorHelperFunct
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -224,7 +224,7 @@ contract CellarWithShareLockPeriodTest is MainnetStarterTest, AdaptorHelperFunct
         );
 
         cellarA.addPositionToCatalogue(wethPosition);
-        cellarA.addPosition(1, wethPosition, abi.encode(0), false);
+        cellarA.addPosition(1, wethPosition, abi.encode(true), false);
 
         // Set up worst case scenario where
         // Cellar has all of its funds in mispriced asset(WETH)

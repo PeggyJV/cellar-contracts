@@ -54,6 +54,11 @@ contract Curve2PoolExtension is Extension {
     error Curve2PoolExtension_POOL_NOT_SUPPORTED();
 
     /**
+     * @notice While getting the virtual price from the pool, the virtual price was outside of normal safe bounds.
+     */
+    error Curve2PoolExtension_BOUNDS_EXCEEDED();
+
+    /**
      * @notice Extension storage
      * @param pool address of the curve pool to use as an oracle
      * @param underlyingOrConstituent0 the underlying or constituent for coins 0
@@ -61,6 +66,8 @@ contract Curve2PoolExtension is Extension {
      * @param divideRate0 bool indicating whether or not we need to divide out the pool stored rate
      * @param divideRate1 bool indicating whether or not we need to divide out the pool stored rate
      * @param isCorrelated bool indicating whether the pool has correlated assets or not
+     * @param upperBound the upper bound `virtual_price` can be, with 4 decimals.
+     * @param lowerBound the lower bound `virtual_price` can be, with 4 decimals.
      */
     struct ExtensionStorage {
         address pool;
@@ -69,6 +76,8 @@ contract Curve2PoolExtension is Extension {
         bool divideRate0; // If we only have the market price of the underlying, and there is a rate with the underlying, then divide out the rate
         bool divideRate1; // If we only new the safe price of sDAI, then we need to divide out the rate stored in the curve pool
         bool isCorrelated; // but if we know the safe market price of DAI then we can just use that.
+        uint32 upperBound;
+        uint32 lowerBound;
     }
 
     /**
@@ -105,6 +114,12 @@ contract Curve2PoolExtension is Extension {
         if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
             revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
 
+        // Make sure we can call virtual price.
+        uint256 virtualPrice = pool.get_virtual_price();
+
+        // Make sure virtualPrice is reasonable.
+        _enforceBounds(virtualPrice, stor.lowerBound, stor.upperBound);
+
         // Make sure isCorrelated is correct.
         if (stor.isCorrelated) {
             // If this is true, then calling lp_price() should revert.
@@ -134,6 +149,9 @@ contract Curve2PoolExtension is Extension {
         uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
         uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
         uint256 virtualPrice = pool.get_virtual_price();
+
+        // Make sure virtualPrice is reasonable.
+        _enforceBounds(virtualPrice, stor.lowerBound, stor.upperBound);
 
         if (stor.isCorrelated) {
             // Handle rates if needed.
@@ -187,5 +205,14 @@ contract Curve2PoolExtension is Extension {
             y = z;
             z = (_x / z + z) / 2;
         }
+    }
+
+    /**
+     * @notice Helper function to check if a provided answer is within a reasonable bound.
+     */
+    function _enforceBounds(uint256 providedAnswer, uint32 lowerBound, uint32 upperBound) internal view {
+        uint32 providedAnswerConvertedToBoundDecimals = uint32(providedAnswer.changeDecimals(curveDecimals, 4));
+        if (providedAnswerConvertedToBoundDecimals < lowerBound || providedAnswerConvertedToBoundDecimals > upperBound)
+            revert Curve2PoolExtension_BOUNDS_EXCEEDED();
     }
 }
