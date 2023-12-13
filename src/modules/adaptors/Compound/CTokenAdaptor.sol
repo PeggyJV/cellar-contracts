@@ -4,6 +4,12 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
+// TODO to get a users health factor, I think we can call `comptroller.getAssetsIn` to get the array of markets currently being used
+// As collateral, then we can use the price router to get a dollar value of the collateral.
+// Then we can call `comptroller.getAccountLiquidity` to figure out how much more debt we can take on before HF == 1, I think using those 2 values
+// we can figure out the HF.
+
+// TODO to handle ETH based markets, do a similair setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
 /**
  * @title Compound CToken Adaptor
  * @notice Allows Cellars to interact with Compound CToken positions.
