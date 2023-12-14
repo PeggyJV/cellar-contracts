@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Math } from "src/utils/Math.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { Owned } from "@solmate/auth/Owned.sol";
-import { Cellar } from "src/base/Cellar.sol";
 
 /**
  * @title Sommelier Simple Slippage Router
- * @notice A Simple Utility Contract to allow Users to call functions: deposit, withdraw, mint, and redeem with Sommelier Cellar contracts w/ respective specified slippage params.
+ * @notice A Simple Utility Contract to allow Users to call functions: deposit, withdraw, mint, and redeem with ERC4626 Vault contracts w/ respective specified slippage params.
  * @author crispymangoes, 0xEinCodes
  */
 contract SimpleSlippageRouter {
     using SafeTransferLib for ERC20;
-    using Math for uint256;
-    using Address for address;
 
     /**
      * @notice attempted to carry out tx with expired deadline.
@@ -64,74 +58,74 @@ contract SimpleSlippageRouter {
     );
 
     /**
-     * @notice deposits assets into specified cellar w/ _minimumShares expected and _deadline specified.
+     * @notice deposits assets into specified ERC4626 Vaults w/ _minimumShares expected and _deadline specified.
      * @dev This function is more gas efficient than the `mint` function, as it does not rely on a preview function.
-     * @param _cellar specified cellar to deposit assets into.
-     * @param _assets amount of cellar base assets to deposit.
+     * @param _vault specified ERC4626 Vaults to deposit assets into.
+     * @param _assets amount of ERC4626 Vaults base assets to deposit.
      * @param _minimumShares amount of shares required at min from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint256 _deadline) public {
+    function deposit(ERC4626 _vault, uint256 _assets, uint256 _minimumShares, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
-        ERC20 baseAsset = _cellar.asset();
+        ERC20 baseAsset = _vault.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), _assets);
-        baseAsset.approve(address(_cellar), _assets);
-        uint256 shareDelta = _cellar.balanceOf(msg.sender);
-        _cellar.deposit(_assets, msg.sender);
-        shareDelta = _cellar.balanceOf(msg.sender) - shareDelta;
+        baseAsset.approve(address(_vault), _assets);
+        uint256 shareDelta = _vault.balanceOf(msg.sender);
+        _vault.deposit(_assets, msg.sender);
+        shareDelta = _vault.balanceOf(msg.sender) - shareDelta;
         if (shareDelta < _minimumShares)
             revert SimpleSlippageRouter__DepositMinimumSharesUnmet(_minimumShares, shareDelta);
-        _revokeExternalApproval(baseAsset, address(_cellar));
+        _revokeExternalApproval(baseAsset, address(_vault));
     }
 
     /**
      * @notice withdraws assets as long as tx returns more than _assets and is done before _deadline.
      * @dev This function is more gas efficient than the `redeem` function, as it does not rely on a preview function.
-     * @param _cellar specified cellar to withdraw assets from.
-     * @param _assets amount of cellar base assets to withdraw.
+     * @param _vault specified ERC4626 Vaults to withdraw assets from.
+     * @param _assets amount of ERC4626 Vaults base assets to withdraw.
      * @param _maxShares max amount of shares to redeem from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint256 _deadline) public {
+    function withdraw(ERC4626 _vault, uint256 _assets, uint256 _maxShares, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
-        uint256 shareDelta = _cellar.balanceOf(msg.sender);
-        _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
-        shareDelta = shareDelta - _cellar.balanceOf(msg.sender);
+        uint256 shareDelta = _vault.balanceOf(msg.sender);
+        _vault.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
+        shareDelta = shareDelta - _vault.balanceOf(msg.sender);
         if (shareDelta > _maxShares) revert SimpleSlippageRouter__WithdrawMaxSharesSurpassed(_maxShares, shareDelta);
     }
 
     /**
-     * @notice mints shares from the cellar and returns shares to receiver IF shares quoted cost are less than specified _assets amount by the specified _deadline.
-     * @param _cellar specified cellar to deposit assets into.
+     * @notice mints shares from the ERC4626 Vaults and returns shares to receiver IF shares quoted cost are less than specified _assets amount by the specified _deadline.
+     * @param _vault specified ERC4626 Vaults to deposit assets into.
      * @param _shares amount of shares required at min from tx.
-     * @param _maxAssets max amount of cellar base assets to deposit.
+     * @param _maxAssets max amount of ERC4626 Vaults base assets to deposit.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function mint(Cellar _cellar, uint256 _shares, uint256 _maxAssets, uint256 _deadline) public {
+    function mint(ERC4626 _vault, uint256 _shares, uint256 _maxAssets, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
-        uint256 quotedAssetAmount = _cellar.previewMint(_shares);
+        uint256 quotedAssetAmount = _vault.previewMint(_shares);
         if (quotedAssetAmount > _maxAssets)
             revert SimpleSlippageRouter__MintMaxAssetsRqdSurpassed(_shares, _maxAssets, quotedAssetAmount);
-        ERC20 baseAsset = _cellar.asset();
+        ERC20 baseAsset = _vault.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
-        baseAsset.approve(address(_cellar), quotedAssetAmount);
-        _cellar.mint(_shares, msg.sender);
-        _revokeExternalApproval(baseAsset, address(_cellar));
+        baseAsset.approve(address(_vault), quotedAssetAmount);
+        _vault.mint(_shares, msg.sender);
+        _revokeExternalApproval(baseAsset, address(_vault));
     }
 
     /**
-     * @notice redeem shares to withdraw assets from the cellar IF withdrawn quotedAssetAmount > _minAssets & tx carried out before _deadline.
-     * @param _cellar specified cellar to redeem shares for assets from.
+     * @notice redeem shares to withdraw assets from the ERC4626 Vaults IF withdrawn quotedAssetAmount > _minAssets & tx carried out before _deadline.
+     * @param _vault specified ERC4626 Vaults to redeem shares for assets from.
      * @param _shares max amount of shares to redeem from tx.
-     * @param _minAssets amount of cellar base assets to receive upon share redemption.
+     * @param _minAssets amount of ERC4626 Vaults base assets to receive upon share redemption.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function redeem(Cellar _cellar, uint256 _shares, uint256 _minAssets, uint256 _deadline) public {
+    function redeem(ERC4626 _vault, uint256 _shares, uint256 _minAssets, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
-        uint256 quotedAssetAmount = _cellar.previewRedeem(_shares);
+        uint256 quotedAssetAmount = _vault.previewRedeem(_shares);
         if (quotedAssetAmount < _minAssets)
             revert SimpleSlippageRouter__RedeemMinAssetsUnmet(_shares, _minAssets, quotedAssetAmount);
-        _cellar.redeem(_shares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
+        _vault.redeem(_shares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
     }
 
     /// Helper Functions
