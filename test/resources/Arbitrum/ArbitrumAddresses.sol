@@ -17,7 +17,7 @@ contract ArbitrumAddresses {
     address public cosmos = address(0xCAAA);
     address public multisig = address(0);
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
-    address public priceRouter = address(0);
+    // address public priceRouter = address(0);
 
     // DeFi Ecosystem
     address public ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -91,6 +91,7 @@ contract ArbitrumAddresses {
     ERC20 public dV3ARB = ERC20(0x44705f578135cC5d703b4c9c122528C73Eb87145);
 
     // Balancer V2 Addresses
+    address public vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x37D9dC70bfcd8BC77Ec2858836B923c560E891D1;
