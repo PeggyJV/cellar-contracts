@@ -23,7 +23,7 @@ contract SimpleSlippageRouter {
      * @notice attempted to carry out tx with expired deadline.
      * @param deadline specified tx block.timestamp to not pass during tx.
      */
-    error SimpleSlippageAdaptor__ExpiredDeadline(uint64 deadline);
+    error SimpleSlippageAdaptor__ExpiredDeadline(uint256 deadline);
 
     /**
      * @notice attempted to carry out deposit() tx with less than acceptable minimum shares.
@@ -71,7 +71,7 @@ contract SimpleSlippageRouter {
      * @param _minimumShares amount of shares required at min from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
+    function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         ERC20 baseAsset = _cellar.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), _assets);
@@ -92,7 +92,7 @@ contract SimpleSlippageRouter {
      * @param _maxShares max amount of shares to redeem from tx.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint64 _deadline) public {
+    function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         uint256 shareDelta = _cellar.balanceOf(msg.sender);
         _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
@@ -107,7 +107,7 @@ contract SimpleSlippageRouter {
      * @param _maxAssets max amount of cellar base assets to deposit.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function mint(Cellar _cellar, uint256 _shares, uint256 _maxAssets, uint64 _deadline) public {
+    function mint(Cellar _cellar, uint256 _shares, uint256 _maxAssets, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         uint256 quotedAssetAmount = _cellar.previewMint(_shares);
         if (quotedAssetAmount > _maxAssets)
@@ -126,7 +126,7 @@ contract SimpleSlippageRouter {
      * @param _minAssets amount of cellar base assets to receive upon share redemption.
      * @param _deadline block.timestamp that tx must be carried out by.
      */
-    function redeem(Cellar _cellar, uint256 _shares, uint256 _minAssets, uint64 _deadline) public {
+    function redeem(Cellar _cellar, uint256 _shares, uint256 _minAssets, uint256 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
         uint256 quotedAssetAmount = _cellar.previewRedeem(_shares);
         if (quotedAssetAmount < _minAssets)
