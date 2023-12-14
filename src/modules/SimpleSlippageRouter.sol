@@ -65,6 +65,7 @@ contract SimpleSlippageRouter {
 
     /**
      * @notice deposits assets into specified cellar w/ _minimumShares expected and _deadline specified.
+     * @dev This function is more gas efficient than the `mint` function, as it does not rely on a preview function.
      * @param _cellar specified cellar to deposit assets into.
      * @param _assets amount of cellar base assets to deposit.
      * @param _minimumShares amount of shares required at min from tx.
@@ -72,17 +73,20 @@ contract SimpleSlippageRouter {
      */
     function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
-        uint256 shares = _cellar.previewDeposit(_assets);
-        if (shares < _minimumShares) revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shares);
         ERC20 baseAsset = _cellar.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), _assets);
         baseAsset.approve(address(_cellar), _assets);
+        uint256 shareDelta = _cellar.balanceOf(msg.sender);
         _cellar.deposit(_assets, msg.sender);
+        shareDelta = _cellar.balanceOf(msg.sender) - shareDelta;
+        if (shareDelta < _minimumShares)
+            revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shareDelta);
         _revokeExternalApproval(baseAsset, address(_cellar));
     }
 
     /**
      * @notice withdraws assets as long as tx returns more than _assets and is done before _deadline.
+     * @dev This function is more gas efficient than the `redeem` function, as it does not rely on a preview function.
      * @param _cellar specified cellar to withdraw assets from.
      * @param _assets amount of cellar base assets to withdraw.
      * @param _maxShares max amount of shares to redeem from tx.
@@ -90,9 +94,10 @@ contract SimpleSlippageRouter {
      */
     function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint64 _deadline) public {
         if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
-        uint256 shares = _cellar.previewWithdraw(_assets);
-        if (shares > _maxShares) revert SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(_maxShares, shares);
+        uint256 shareDelta = _cellar.balanceOf(msg.sender);
         _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
+        shareDelta = shareDelta - _cellar.balanceOf(msg.sender);
+        if (shareDelta > _maxShares) revert SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(_maxShares, shareDelta);
     }
 
     /**
