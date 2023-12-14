@@ -23,21 +23,21 @@ contract SimpleSlippageRouter {
      * @notice attempted to carry out tx with expired deadline.
      * @param deadline specified tx block.timestamp to not pass during tx.
      */
-    error SimpleSlippageAdaptor__ExpiredDeadline(uint256 deadline);
+    error SimpleSlippageRouter__ExpiredDeadline(uint256 deadline);
 
     /**
      * @notice attempted to carry out deposit() tx with less than acceptable minimum shares.
      * @param minimumShares specified acceptable minimum shares amount.
      * @param actualSharesQuoted actual amount of shares to come from proposed tx.
      */
-    error SimpleSlippageAdaptor__DepositMinimumSharesUnmet(uint256 minimumShares, uint256 actualSharesQuoted);
+    error SimpleSlippageRouter__DepositMinimumSharesUnmet(uint256 minimumShares, uint256 actualSharesQuoted);
 
     /**
      * @notice attempted to carry out withdraw() tx where required shares to redeem > maxShares specified by user.
      * @param maxShares specified acceptable max shares amount.
      * @param actualSharesQuoted actual amount of shares to come from proposed tx.
      */
-    error SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(uint256 maxShares, uint256 actualSharesQuoted);
+    error SimpleSlippageRouter__WithdrawMaxSharesSurpassed(uint256 maxShares, uint256 actualSharesQuoted);
 
     /**
      * @notice attempted to carry out mint() tx where resultant required assets for requested shares is too much.
@@ -45,7 +45,7 @@ contract SimpleSlippageRouter {
      * @param maxAssets specified max assets to spend on mint.
      * @param actualAssetsQuoted actual amount of assets to come from proposed tx, indicating asset amount not enough for specified shares.
      */
-    error SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed(
+    error SimpleSlippageRouter__MintMaxAssetsRqdSurpassed(
         uint256 minShares,
         uint256 maxAssets,
         uint256 actualAssetsQuoted
@@ -57,7 +57,7 @@ contract SimpleSlippageRouter {
      * @param minimumAssets specified minimum amount of assets to be returned.
      * @param actualAssetsQuoted actual amount of assets to come from proposed tx.
      */
-    error SimpleSlippageAdaptor__RedeemMinAssetsUnmet(
+    error SimpleSlippageRouter__RedeemMinAssetsUnmet(
         uint256 maxShares,
         uint256 minimumAssets,
         uint256 actualAssetsQuoted
@@ -72,7 +72,7 @@ contract SimpleSlippageRouter {
      * @param _deadline block.timestamp that tx must be carried out by.
      */
     function deposit(Cellar _cellar, uint256 _assets, uint256 _minimumShares, uint256 _deadline) public {
-        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+        if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
         ERC20 baseAsset = _cellar.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), _assets);
         baseAsset.approve(address(_cellar), _assets);
@@ -80,7 +80,7 @@ contract SimpleSlippageRouter {
         _cellar.deposit(_assets, msg.sender);
         shareDelta = _cellar.balanceOf(msg.sender) - shareDelta;
         if (shareDelta < _minimumShares)
-            revert SimpleSlippageAdaptor__DepositMinimumSharesUnmet(_minimumShares, shareDelta);
+            revert SimpleSlippageRouter__DepositMinimumSharesUnmet(_minimumShares, shareDelta);
         _revokeExternalApproval(baseAsset, address(_cellar));
     }
 
@@ -93,11 +93,11 @@ contract SimpleSlippageRouter {
      * @param _deadline block.timestamp that tx must be carried out by.
      */
     function withdraw(Cellar _cellar, uint256 _assets, uint256 _maxShares, uint256 _deadline) public {
-        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+        if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
         uint256 shareDelta = _cellar.balanceOf(msg.sender);
         _cellar.withdraw(_assets, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
         shareDelta = shareDelta - _cellar.balanceOf(msg.sender);
-        if (shareDelta > _maxShares) revert SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed(_maxShares, shareDelta);
+        if (shareDelta > _maxShares) revert SimpleSlippageRouter__WithdrawMaxSharesSurpassed(_maxShares, shareDelta);
     }
 
     /**
@@ -108,10 +108,10 @@ contract SimpleSlippageRouter {
      * @param _deadline block.timestamp that tx must be carried out by.
      */
     function mint(Cellar _cellar, uint256 _shares, uint256 _maxAssets, uint256 _deadline) public {
-        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+        if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
         uint256 quotedAssetAmount = _cellar.previewMint(_shares);
         if (quotedAssetAmount > _maxAssets)
-            revert SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed(_shares, _maxAssets, quotedAssetAmount);
+            revert SimpleSlippageRouter__MintMaxAssetsRqdSurpassed(_shares, _maxAssets, quotedAssetAmount);
         ERC20 baseAsset = _cellar.asset();
         baseAsset.safeTransferFrom(msg.sender, address(this), quotedAssetAmount);
         baseAsset.approve(address(_cellar), quotedAssetAmount);
@@ -127,10 +127,10 @@ contract SimpleSlippageRouter {
      * @param _deadline block.timestamp that tx must be carried out by.
      */
     function redeem(Cellar _cellar, uint256 _shares, uint256 _minAssets, uint256 _deadline) public {
-        if (block.timestamp > _deadline) revert SimpleSlippageAdaptor__ExpiredDeadline(_deadline);
+        if (block.timestamp > _deadline) revert SimpleSlippageRouter__ExpiredDeadline(_deadline);
         uint256 quotedAssetAmount = _cellar.previewRedeem(_shares);
         if (quotedAssetAmount < _minAssets)
-            revert SimpleSlippageAdaptor__RedeemMinAssetsUnmet(_shares, _minAssets, quotedAssetAmount);
+            revert SimpleSlippageRouter__RedeemMinAssetsUnmet(_shares, _minAssets, quotedAssetAmount);
         _cellar.redeem(_shares, msg.sender, msg.sender); // NOTE: user needs to approve this contract to spend shares
     }
 
