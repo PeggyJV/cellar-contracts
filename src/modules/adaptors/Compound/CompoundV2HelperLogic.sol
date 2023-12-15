@@ -59,11 +59,12 @@ contract CompoundV2HelperLogic {
             if (oraclePriceMantissa == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
 
             // TODO: possibly convert oraclePriceMantissa to Exp format (like compound where it is 18 decimals representation)
-            uint256 tokensToDenom = (collateralFactor * exchangeRateMantissa) * oraclePriceMantissa; // TODO: make this 18 decimals
+            uint256 tokensToDenom = (collateralFactor * exchangeRateMantissa) * oraclePriceMantissa; // TODO: make this 18 decimals --> units are underlying/cToken * 
 
-            sumCollateral = (tokensToDenom * cTokenBalance) + sumCollateral;
+            // What are the units of exchangeRate, oraclePrice, tokensToDenom? Is it underlying/cToken, usd/underlying, usd/cToken, respectively?
+            sumCollateral = (tokensToDenom * cTokenBalance) + sumCollateral; // Units --> usd/CToken * cToken --> equates to usd
 
-            sumBorrow = (oraclePriceMantissa * borrowBalance) + sumBorrow;
+            sumBorrow = (oraclePriceMantissa * borrowBalance) + sumBorrow; // Units --> usd/underlying * underlying --> equates to usd
         }
 
         // now we can calculate health factor with sumCollateral and sumBorrow

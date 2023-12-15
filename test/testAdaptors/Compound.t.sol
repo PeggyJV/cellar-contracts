@@ -3,13 +3,10 @@ pragma solidity 0.8.21;
 
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
-
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
-
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
 contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {

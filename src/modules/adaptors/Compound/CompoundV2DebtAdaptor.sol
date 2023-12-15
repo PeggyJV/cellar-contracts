@@ -160,7 +160,6 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
         uint256 errorCode = market.borrow(amountToBorrow);
         if (errorCode != 0) revert CompoundV2DebtAdaptor__NonZeroCompoundErrorCode(errorCode);
 
-        // // TODO: figure out health factor logic
         // // Check if borrower is insolvent after this borrow tx, revert if they are
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
             revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(this));

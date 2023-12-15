@@ -44,6 +44,11 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
     error CTokenAdaptor__HealthFactorTooLow(address market);
 
     /**
+     * @notice Attempted tx that results in unhealthy cellar
+     */
+    error CTokenAdaptor__AlreadyInMarket(address market);
+
+    /**
      * @notice The Compound V2 Comptroller contract on current network.
      * @dev For mainnet use 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B.
      */
@@ -86,8 +91,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @param assets the amount of assets to lend on Compound
      * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
-     * @dev straegist function `enterMarket()` is used to mark cTokens as collateral provision for cellar. `exitMarket()` removes toggle marking and thus marks this position's assets no longer as collateral.
-     * TODO: decide to leave it up to the strategist or not to toggle this adaptor position to be illiquid or not, AND thus to be supplying collateral for possible open borrow positions.
+     * @dev straegist function `enterMarket()` is used to mark cTokens as collateral provision for cellar. `exitMarket()` removes compound-internal toggle marking and thus marks this position's assets no longer as collateral.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Compound.
@@ -120,18 +124,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         _validateMarketInput(address(cToken));
 
         // Check cellar has entered the market and thus is illiquid (used for open-borrows possibly)
-        CErc20[] memory marketsEntered = comptroller.getAssetsIn(address(this));
-        bool inCTokenMarket;
-        for (uint256 i = 0; i < marketsEntered.length; i++) {
-            // check if cToken is one of the markets cellar position is in.
-            if (marketsEntered[i] == cToken) {
-                inCTokenMarket = true;
-            }
-        }
-        // if true, means cellar is in the market and thus withdraws aren't allowed to prevent affecting HF
-        if (inCTokenMarket) {
-            revert BaseAdaptor__UserWithdrawsNotAllowed();
-        }
+        _checkMarketsEntered(cToken);
 
         // Withdraw assets from Compound.
         uint256 errorCode = cToken.redeemUnderlying(assets);
@@ -146,14 +139,11 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
     }
 
     /**
-     * @notice Identical to `balanceOf`.
-     * @dev TODO: There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
-     *      If cellars ever take on Compound Debt it is crucial these checks are added,
-     *      see "IMPORTANT" above.
+     * @notice Returns balanceOf underlying assets for cToken, regardless of if they are used as supplied collateral or only as lent out assets.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        // TODO: add conditional logic similar to withdraw checking if this adaptor is being used as supplied collateral or lent out assets. The latter is liquid, the former is not. If it is the former, revert.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
+        _checkMarketsEntered(cToken); // Check cellar has entered the market and thus is illiquid (used for open-borrows possibly)
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
     }
@@ -246,33 +236,33 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @notice Allows strategists to enter the compound market and thus mark its assets as supplied collateral that can support an open borrow position.
      * @param market the market to mark alotted assets as supplied collateral.
      * @dev NOTE: this must be called in order to support for a CToken in order to open a borrow position within that market.
-     * TODO: decide to have an adaptorData param to set this adaptor position as "in market" or not. IMO having strategist "enter market" via strategist function calls is probably easiest and most flexible.
      */
-    function enterMarket(address market) public {
-        _validateMarketInput(market);
-        // TODO: check if we're already in the market
+    function enterMarket(CErc20 market) public {
+        _validateMarketInput(address(market));
+        _checkMarketsEntered(market);
         address[] memory cToken = new address[](1);
         uint256[] memory result = new uint256[](1);
-
-        cToken[0] = market;
+        cToken[0] = address(market);
         result = comptroller.enterMarkets(cToken); // enter the market
 
-        if (result[0] > 0) revert CTokenAdaptor__UnsuccessfulEnterMarket(market);
+        if (result[0] > 0) revert CTokenAdaptor__UnsuccessfulEnterMarket(address(market));
     }
 
     /**
      * @notice Allows strategists to exit the compound market and thus unmark its assets as supplied collateral; thus no longer supporting an open borrow position.
      * @param market the market to unmark alotted assets as supplied collateral.
-     * @dev TODO: check if we need to call this in order to actually redeem cTokens when there are no open borrow positions from cellar associated to this position.
+     * @dev This function is not needed to be called if redeeming cTokens, but it is available if Strategists want to toggle a `CTokenAdaptor` position w/ a specific cToken as "not supporting an open-borrow position" for w/e reason.
      */
     function exitMarket(address market) public {
         _validateMarketInput(market);
-        // TODO: check if we're already in the market
-        // TODO: add a check to see if we can even exit the market... although the `exitMarket()` call below may result in an error anyways if it can't. Check the logic to see that it does this.
-        comptroller.exitMarket(market); // enter the market
 
-        // uint256 result = comptroller.exitMarket(market); // enter the market
-        // if (!result) revert CTokenAdaptor__UnsuccessfulEnterMarket(market); // TODO: sort out what the returned uint means (which means success and which doesn't)
+        uint256 errorCode = comptroller.exitMarket(market); // exit the market as supplied collateral (still in lending position though)
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        // Check new HF from exiting the market
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     /**
@@ -291,5 +281,24 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         (bool isListed, , ) = comptroller.markets(input);
 
         if (!isListed) revert CTokenAdaptor__MarketNotListed(input);
+    }
+
+    /**
+     * @notice Helper function that checks if passed market is within list of markets that the cellar is in, and reverts if it is.
+     */
+    function _checkMarketsEntered(CErc20 cToken) internal view {
+        // Check cellar has entered the market and thus is illiquid (used for open-borrows possibly)
+        CErc20[] memory marketsEntered = comptroller.getAssetsIn(address(this));
+        bool inCTokenMarket;
+        for (uint256 i = 0; i < marketsEntered.length; i++) {
+            // check if cToken is one of the markets cellar position is in.
+            if (marketsEntered[i] == cToken) {
+                inCTokenMarket = true;
+            }
+        }
+        // if true, means cellar is in the market already
+        if (inCTokenMarket) {
+            revert CTokenAdaptor__AlreadyInMarket(address(cToken));
+        }
     }
 }
