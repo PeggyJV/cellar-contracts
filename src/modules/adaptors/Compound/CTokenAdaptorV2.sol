@@ -5,11 +5,6 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompoundV2.sol";
 import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
-// TODO to get a users health factor, I think we can call `comptroller.getAssetsIn` to get the array of markets currently being used
-// As collateral, then we can use the price router to get a dollar value of the collateral. Although Compound stouts they have their own pricing too (based off of chainlink)
-// Then we can call `comptroller.getAccountLiquidity` to figure out how much more debt we can take on before HF == 1, I think using those 2 values
-// we can figure out the HF.
-
 // TODO to handle ETH based markets, do a similair setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
 /**
  * @title Compound CToken Adaptor V2
@@ -26,13 +21,6 @@ contract CTokenAdaptorV2 is CompoundV2HelperLogic, BaseAdaptor {
     // `cToken` is the cToken position this adaptor is working with
     //================= Configuration Data Specification =================
     // NOT USED
-    // **************************** IMPORTANT ****************************
-    // There is no way for a Cellar to take out loans on Compound, so there
-    // are NO health factor checks done for `withdraw` or `withdrawableFrom`
-    // In the future if a Compound debt adaptor is created, then this adaptor
-    // must be changed to include some health factor checks like the
-    // Aave aToken adaptor.
-    //====================================================================
 
     /**
      @notice Compound action returned a non zero error code.
@@ -141,11 +129,12 @@ contract CTokenAdaptorV2 is CompoundV2HelperLogic, BaseAdaptor {
 
     /**
      * @notice Identical to `balanceOf`.
-     * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
+     * @dev TODO: There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
      *      If cellars ever take on Compound Debt it is crucial these checks are added,
      *      see "IMPORTANT" above.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
+        // TODO: add conditional logic similar to withdraw checking if this adaptor is being used as supplied collateral or lent out assets. The latter is liquid, the former is not. If it is the former, revert.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
@@ -218,6 +207,7 @@ contract CTokenAdaptorV2 is CompoundV2HelperLogic, BaseAdaptor {
      * @param market the market to withdraw from.
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      * TODO: check HF when redeeming
+     * NOTE: `redeem()` is used for redeeming a specified amount of cToken, whereas `redeemUnderlying()` is used for obtaining a specified amount of underlying tokens no matter what amount of cTokens required.
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
         _validateMarketInput(address(market));
@@ -257,7 +247,9 @@ contract CTokenAdaptorV2 is CompoundV2HelperLogic, BaseAdaptor {
         _validateMarketInput(market);
         // TODO: check if we're already in the market
         // TODO: add a check to see if we can even exit the market... although the `exitMarket()` call below may result in an error anyways if it can't. Check the logic to see that it does this.
-        uint256 result = comptroller.exitMarket(market); // enter the market
+        comptroller.exitMarket(market); // enter the market
+
+        // uint256 result = comptroller.exitMarket(market); // enter the market
         // if (!result) revert CTokenAdaptorV2__UnsuccessfulEnterMarket(market); // TODO: sort out what the returned uint means (which means success and which doesn't)
     }
 

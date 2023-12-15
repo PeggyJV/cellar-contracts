@@ -21,9 +21,15 @@ interface CErc20 {
 
     function exchangeRateStored() external view returns (uint256);
 
+    function borrowBalanceCurrent(address account) external view returns (uint);
+
     function mint(uint256 mintAmount) external returns (uint256);
 
     function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
 
     function redeem(uint256 redeemTokens) external returns (uint256);
+
+    function borrow(uint borrowAmount) external returns (uint);
+
+    function repayBorrow(uint repayAmount) external returns (uint);
 }
