@@ -281,25 +281,25 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageRouter__ExpiredDeadline.selector, deadline1)
             )
         );
         simpleSlippageRouter.deposit(cellar, deposit1, minShares1, deadline1);
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageRouter__ExpiredDeadline.selector, deadline1)
             )
         );
         simpleSlippageRouter.withdraw(cellar, deposit1, minShares1, deadline1);
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageRouter__ExpiredDeadline.selector, deadline1)
             )
         );
         simpleSlippageRouter.mint(cellar, minShares1, deposit1, deadline1);
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageAdaptor__ExpiredDeadline.selector, deadline1)
+                abi.encodeWithSelector(SimpleSlippageRouter.SimpleSlippageRouter__ExpiredDeadline.selector, deadline1)
             )
         );
         simpleSlippageRouter.redeem(cellar, minShares1, deposit1, deadline1);
@@ -320,7 +320,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__DepositMinimumSharesUnmet.selector,
+                    SimpleSlippageRouter.SimpleSlippageRouter__DepositMinimumSharesUnmet.selector,
                     minShares1,
                     quoteShares
                 )
@@ -353,7 +353,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__WithdrawMaxSharesSurpassed.selector,
+                    SimpleSlippageRouter.SimpleSlippageRouter__WithdrawMaxSharesSurpassed.selector,
                     maxShares1 - 1,
                     quoteShares
                 )
@@ -384,7 +384,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__MintMaxAssetsRqdSurpassed.selector,
+                    SimpleSlippageRouter.SimpleSlippageRouter__MintMaxAssetsRqdSurpassed.selector,
                     minShares1,
                     deposit1,
                     quotedAssetAmount
@@ -419,7 +419,7 @@ contract SimpleSlippageRouterTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    SimpleSlippageRouter.SimpleSlippageAdaptor__RedeemMinAssetsUnmet.selector,
+                    SimpleSlippageRouter.SimpleSlippageRouter__RedeemMinAssetsUnmet.selector,
                     maxShares1,
                     withdraw1 + 1,
                     quotedAssetAmount
