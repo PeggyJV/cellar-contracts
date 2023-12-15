@@ -30,6 +30,8 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private cUSDCPosition = 4;
     uint32 private daiVestingPosition = 5;
 
+    uint256 private minHealthFactor = 1;
+
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
@@ -40,7 +42,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         _setUp();
 
         vesting = new VestingSimple(USDC, 1 days / 4, 1e6);
-        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP));
+        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP), minHealthFactor);
         vestingAdaptor = new VestingSimpleAdaptor();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

@@ -5,7 +5,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
-// TODO to handle ETH based markets, do a similair setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
+// TODO to handle ETH based markets, do a similar setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
 /**
  * @title Compound CToken Adaptor
  * @notice Allows Cellars to interact with CompoundV2 CToken positions AND enter compound markets such that the calling cellar has an active collateral position (enabling the cellar to borrow).
@@ -39,6 +39,11 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
     error CTokenAdaptor__UnsuccessfulEnterMarket(address market);
 
     /**
+     * @notice Attempted tx that results in unhealthy cellar
+     */
+    error CTokenAdaptor__HealthFactorTooLow(address market);
+
+    /**
      * @notice The Compound V2 Comptroller contract on current network.
      * @dev For mainnet use 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B.
      */
@@ -50,9 +55,17 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     ERC20 public immutable COMP;
 
-    constructor(address v2Comptroller, address comp) {
+    /**
+     * @notice Minimum Health Factor enforced after every removeCollateral() strategist function call.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address v2Comptroller, address comp, uint256 _healthFactor) {
+        _verifyConstructorMinimumHealthFactor(_healthFactor);
         comptroller = Comptroller(v2Comptroller);
         COMP = ERC20(comp);
+        minimumHealthFactor = _healthFactor;
     }
 
     //============================================ Global Functions ===========================================
@@ -211,7 +224,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @notice Allows strategists to withdraw assets from Compound.
      * @param market the market to withdraw from.
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
-     * TODO: check HF when redeeming
      * NOTE: `redeem()` is used for redeeming a specified amount of cToken, whereas `redeemUnderlying()` is used for obtaining a specified amount of underlying tokens no matter what amount of cTokens required.
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
@@ -223,6 +235,11 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
 
         // Check for errors.
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        // Check new HF from redemption
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     /**

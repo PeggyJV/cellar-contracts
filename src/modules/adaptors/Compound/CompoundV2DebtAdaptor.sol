@@ -162,9 +162,9 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
 
         // // TODO: figure out health factor logic
         // // Check if borrower is insolvent after this borrow tx, revert if they are
-        // if (minimumHealthFactor > (_getHealthFactor(address(this), _exchangeRate))) {
-        //     revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(this));
-        // }
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     // `repayDebt`
