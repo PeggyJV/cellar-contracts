@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { Math } from "src/utils/Math.sol";
-import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompoundV2.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 /**
  * @title CompoundV2 Helper Logic contract.
@@ -18,10 +18,22 @@ contract CompoundV2HelperLogic {
      * TODO:
      */
     function _getHealthFactor() public {
-        // Health Factor Calculations
-        // TODO to get a users health factor, I think we can call `comptroller.getAssetsIn` to get the array of markets currently being used
-        // TODO grab oracle from comptroller
-        // TODO call accrueInterest() to update exchange rates before going through the loop --> TODO --> test if we need this by seeing if the exchange rates are 'kicked' when going through the rest of it. If so, remove this line of code.
+        // // Health Factor Calculations
+        // // TODO to get a users health factor, I think we can call `comptroller.getAssetsIn` to get the array of markets currently being used
+        // CErc20[] memory marketsEntered = comptroller.getAssetsIn(address(this));
+
+        // // TODO grab oracle from comptroller
+        // PriceOracle oracle = comptroller.oracle();
+
+        // // TODO call accrueInterest() to update exchange rates before going through the loop --> TODO --> test if we need this by seeing if the exchange rates are 'kicked' when going through the rest of it. If so, remove this line of code.
+
+        // for (uint256 i = 0; i < marketsEntered.length; i++) {
+        //     // check if cToken is one of the markets cellar position is in.
+        //     if (marketsEntered[i] == cToken) {
+        //         inCTokenMarket = true;
+        //     }
+        // }
+
         // TODO We're going through a loop to calculate total collateral & total borrow for HF calcs (Starting below) w// assets we're in.
         // TODO Within each asset:
         // TODO             `(oErr, vars.cTokenBalance, vars.borrowBalance, vars.exchangeRateMantissa) = asset.getAccountSnapshot(account);``

@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompoundV2.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
 /**
@@ -192,7 +192,7 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
      * @notice Helper function that reverts if market is not listed in Comptroller AND checks that it is setup in the Cellar.
      */
     function _validateMarketInput(address _market) internal view {
-        (bool isListed, , , ) = comptroller.markets(_market);
+        (bool isListed, , ) = comptroller.markets(_market);
         if (!isListed) revert CTokenAdaptorV2__MarketNotListed(_market);
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(_market)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);

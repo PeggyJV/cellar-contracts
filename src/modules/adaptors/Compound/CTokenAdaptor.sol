@@ -3,19 +3,16 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-
-// TODO to get a users health factor, I think we can call `comptroller.getAssetsIn` to get the array of markets currently being used
-// As collateral, then we can use the price router to get a dollar value of the collateral. Although Compound stouts they have their own pricing too (based off of chainlink)
-// Then we can call `comptroller.getAccountLiquidity` to figure out how much more debt we can take on before HF == 1, I think using those 2 values
-// we can figure out the HF.
+import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
 // TODO to handle ETH based markets, do a similair setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
 /**
  * @title Compound CToken Adaptor
- * @notice Allows Cellars to interact with Compound CToken positions.
- * @author crispymangoes
+ * @notice Allows Cellars to interact with CompoundV2 CToken positions AND enter compound markets such that the calling cellar has an active collateral position (enabling the cellar to borrow).
+ * @dev As of December 2023, this is the newer version of `CTokenAdaptor.sol` whereas the prior version had no functionality for marking lent assets as supplied Collateral for open borrow positions using the `CompoundV2DebtAdaptor.sol`
+ * @author crispymangoes, 0xEinCodes
  */
-contract CTokenAdaptor is BaseAdaptor {
+contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -25,13 +22,6 @@ contract CTokenAdaptor is BaseAdaptor {
     // `cToken` is the cToken position this adaptor is working with
     //================= Configuration Data Specification =================
     // NOT USED
-    // **************************** IMPORTANT ****************************
-    // There is no way for a Cellar to take out loans on Compound, so there
-    // are NO health factor checks done for `withdraw` or `withdrawableFrom`
-    // In the future if a Compound debt adaptor is created, then this adaptor
-    // must be changed to include some health factor checks like the
-    // Aave aToken adaptor.
-    //====================================================================
 
     /**
      @notice Compound action returned a non zero error code.
@@ -42,6 +32,11 @@ contract CTokenAdaptor is BaseAdaptor {
      * @notice Strategist attempted to interact with a market that is not listed.
      */
     error CTokenAdaptor__MarketNotListed(address market);
+
+    /**
+     * @notice Strategist attempted to enter a market but failed
+     */
+    error CTokenAdaptor__UnsuccessfulEnterMarket(address market);
 
     /**
      * @notice The Compound V2 Comptroller contract on current network.
@@ -68,15 +63,18 @@ contract CTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Compound cToken Adaptor V 1.1"));
+        return keccak256(abi.encode("CompoundV2 cToken AdaptorV2 V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
+
     /**
      * @notice Cellar must approve market to spend its assets, then call mint to lend its assets.
      * @param assets the amount of assets to lend on Compound
      * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
+     * @dev straegist function `enterMarket()` is used to mark cTokens as collateral provision for cellar. `exitMarket()` removes toggle marking and thus marks this position's assets no longer as collateral.
+     * TODO: decide to leave it up to the strategist or not to toggle this adaptor position to be illiquid or not, AND thus to be supplying collateral for possible open borrow positions.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Compound.
@@ -94,23 +92,35 @@ contract CTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     @notice Cellars must withdraw from Compound.
+     @notice Allows users to withdraw from Compound through interacting with the cellar IF cellar is not using this position to "provide collateral"
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
      * @param assets the amount of assets to withdraw from Compound
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
-     * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
-     *      If cellars ever take on Compound Debt it is crucial these checks are added,
-     *      see "IMPORTANT" above.
+     * @dev Conditional logic with`marketJoinCheck` ensures that any withdrawal does not affect health factor.
      */
     function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         // Run external receiver check.
         _externalReceiverCheck(receiver);
+        _validateMarketInput(address(cToken));
+
+        // Check cellar has entered the market and thus is illiquid (used for open-borrows possibly)
+        CErc20[] memory marketsEntered = comptroller.getAssetsIn(address(this));
+        bool inCTokenMarket;
+        for (uint256 i = 0; i < marketsEntered.length; i++) {
+            // check if cToken is one of the markets cellar position is in.
+            if (marketsEntered[i] == cToken) {
+                inCTokenMarket = true;
+            }
+        }
+        // if true, means cellar is in the market and thus withdraws aren't allowed to prevent affecting HF
+        if (inCTokenMarket) {
+            revert BaseAdaptor__UserWithdrawsNotAllowed();
+        }
 
         // Withdraw assets from Compound.
-        CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        _validateMarketInput(address(cToken));
         uint256 errorCode = cToken.redeemUnderlying(assets);
 
         // Check for errors.
@@ -118,15 +128,18 @@ contract CTokenAdaptor is BaseAdaptor {
 
         // Transfer assets to receiver.
         ERC20(cToken.underlying()).safeTransfer(receiver, assets);
+
+        // TODO: need to figure out how to handle native ETH if that is the underlying asset
     }
 
     /**
      * @notice Identical to `balanceOf`.
-     * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
+     * @dev TODO: There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
      *      If cellars ever take on Compound Debt it is crucial these checks are added,
      *      see "IMPORTANT" above.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
+        // TODO: add conditional logic similar to withdraw checking if this adaptor is being used as supplied collateral or lent out assets. The latter is liquid, the former is not. If it is the former, revert.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
@@ -174,7 +187,7 @@ contract CTokenAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to lend assets on Compound.
+     * @notice Allows strategists to lend assets on Compound or add to existing collateral supply for cellar wrt specified market.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
      * @param market the market to deposit to.
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Compound.
@@ -198,6 +211,8 @@ contract CTokenAdaptor is BaseAdaptor {
      * @notice Allows strategists to withdraw assets from Compound.
      * @param market the market to withdraw from.
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
+     * TODO: check HF when redeeming
+     * NOTE: `redeem()` is used for redeeming a specified amount of cToken, whereas `redeemUnderlying()` is used for obtaining a specified amount of underlying tokens no matter what amount of cTokens required.
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
         _validateMarketInput(address(market));
@@ -208,6 +223,39 @@ contract CTokenAdaptor is BaseAdaptor {
 
         // Check for errors.
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+    }
+
+    /**
+     * @notice Allows strategists to enter the compound market and thus mark its assets as supplied collateral that can support an open borrow position.
+     * @param market the market to mark alotted assets as supplied collateral.
+     * @dev NOTE: this must be called in order to support for a CToken in order to open a borrow position within that market.
+     * TODO: decide to have an adaptorData param to set this adaptor position as "in market" or not. IMO having strategist "enter market" via strategist function calls is probably easiest and most flexible.
+     */
+    function enterMarket(address market) public {
+        _validateMarketInput(market);
+        // TODO: check if we're already in the market
+        address[] memory cToken = new address[](1);
+        uint256[] memory result = new uint256[](1);
+
+        cToken[0] = market;
+        result = comptroller.enterMarkets(cToken); // enter the market
+
+        if (result[0] > 0) revert CTokenAdaptor__UnsuccessfulEnterMarket(market);
+    }
+
+    /**
+     * @notice Allows strategists to exit the compound market and thus unmark its assets as supplied collateral; thus no longer supporting an open borrow position.
+     * @param market the market to unmark alotted assets as supplied collateral.
+     * @dev TODO: check if we need to call this in order to actually redeem cTokens when there are no open borrow positions from cellar associated to this position.
+     */
+    function exitMarket(address market) public {
+        _validateMarketInput(market);
+        // TODO: check if we're already in the market
+        // TODO: add a check to see if we can even exit the market... although the `exitMarket()` call below may result in an error anyways if it can't. Check the logic to see that it does this.
+        comptroller.exitMarket(market); // enter the market
+
+        // uint256 result = comptroller.exitMarket(market); // enter the market
+        // if (!result) revert CTokenAdaptor__UnsuccessfulEnterMarket(market); // TODO: sort out what the returned uint means (which means success and which doesn't)
     }
 
     /**
