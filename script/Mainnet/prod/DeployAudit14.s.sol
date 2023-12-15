@@ -32,20 +32,20 @@ contract DeployAudit14Script is Script, MainnetAddresses {
 
         vm.startBroadcast();
 
-        // Deploy SimpleSlippageRouter
-        creationCode = type(SimpleSlippageRouter).creationCode;
-        // constructorArgs empty
-        deployer.deployContract("SimpleSlippageRouter V0.0", creationCode, constructorArgs, 0);
+        // // Deploy SimpleSlippageRouter
+        // creationCode = type(SimpleSlippageRouter).creationCode;
+        // // constructorArgs empty
+        // deployer.deployContract("SimpleSlippageRouter V0.0", creationCode, constructorArgs, 0);
 
-        // Deploy Withdraw Queue
-        creationCode = type(WithdrawQueue).creationCode;
-        // constructorArgs empty
-        address queue = deployer.deployContract("WithdrawQueue V0.0", creationCode, constructorArgs, 0);
+        // // Deploy Withdraw Queue
+        // creationCode = type(WithdrawQueue).creationCode;
+        // // constructorArgs empty
+        // address queue = deployer.deployContract("WithdrawQueue V0.0", creationCode, constructorArgs, 0);
 
-        // Deploy SimpleSolver
-        creationCode = type(SimpleSolver).creationCode;
-        constructorArgs = abi.encode(queue);
-        deployer.deployContract("SimpleSolver V0.0", creationCode, constructorArgs, 0);
+        // // Deploy SimpleSolver
+        // creationCode = type(SimpleSolver).creationCode;
+        // constructorArgs = abi.encode(queue);
+        // deployer.deployContract("SimpleSolver V0.0", creationCode, constructorArgs, 0);
 
         // Deploy Curve2PoolExtension
         creationCode = type(Curve2PoolExtension).creationCode;
