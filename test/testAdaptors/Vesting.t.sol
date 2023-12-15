@@ -63,7 +63,7 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         string memory cellarName = "Multiposition Cellar LP Token";
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
         cellar.addAdaptorToCatalogue(address(erc20Adaptor));
         cellar.addAdaptorToCatalogue(address(vestingAdaptor));
 

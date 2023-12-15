@@ -78,7 +78,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e12;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, WETH, morphoAWethPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, WETH, morphoAWethPosition, abi.encode(true), initialDeposit, platformCut);
 
         cellar.addAdaptorToCatalogue(address(aTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(debtTokenAdaptor));
@@ -223,7 +223,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         uint256 assetsWithdrawable;
         // Add vanilla WETH to the cellar.
-        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
         // Add debt position to cellar.
         cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
 
@@ -393,7 +393,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addAdaptorToCatalogue(address(aTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
         cellar.addPositionToCatalogue(usdcPosition);
-        cellar.addPosition(0, usdcPosition, abi.encode(0), false);
+        cellar.addPosition(0, usdcPosition, abi.encode(true), false);
 
         // assets = 100_000e6;
         assets = bound(assets, 1e6, 1_000_000e6);
@@ -466,8 +466,8 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Setup cellar so that aSTETH is illiquid.
         // Then have strategist loop into STETH.
         // -Deposit STETH as collateral, and borrow WETH, repeat.
-        cellar.addPosition(0, wethPosition, abi.encode(0), false);
-        cellar.addPosition(0, stethPosition, abi.encode(0), false);
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
+        cellar.addPosition(0, stethPosition, abi.encode(true), false);
         cellar.addPosition(0, morphoAStEthPosition, abi.encode(false), false);
         cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
 
@@ -539,7 +539,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         assetsToBorrow = bound(assetsToBorrow, 1, 1_000e18);
 
         // Add vanilla WETH to the cellar.
-        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
         // Add debt position to cellar.
         cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
 
@@ -584,7 +584,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 assets = 100e18;
 
         // Add vanilla WETH to the cellar.
-        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
         // Add debt position to cellar.
         cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
 
@@ -648,8 +648,8 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function _setupCellarForBorrowing(Cellar target) internal {
         // Add required positions.
-        target.addPosition(0, wethPosition, abi.encode(0), false);
-        target.addPosition(1, stethPosition, abi.encode(0), false);
+        target.addPosition(0, wethPosition, abi.encode(true), false);
+        target.addPosition(1, stethPosition, abi.encode(true), false);
         target.addPosition(2, morphoAStEthPosition, abi.encode(0), false);
         target.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
 
