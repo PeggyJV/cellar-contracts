@@ -253,10 +253,10 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @param market the market to unmark alotted assets as supplied collateral.
      * @dev This function is not needed to be called if redeeming cTokens, but it is available if Strategists want to toggle a `CTokenAdaptor` position w/ a specific cToken as "not supporting an open-borrow position" for w/e reason.
      */
-    function exitMarket(address market) public {
-        _validateMarketInput(market);
+    function exitMarket(CErc20 market) public {
+        _validateMarketInput(address(market));
 
-        uint256 errorCode = comptroller.exitMarket(market); // exit the market as supplied collateral (still in lending position though)
+        uint256 errorCode = comptroller.exitMarket(address(market)); // exit the market as supplied collateral (still in lending position though)
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Check new HF from exiting the market

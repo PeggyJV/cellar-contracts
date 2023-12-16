@@ -39,6 +39,8 @@ interface CErc20 {
 
     function accrueInterest() external returns (uint);
 
+    function borrowBalanceStored(address account) external view returns (uint);
+
     /**
      * @notice Get a snapshot of the account's balances, and the cached exchange rate
      * @dev This is used by comptroller to more efficiently perform liquidity checks.

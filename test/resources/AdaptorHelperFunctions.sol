@@ -27,6 +27,7 @@ import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolA
 // Compound
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+import { CompoundV2DebtAdaptor } from "src/modules/adaptors/Compound/CompoundV2DebtAdaptor.sol";
 
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -373,6 +374,28 @@ contract AdaptorHelperFunctions {
         uint256 amountToWithdraw
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
+    }
+
+    function _createBytesDataToEnterMarketWithCompoundV2(CErc20 market) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.enterMarket.selector, market);
+    }
+
+    function _createBytesDataToExitMarketWithCompoundV2(CErc20 market) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.exitMarket.selector, market);
+    }
+
+    function _createBytesDataToBorrowWithCompoundV2(
+        CErc20 market,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV2DebtAdaptor.borrowFromCompoundV2.selector, market, amountToBorrow);
+    }
+
+    function _createBytesDataToRepayWithCompoundV2(
+        CErc20 market,
+        uint256 debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV2DebtAdaptor.repayCompoundV2Debt.selector, market, debtTokenRepayAmount);
     }
 
     // ========================================= Fees And Reserves FUNCTIONS =========================================

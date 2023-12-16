@@ -124,10 +124,12 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
      * @notice Returns the cellar's amount owing (debt) to CompoundV2 market
      * @param adaptorData encoded CompoundV2 market (cToken) for this position
      * NOTE: this queries `borrowBalanceCurrent(address account)` to get current borrow amount per compoundV2 market PLUS interest
+     * TODO `borrowBalanceCurrent` calls accrueInterest, so it changes state and thus might not be callable from balanceOf which is just a view function. Thus trying `borrowBalanceStored` for now.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        return cToken.borrowBalanceCurrent(msg.sender);
+        // return cToken.borrowBalanceCurrent(msg.sender);
+        return cToken.borrowBalanceStored(msg.sender);
     }
 
     /**

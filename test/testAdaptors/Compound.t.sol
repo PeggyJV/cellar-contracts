@@ -34,10 +34,10 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private cUSDCPosition = 4;
     uint32 private daiVestingPosition = 5;
     uint32 private cDAIDebtPosition = 6;
-    uint32 private cUSDCDebtPosition = 7;
+    // uint32 private cUSDCDebtPosition = 7;
     // TODO: add positions for ETH CTokens
 
-    uint256 private minHealthFactor = 1;
+    uint256 private minHealthFactor = 1.1e18;
 
     function setUp() external {
         // Setup forked environment.
@@ -83,7 +83,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // trust debtAdaptor positions
         registry.trustPosition(cDAIDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cDAI));
-        registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
+        // registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
 
         string memory cellarName = "Compound Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -102,14 +102,14 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addPositionToCatalogue(cUSDCPosition);
         cellar.addPositionToCatalogue(daiVestingPosition);
         cellar.addPositionToCatalogue(cDAIDebtPosition);
-        cellar.addPositionToCatalogue(cUSDCDebtPosition);
+        // cellar.addPositionToCatalogue(cUSDCDebtPosition);
 
         cellar.addPosition(1, daiPosition, abi.encode(0), false);
         cellar.addPosition(2, usdcPosition, abi.encode(0), false);
         cellar.addPosition(3, cUSDCPosition, abi.encode(0), false);
         cellar.addPosition(4, daiVestingPosition, abi.encode(0), false);
         cellar.addPosition(5, cDAIDebtPosition, abi.encode(0), true);
-        cellar.addPosition(6, cUSDCDebtPosition, abi.encode(0), true);
+        // cellar.addPosition(6, cUSDCDebtPosition, abi.encode(0), true);
 
         DAI.safeApprove(address(cellar), type(uint256).max);
     }
@@ -378,5 +378,205 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 9))
         );
         cellar.callOnAdaptor(data);
+    }
+
+    /// Extra test for supporting providing collateral && open borrow positions
+
+    // TODO repeat above tests but for positions that have marked their cToken positions as collateral provision
+
+    function testEnterMarket(uint256 assets) external {
+        // TODO below checks AFTER entering the market
+        // TODO check that totalAssets reports properly
+        // TODO check that balanceOf reports properly
+        // TODO check that withdrawableFrom reports properly
+        // TODO check that user deposits add to collateral position
+        // TODO check that user withdraws work when no debt-position is open
+        // TODO check that strategist function to enterMarket reverts if you're already in the market
+        // TODO check that you can exit the market, then enter again
+    }
+
+    function testTotalAssets(uint256 assets) external {
+        // TODO focused test on totalAssets as cellar takes on lending, collateral provision, borrows, repayments, full withdrawals
+    }
+
+    function testExitMarket(uint256 assets) external {
+        // TODO below checks AFTER entering the market
+        // TODO check that totalAssets reports properly
+        // TODO check that balanceOf reports properly
+        // TODO check that withdrawableFrom reports properly
+        // TODO check that user deposits add to collateral position
+        // TODO check that user withdraws work when no debt-position is open
+        // TODO check that strategist function to enterMarket reverts if you're already in the market
+        // TODO check that you can exit the market, then enter again
+    }
+
+    function testTakingOutLoans(uint256 assets) external {
+        // TODO Simply carry out borrows
+        // TODO assert that amount borrowed equates to how much compound has on record, and is in agreement with how much cellar wanted
+    }
+
+    function testTakingOutLoanInUntrackedPositionV2(uint256 assets) external {
+        // TODO simply test taking out loans in untracked position
+    }
+
+    function testRepayingLoans(uint256 assets) external {
+        // TODO simply test repaying and that balances make sense
+        // TODO repay some
+        // TODO repay all
+    }
+
+    function testMultipleCompoundV2Positions() external {
+        // TODO check that adaptor can handle multiple positions for a cellar
+        // TODO
+    }
+
+    function testRemoveCollateral(uint256 assets) external {
+        // TODO test redeeming without calling `exitMarket`
+        // TODO test redeeming with calling `exitMarket` first to make sure it all works still either way
+    }
+
+    function testRemoveSomeCollateral(uint256 assets) external {
+        // TODO test partial removal
+        // TODO test redeeming without calling `exitMarket`
+        // TODO test redeeming with calling `exitMarket` first to make sure it all works still either way
+    }
+
+    function testRemoveAllCollateralWithTypeUINT256Max(uint256 assets) external {
+        // TODO test type(uint256).max removal
+        // TODO test redeeming without calling `exitMarket`
+        // TODO test redeeming with calling `exitMarket` first to make sure it all works still either way
+    }
+
+    function testRemoveCollateralWithTypeUINT256MaxAfterRepay(uint256 assets) external {
+        // TODO test type(uint256).max removal after repays on an open borrow position
+        // TODO test redeeming without calling `exitMarket`
+        // TODO test redeeming with calling `exitMarket` first to make sure it all works still either way
+    }
+
+    function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
+        // TODO test that it reverts if trying to redeem too much
+        // TODO test that it reverts if trying to call exitMarket w/ too much borrow position out that one cannot pull the collateral.
+    }
+
+    function testHF(uint256 assets) external {
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // TODO - MOVE BELOW BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
+        // check that we aren't in market
+        bool inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, false, "Should not be 'IN' the market yet");
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+        inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, true, "Should be 'IN' the market yet");
+
+        // TODO - MOVE ABOVE BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
+
+        // now we're in the market, so start borrowing.
+        uint256 borrow1 = assets / 2;
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cDAI, borrow1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // TODO - EIN THIS IS WHERE YOU LEFT OFF, CURRENTLY IT IS HAVING UNDERFLOW/OVERFLOW ERRORS IN THE HEALTHFACTOR LOGIC HELPER CONTRACT
+
+        // TODO check decimals to refine the HF calculations
+        // check consoles, ultimately we just want to see HF is calculated properly, actually just console log inside of the CompoundV2HelperLogic.sol file. see what comes up.
+
+        // TODO test borrowing more when it would lower HF
+        // TODO test redeeming when it would lower HF
+        // TODO increase the collateral position so the HF is higher and then perform the borrow
+        // TODO decrease the borrow and then do the redeem successfully
+    }
+
+    // Crispy's test that has the decimals that he thinks we should use.
+    //     The only thing with this calculation is that the first part is in terms of the underlying asset decimals, which for DAI is 18 decimals, but USDC, USDT use 6 decimals, so you could lose a lot of precision there. Something we would need to look at.
+    // To increase precision, the line where we declare actualCollateralBacking we could do 1 of 2 things
+    // 1) Divide by the asset decimals instead of 1e18, so we use 18 decimals by default(which later on we would need to adjust for)
+    // 2) Or we could multiply by some scalar to make sure we have more precision(which later on we would need to adjust for again)
+
+    // Both of these methods use more logic and read more state, so if we can get away with using the method I outlined in the screen shot that would be best, even if it resulted in HFs being 0.1% off from the compound 1. If we set our minimum health factor in the adaptor to 1.03, then worse case scenario is the adaptor thinks the cellars health factor is 1.03, but in reality it is 1.02897.
+
+    // I mean hell even if it was 1% the worst case scenario for the health factor would bbe 1.0197, which is still comfortably above 1
+
+    // function testCrispyDeposit(uint256 assets) external {
+    //     uint256 initialAssets = cellar.totalAssets();
+    //     assets = bound(assets, 0.1e18, 1_000_000e18);
+    //     deal(address(DAI), address(this), assets); //18
+    //     cellar.deposit(assets, address(this));
+    //     assertApproxEqRel(
+    //         cDAI.balanceOf(address(cellar)).mulDivDown(cDAI.exchangeRateStored(), 1e18),
+    //         assets + initialAssets,
+    //         0.001e18,
+    //         "Assets should have been deposited into Compound."
+    //     );
+
+    //     // Calculate collateral value for HF equation.
+    //     cDAI.accrueInterest(); // Update ExchangeRate stored.
+    //     uint256 cTokenBalance = cDAI.balanceOf(address(cellar));
+    //     uint256 currentExchangeRate = cDAI.exchangeRateStored();
+    //     Oracle compoundOracle = Oracle(comptroller.oracle());
+    //     uint256 underlyingPriceInUsd = compoundOracle.getUnderlyingPrice(address(cDAI));
+    //     (, uint256 collateralFactor, ) = comptroller.markets(address(cDAI));
+
+    //     uint256 actualCollateralBacking = cTokenBalance.mulDivDown(currentExchangeRate, 1e18); // Now in terms of underlying asset decimals.
+    //     actualCollateralBacking = actualCollateralBacking.mulDivDown(underlyingPriceInUsd, 1e18); // Now in terms of 18 decimals.
+    //     /// NOTE to perform calc for a debt balance, call `cDAI.borrowBalanceStored` and use that value instead of `cDAI.balanceOf`, then stop here and do not muldiv the collateral factor
+    //     actualCollateralBacking = actualCollateralBacking.mulDivDown(collateralFactor, 1e18); // Still in terms of 18 decimals.
+
+    //     uint256 assetsInvested = assets + initialDeposit;
+    //     uint256 expectedCollateralBacking = assetsInvested.mulDivDown(priceRouter.getPriceInUSD(DAI), 1e8); // Now in terms of underlying decimals.
+    //     expectedCollateralBacking = expectedCollateralBacking.mulDivDown(collateralFactor, 10 ** DAI.decimals()); // Now in terms of 18 decimals.
+
+    //     assertApproxEqRel(
+    //         actualCollateralBacking,
+    //         expectedCollateralBacking,
+    //         0.000001e18,
+    //         "Collateral backing does not equal expected."
+    //     );
+    // }
+
+    function testRepayPartialDebt(uint256 assets) external {
+        // TODO test partial repayment and check that balances make sense within compound and outside of it (actual token balances)
+    }
+
+    // This check stops strategists from taking on any debt in positions they do not set up properly.
+    function testLoanInUntrackedPosition(uint256 assets) external {
+        // TODO purposely do not trust a fraxlendDebtUNIPosition
+        // TODO then test borrowing from it
+    }
+
+    function testRepayingDebtThatIsNotOwed(uint256 assets) external {
+        // TODO
+    }
+
+    // externalReceiver triggers when doing Strategist Function calls via adaptorCall.
+    function testBlockExternalReceiver(uint256 assets) external {
+        // TODO         vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+    }
+
+    /// helpers
+
+    function _checkInMarket(CErc20 _market) internal view returns (bool inCTokenMarket) {
+        // check that we aren't in market
+        CErc20[] memory marketsEntered = comptroller.getAssetsIn(address(cellar));
+        for (uint256 i = 0; i < marketsEntered.length; i++) {
+            // check if cToken is one of the markets cellar position is in.
+            if (marketsEntered[i] == cDAI) {
+                inCTokenMarket = true;
+            }
+        }
     }
 }
