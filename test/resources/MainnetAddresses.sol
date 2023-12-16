@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { CErc20 } from "src/interfaces/external/ICompound.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 contract MainnetAddresses {
     // Sommelier
