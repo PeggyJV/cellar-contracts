@@ -76,13 +76,24 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
      */
     uint256 public immutable minimumHealthFactor;
 
+    /**
+     * @notice Store the adaptor address in bytecode, so that Cellars can use it during delegate call operations.
+     */
+    address payable public immutable adaptorAddress;
+
     // NOTE: comptroller is a proxy so there may be times that the implementation is updated, although it is rare and would come up for governance vote.
-    constructor(bool _accountForInterest, address _v2Comptroller, address _comp, uint256 _healthFactor) {
+    constructor(
+        bool _accountForInterest,
+        address _v2Comptroller,
+        address _comp,
+        uint256 _healthFactor
+    ) CompoundV2HelperLogic(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         comptroller = Comptroller(_v2Comptroller);
         COMP = ERC20(_comp);
         minimumHealthFactor = _healthFactor;
+        adaptorAddress = payable(address(this));
     }
 
     //============================================ Global Functions ===========================================
@@ -187,6 +198,29 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
         if (errorCode != 0) revert CompoundV2DebtAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         _revokeExternalApproval(tokenToRepay, address(_market));
+    }
+
+    function repayNative(uint256 amountToRepay) public {
+        ERC20 wrappedNative = ERC20(nativeWrapper);
+
+        amountToRepay = _maxAvailable(wrappedNative, amountToRepay);
+
+        wrappedNative.safeApprove(adaptorAddress, amountToRepay);
+
+        uint256 errorCode = CompoundV2HelperLogic(adaptorAddress).repayNativeViaProxy(amountToRepay);
+
+        // Check for errors.
+        if (errorCode != 0) revert CompoundV2DebtAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        _revokeExternalApproval(wrappedNative, adaptorAddress);
+    }
+
+    function borrowNative(uint256 amountToBorrow) public {
+        // TODO ooof there is no way to borrow on behalf.... or borrow and specify a receiver
+
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     /**

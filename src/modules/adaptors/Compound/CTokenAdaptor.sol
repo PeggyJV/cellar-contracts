@@ -66,11 +66,21 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(address v2Comptroller, address comp, uint256 _healthFactor) {
+    /**
+     * @notice Store the adaptor address in bytecode, so that Cellars can use it during delegate call operations.
+     */
+    address payable public immutable adaptorAddress;
+
+    constructor(
+        address v2Comptroller,
+        address comp,
+        uint256 _healthFactor
+    ) CompoundV2HelperLogic(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         comptroller = Comptroller(v2Comptroller);
         COMP = ERC20(comp);
         minimumHealthFactor = _healthFactor;
+        adaptorAddress = payable(address(this));
     }
 
     //============================================ Global Functions ===========================================
@@ -270,6 +280,36 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     function claimComp() public {
         comptroller.claimComp(address(this));
+    }
+
+    function mintNative(uint256 wrappedNativeIn) public {
+        ERC20 wrappedNative = ERC20(nativeWrapper);
+
+        wrappedNativeIn = _maxAvailable(wrappedNative, wrappedNativeIn);
+
+        wrappedNative.safeApprove(adaptorAddress, wrappedNativeIn);
+
+        uint256 errorCode = CompoundV2HelperLogic(adaptorAddress).mintNativeViaProxy(wrappedNativeIn);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        _revokeExternalApproval(wrappedNative, adaptorAddress);
+    }
+
+    // Note we do not support redeemUnderlying, only redemption of cTokens.
+    function redeemNative(uint256 cNativeAmount) public {
+        CErc20 market = CErc20(cNative);
+        if (cNativeAmount == type(uint256).max) cNativeAmount = market.balanceOf(address(this));
+
+        ERC20(cNative).safeApprove(adaptorAddress, cNativeAmount);
+
+        uint256 errorCode = CompoundV2HelperLogic(adaptorAddress).redeemNativeViaProxy(cNativeAmount);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        _revokeExternalApproval(ERC20(cNative), adaptorAddress);
     }
 
     //============================================ Helper Functions ============================================
