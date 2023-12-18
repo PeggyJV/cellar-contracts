@@ -2,6 +2,23 @@
 pragma solidity 0.8.21;
 
 contract ContractDeploymentNames {
+    // Multi-chain
+    string public registryName = "Registry V0.0";
+    string public priceRouterName = "PriceRouter V0.0";
+    string public erc20AdaptorName = "ERC20 Adaptor V1.0";
+    string public erc4626AdaptorName = "ERC4626 Adaptor V0.0";
+    string public oneInchAdaptorName = "1Inch Adaptor V0.0";
+    string public zeroXAdaptorName = "0x Adaptor V0.0";
+    string public uniswapV3Adaptor = "Uniswap V3 Adaptor V0.0";
+    string public uniswapV3PositionTracker = "Uniswap V3 Position Tracker V0.0";
+    string public swapWithUniswapAdaptor = "Swap With Uniswap Adaptor V0.0";
+    string public aaveV3ATokenAdaptor = "Aave V3 AToken Adaptor V0.0";
+    string public aaveV3DebtTokenAdaptor = "Aave V3 Debt Token Adaptor V0.0";
+
+    // Mainnet
+    // TODO morpho adaptors
+    // aave v2 adaptors
+
     // PRODUCTION_REGISTRY_V3 = {
     // ERC20_ADAPTOR_NAME: "0xa5D315eA3D066160651459C4123ead9264130BFd",
     // UNIV3_ADAPTOR_NAME: "0xC74fFa211A8148949a77ec1070Df7013C8D5Ce92",
