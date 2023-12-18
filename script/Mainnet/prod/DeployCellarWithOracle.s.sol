@@ -31,7 +31,7 @@ import "forge-std/Script.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/prod/DeployCellarWithOracle.s.sol:DeployCellarWithOracleScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/Mainnet/prod/DeployCellarWithOracle.s.sol:DeployCellarWithOracleScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployCellarWithOracleScript is Script, MainnetAddresses {
@@ -58,53 +58,43 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
     UniswapV3PositionTracker public tracker;
     BalancerPoolAdaptor public balancerPoolAdaptor;
 
-    CellarWithOracleWithBalancerFlashLoans public ghoCellar;
-    CellarWithOracleWithBalancerFlashLoans public swethCellar;
-
-    INonfungiblePositionManager internal positionManager =
-        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+    CellarWithOracleWithBalancerFlashLoans public curveCellar;
 
     // Positions.
     uint32 usdcPositionId = 3;
-    uint32 usdtPositionId = 5;
-    uint32 ghoPositionId = 6;
-    uint32 GHO_USDC_PositionId = 1_000_002;
-    uint32 GHO_USDT_PositionId = 1_000_003;
 
     function run() external {
-        address uniswapAdaptor = deployer.getAddress("Uniswap V3 Adaptor V1.4");
-
         vm.startBroadcast();
 
         // Create Cellars and Share Price Oracles.
-        ghoCellar = _createCellar("Turbo GHO", "TurboGHO", USDC, usdcPositionId, abi.encode(0), 1e6, 0.8e18);
+        curveCellar = _createCellar(
+            "Test Curve Cellar",
+            "TestCurveCellar",
+            USDC,
+            usdcPositionId,
+            abi.encode(true),
+            0.1e6,
+            0.8e18
+        );
 
-        uint64 heartbeat = 1 days;
+        uint64 heartbeat = 1 days / 24;
         uint64 deviationTrigger = 0.0050e4;
-        uint64 gracePeriod = 1 days / 6;
+        uint64 gracePeriod = 30 days;
         uint16 observationsToUse = 4;
-        address automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
         uint216 startingAnswer = 1e18;
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 10e4;
         _createSharePriceOracle(
-            "Turbo GHO Share Price Oracle V0.1",
-            address(ghoCellar),
+            "Test Curve Cellar Share Price Oracle V0.0",
+            address(curveCellar),
             heartbeat,
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
         );
-
-        ghoCellar.addAdaptorToCatalogue(uniswapAdaptor);
-        ghoCellar.addPositionToCatalogue(ghoPositionId);
-        ghoCellar.addPositionToCatalogue(usdtPositionId);
-        ghoCellar.addPositionToCatalogue(GHO_USDC_PositionId);
-        ghoCellar.addPositionToCatalogue(GHO_USDT_PositionId);
 
         vm.stopBroadcast();
     }
@@ -119,7 +109,7 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         uint64 platformCut
     ) internal returns (CellarWithOracleWithBalancerFlashLoans) {
         // Approve new cellar to spend assets.
-        string memory nameToUse = string.concat(cellarName, " V0.1");
+        string memory nameToUse = string.concat(cellarName, " V0.0");
         address cellarAddress = deployer.getAddress(nameToUse);
         holdingAsset.approve(cellarAddress, initialDeposit);
 
@@ -153,7 +143,6 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -167,7 +156,10 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry,
+            automationRegistryV2,
+            automationRegistrarV2,
+            devStrategist,
+            LINK,
             _startingAnswer,
             _allowedAnswerChangeLower,
             _allowedAnswerChangeUpper

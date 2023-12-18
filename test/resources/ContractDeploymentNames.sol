@@ -15,6 +15,9 @@ contract ContractDeploymentNames {
     string public aaveV3ATokenAdaptor = "Aave V3 AToken Adaptor V0.0";
     string public aaveV3DebtTokenAdaptor = "Aave V3 Debt Token Adaptor V0.0";
 
+    string public realYieldEth = "Real Yield ETH V1.0";
+    string public realYieldMatic = "Real Yield MATIC V0.0";
+    string public realYieldAvax = "Real Yield AVAX V0.0";
     // Mainnet
     // TODO morpho adaptors
     // aave v2 adaptors
