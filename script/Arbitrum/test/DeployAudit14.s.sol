@@ -14,7 +14,7 @@ import { ArbitrumAddresses } from "test/resources/Arbitrum/ArbitrumAddresses.sol
 
 /**
  * @dev Run
- *      `source .env && forge script script/Arbitrum/test/DeployAudit14.s.sol:DeployAudit14Script --rpc-url $ARBITRUM_RPC_URL --evm-version london  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ARBISCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/Arbitrum/test/DeployAudit14.s.sol:DeployAudit14Script --rpc-url $ARBITRUM_RPC_URL --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $ARBISCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployAudit14Script is Script, ArbitrumAddresses {
@@ -29,17 +29,17 @@ contract DeployAudit14Script is Script, ArbitrumAddresses {
         // Deploy SimpleSlippageRouter
         creationCode = type(SimpleSlippageRouter).creationCode;
         // constructorArgs empty
-        deployer.deployContract("SimpleSlippageRouter V0.0", creationCode, constructorArgs, 0);
+        deployer.deployContract("Test SimpleSlippageRouter V0.1", creationCode, constructorArgs, 0);
 
         // Deploy Withdraw Queue
         creationCode = type(WithdrawQueue).creationCode;
         // constructorArgs empty
-        address queue = deployer.deployContract("WithdrawQueue V0.0", creationCode, constructorArgs, 0);
+        address queue = deployer.deployContract("Test WithdrawQueue V0.1", creationCode, constructorArgs, 0);
 
         // Deploy SimpleSolver
         creationCode = type(SimpleSolver).creationCode;
         constructorArgs = abi.encode(queue);
-        deployer.deployContract("SimpleSolver V0.0", creationCode, constructorArgs, 0);
+        deployer.deployContract("Test SimpleSolver V0.1", creationCode, constructorArgs, 0);
 
         vm.stopBroadcast();
     }
