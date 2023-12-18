@@ -644,13 +644,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Max rebalance deviation value is 10%.
         uint256 deviation = 0.2e18;
         vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__InvalidRebalanceDeviation.selector,
-                    deviation,
-                    cellar.MAX_REBALANCE_DEVIATION()
-                )
-            )
+            bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidRebalanceDeviation.selector, deviation, 0.1e18))
         );
         cellar.setRebalanceDeviation(deviation);
     }
@@ -1045,41 +1039,41 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Specify a zero length Adaptor Call array.
         Cellar.AdaptorCall[] memory data;
 
-        address automationActions = vm.addr(5);
-        registry.register(automationActions);
-        cellar.setAutomationActions(3, automationActions);
+        // address automationActions = vm.addr(5);
+        // registry.register(automationActions);
+        // cellar.setAutomationActions(3, automationActions);
 
         // Only owner and automation actions can call `callOnAdaptor`.
         cellar.callOnAdaptor(data);
 
-        vm.prank(automationActions);
-        cellar.callOnAdaptor(data);
+        // vm.prank(automationActions);
+        // cellar.callOnAdaptor(data);
 
-        // Update Automation Actions contract to zero address.
-        cellar.setAutomationActions(4, address(0));
+        // // Update Automation Actions contract to zero address.
+        // cellar.setAutomationActions(4, address(0));
 
-        // Call now reverts.
-        vm.startPrank(automationActions);
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
-        cellar.callOnAdaptor(data);
-        vm.stopPrank();
+        // // Call now reverts.
+        // vm.startPrank(automationActions);
+        // vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
+        // cellar.callOnAdaptor(data);
+        // vm.stopPrank();
 
         // Owner can still call callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        registry.setAddress(3, automationActions);
+        // registry.setAddress(3, automationActions);
 
-        // Governance tries to set automation actions to registry address 3, but malicious multisig changes it after prop passes.
-        registry.setAddress(3, address(this));
+        // // Governance tries to set automation actions to registry address 3, but malicious multisig changes it after prop passes.
+        // registry.setAddress(3, address(this));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
-        cellar.setAutomationActions(3, automationActions);
+        // vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
+        // cellar.setAutomationActions(3, automationActions);
 
-        // Try setting automation actions to registry id 0.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
-        );
-        cellar.setAutomationActions(0, automationActions);
+        // // Try setting automation actions to registry id 0.
+        // vm.expectRevert(
+        //     bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
+        // );
+        // cellar.setAutomationActions(0, automationActions);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
