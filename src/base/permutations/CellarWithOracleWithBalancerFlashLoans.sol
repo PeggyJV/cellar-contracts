@@ -5,8 +5,6 @@ import { Registry, ERC20, Math, SafeTransferLib } from "src/base/Cellar.sol";
 import { IFlashLoanRecipient, IERC20 } from "@balancer/interfaces/contracts/vault/IFlashLoanRecipient.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
-import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
-
 contract CellarWithOracleWithBalancerFlashLoans is CellarWithOracle, IFlashLoanRecipient {
     using Math for uint256;
     using SafeTransferLib for ERC20;
@@ -15,7 +13,7 @@ contract CellarWithOracleWithBalancerFlashLoans is CellarWithOracle, IFlashLoanR
      * @notice The Balancer Vault contract on current network.
      * @dev For mainnet use 0xBA12222222228d8Ba445958a75a0704d566BF2C8.
      */
-    address public immutable balancerVault;
+    address internal immutable balancerVault;
 
     constructor(
         address _owner,
