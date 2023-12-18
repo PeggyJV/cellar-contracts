@@ -41,8 +41,8 @@ contract CompoundV2HelperLogic is Test {
         PriceOracle oracle = comptroller.oracle();
         uint256 sumCollateral;
         uint256 sumBorrow;
-        console.log("Oracle, also setting console.log: %s", address(oracle));
 
+        // TODO: EIN THIS IS WHERE YOU LEFT OFF --> BASICALLY THE BORROW SEEMS TO WORK --> IT'S INTERESTING, IF YOU HAVE A CTOKEN POSITION FOR THE UNDERLYING ASSET THEN IT'LL REDEEM CTOKEN IT LOOKS LIKE FOR YOU. TODO: CHECK THIS OUT. OTHERWISE, YOU'RE LOOKING AT CHECKING DECIMALS. SO NEXT THING YOU GOTTA DO IS ALGEBRAICALLY MAKE SENSE OF THE DECIMALS YOU'RE GETTING. LOOK AT A SPREADSHEET AND LOOK AT THE MATH AND SEE WHAT MAKES SENSE.
         for (uint256 i = 0; i < marketsEntered.length; i++) {
             CErc20 asset = marketsEntered[i];
             // call accrueInterest() to update exchange rates before going through the loop --> TODO --> test if we need this by seeing if the exchange rates are 'kicked' when going through the rest of it. If so, remove this line of code.
@@ -50,17 +50,12 @@ contract CompoundV2HelperLogic is Test {
             // if (errorCode != 0) revert CompoundV2HelperLogic__NonZeroCompoundErrorCode(errorCode);
 
             // TODO We're going through a loop to calculate total collateral & total borrow for HF calcs (Starting below) w/ assets we're in.
-            (uint256 oErr, uint256 cTokenBalance, uint256 borrowBalance, uint256 exchangeRateMantissa) = asset
+            (uint256 oErr, uint256 cTokenBalance, uint256 borrowBalance, uint256 exchangeRate) = asset
                 .getAccountSnapshot(_account);
             if (oErr != 0) revert CompoundV2HelperLogic__NonZeroCompoundErrorCode(oErr);
-            console.log(
-                "oErr: %s, cTokenBalance: %s, borrowBalance: %s, exchangeRateMantissa: %s",
-                oErr,
-                cTokenBalance,
-                borrowBalance,
-                exchangeRateMantissa
-            );
+            console.log("oErr: %s, cTokenBalance: %s, borrowBalance: %s ", oErr, cTokenBalance, borrowBalance); // oErr == 0, test is supplying DAI, and borrowing DAI?
 
+            console.log("exchangeRate: %s", exchangeRate);
             // get collateral factor from markets
             (, uint256 collateralFactor, ) = comptroller.markets(address(asset));
             console.log("CollateralFactor: %s", collateralFactor);
@@ -68,20 +63,20 @@ contract CompoundV2HelperLogic is Test {
             // TODO console.log to see what the values look like (decimals, etc.)
 
             // TODO Then normalize the values and get the HF with them. If it's safe, then we're good, if not revert.
-            uint256 oraclePriceMantissa = oracle.getUnderlyingPrice(asset);
-            console.log("oraclePriceMantissa: %s", oraclePriceMantissa);
+            uint256 oraclePrice = oracle.getUnderlyingPrice(asset);
+            console.log("oraclePrice: %s", oraclePrice);
 
-            if (oraclePriceMantissa == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
+            if (oraclePrice == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
 
-            // TODO: possibly convert oraclePriceMantissa to Exp format (like compound where it is 18 decimals representation)
-            uint256 tokensToDenom = (collateralFactor * exchangeRateMantissa) * oraclePriceMantissa; // TODO: make this 18 decimals --> units are underlying/cToken *
+            // TODO: possibly convert oraclePrice to Exp format (like compound where it is 18 decimals representation)
+            uint256 tokensToDenom = (collateralFactor * exchangeRate) * oraclePrice; // TODO: make this 18 decimals --> units are underlying/cToken *
             console.log("tokensToDenom: %s", tokensToDenom);
 
             // What are the units of exchangeRate, oraclePrice, tokensToDenom? Is it underlying/cToken, usd/underlying, usd/cToken, respectively?
             sumCollateral = (tokensToDenom * cTokenBalance) + sumCollateral; // Units --> usd/CToken * cToken --> equates to usd
             console.log("sumCollateral: %s", sumCollateral);
 
-            sumBorrow = (oraclePriceMantissa * borrowBalance) + sumBorrow; // Units --> usd/underlying * underlying --> equates to usd
+            sumBorrow = (oraclePrice * borrowBalance) + sumBorrow; // Units --> usd/underlying * underlying --> equates to usd
             console.log("sumBorrow: %s", sumBorrow);
         }
 

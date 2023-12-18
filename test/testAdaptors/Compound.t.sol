@@ -9,6 +9,7 @@ import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.
 import "test/resources/MainnetStarter.t.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { CompoundV2DebtAdaptor } from "src/modules/adaptors/Compound/CompoundV2DebtAdaptor.sol";
+import { Math } from "src/utils/Math.sol";
 
 /**
  * TODO - troubleshoot decimals and health factor calcs via console logs
@@ -393,6 +394,27 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         // TODO check that user withdraws work when no debt-position is open
         // TODO check that strategist function to enterMarket reverts if you're already in the market
         // TODO check that you can exit the market, then enter again
+
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // TODO - MOVE BELOW BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
+        // check that we aren't in market
+        bool inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, false, "Should not be 'IN' the market yet");
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+        inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, true, "Should be 'IN' the market yet");
     }
 
     function testTotalAssets(uint256 assets) external {
@@ -458,16 +480,13 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         // TODO test that it reverts if trying to call exitMarket w/ too much borrow position out that one cannot pull the collateral.
     }
 
-    function testHF(uint256 assets) external {
+    // TODO - supply collateral in one asset, and then borrow another. So for these tests, supply DAI, borrow USDC.
+    function testHF() external {
         uint256 initialAssets = cellar.totalAssets();
-        assets = bound(assets, 0.1e18, 1_000_000e18);
+        // assets = bound(assets, 0.1e18, 1_000_000e18);
+        uint256 assets = 100e18;
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
-
-        // TODO - MOVE BELOW BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
-        // check that we aren't in market
-        bool inCTokenMarket = _checkInMarket(cDAI);
-        assertEq(inCTokenMarket, false, "Should not be 'IN' the market yet");
 
         // enter market
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -477,10 +496,6 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-        inCTokenMarket = _checkInMarket(cDAI);
-        assertEq(inCTokenMarket, true, "Should be 'IN' the market yet");
-
-        // TODO - MOVE ABOVE BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
 
         // now we're in the market, so start borrowing.
         uint256 borrow1 = assets / 2;
@@ -489,6 +504,64 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
+
+        // TODO - EIN THIS IS WHERE YOU LEFT OFF, CURRENTLY IT IS HAVING UNDERFLOW/OVERFLOW ERRORS IN THE HEALTHFACTOR LOGIC HELPER CONTRACT
+
+        // TODO check decimals to refine the HF calculations
+        // check consoles, ultimately we just want to see HF is calculated properly, actually just console log inside of the CompoundV2HelperLogic.sol file. see what comes up.
+
+        // TODO test borrowing more when it would lower HF
+        // TODO test redeeming when it would lower HF
+        // TODO increase the collateral position so the HF is higher and then perform the borrow
+        // TODO decrease the borrow and then do the redeem successfully
+    }
+
+    // TODO - supply collateral in one asset, and then borrow another. So for these tests, supply USDC, borrow DAI. DOING THIS INSTEAD OF HF TEST ABOVE BECAUSE SHOULD BE BORROWING A DIFFERENT ASSET BUT CELLAR ERRORS OUT WHEN TRYING TO ADD IN CUSDC
+    function testHF2() external {
+        uint256 initialAssets = cellar.totalAssets();
+        // assets = bound(assets, 0.1e18, 1_000_000e18);
+        uint256 assets = 100e6;
+        deal(address(USDC), address(cellar), assets); // deal USDC to cellar
+        uint256 usdcBalance1 = USDC.balanceOf(address(cellar));
+
+        // mint cUSDC / lend USDC via strategist call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToLendOnComnpoundV2(cUSDC, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 cUSDCBalance1 = cUSDC.balanceOf(address(cellar));
+        uint256 daiBalance1 = DAI.balanceOf(address(cellar));
+
+        // enter market
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cUSDC);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // now we're in the market, so start borrowing from a different market, cDAI
+        uint256 borrow1 = (assets / 2).changeDecimals(6, 18); // should be 50e18 DAI --> do we need to put in the proper decimals?
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cDAI, borrow1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 cUSDCBalance2 = cUSDC.balanceOf(address(cellar));
+        uint256 usdcBalance2 = USDC.balanceOf(address(cellar));
+        uint256 daiBalance2 = DAI.balanceOf(address(cellar));
+
+        assertGt(daiBalance2, daiBalance1, "Cellar should have borrowed some DAI.");
+        assertApproxEqRel(borrow1, daiBalance2, 10, "Cellar should have gotten the correct amount of borrowed DAI");
+
+        console.log("cUSDCBalance1: %s, usdcBalance1: %s, daiBalance1: %s", cUSDCBalance1, usdcBalance1, daiBalance1);
+        console.log("cUSDCBalance2: %s, usdcBalance2: %s, daiBalance2: %s", cUSDCBalance2, usdcBalance2, daiBalance2);
+
+        revert();
 
         // TODO - EIN THIS IS WHERE YOU LEFT OFF, CURRENTLY IT IS HAVING UNDERFLOW/OVERFLOW ERRORS IN THE HEALTHFACTOR LOGIC HELPER CONTRACT
 

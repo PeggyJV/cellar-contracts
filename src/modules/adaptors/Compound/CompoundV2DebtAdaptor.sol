@@ -153,7 +153,7 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
     /**
      * @notice Allows strategists to borrow assets from CompoundV2 markets.
      * @param market the CompoundV2 market to borrow from underlying assets from
-     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on this CompoundV2 market.
+     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on this CompoundV2 market. This is in the decimals of the underlying asset being borrowed.
      */
     function borrowFromCompoundV2(CErc20 market, uint256 amountToBorrow) public {
         _validateMarketInput(address(market));
