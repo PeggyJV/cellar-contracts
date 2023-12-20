@@ -3,13 +3,21 @@ pragma solidity 0.8.21;
 
 import { PriceRouter, Registry, ERC20, IChainlinkAggregator } from "src/modules/price-router/PriceRouter.sol";
 
+/**
+ * @title SequencerPriceRouter
+ * @notice Adds sequencer uptime feed safety checks to all PriceRouter pricing calls.
+ * @author crispymangoes
+ */
 contract SequencerPriceRouter is PriceRouter {
-    IChainlinkAggregator internal immutable sequencerUptimeFeed;
-
-    uint256 internal immutable gracePeriod;
+    //============================== ERRORS ===============================
 
     error SequencerPriceRouter__SequencerDown();
     error SequencerPriceRouter__GracePeriodNotOver();
+
+    //============================== IMMUTABLES ===============================
+
+    IChainlinkAggregator internal immutable sequencerUptimeFeed;
+    uint256 internal immutable gracePeriod;
 
     constructor(
         address _sequencerUptimeFeed,
@@ -21,6 +29,8 @@ contract SequencerPriceRouter is PriceRouter {
         sequencerUptimeFeed = IChainlinkAggregator(_sequencerUptimeFeed);
         gracePeriod = _gracePeriod;
     }
+
+    //============================== Sequencer Uptime Logic ===============================
 
     /**
      * @notice Layer 2 chains that use sequencers, can have the sequencer go down. If this happens we do not want
@@ -35,12 +45,14 @@ contract SequencerPriceRouter is PriceRouter {
 
         ) = sequencerUptimeFeed.latestRoundData();
 
+        // This check should make TXs from L1 to L2 revert if someone tried interacting with the cellar while the sequencer is down.
         // Answer == 0: Sequencer is up
         // Answer == 1: Sequencer is down
         if (answer == 1) {
             revert SequencerPriceRouter__SequencerDown();
         }
 
+        // TODO better understand why this adds a grace period, and why we use startedAt instead of updatedAt.
         // Make sure the grace period has passed after the
         // sequencer is back up.
         uint256 timeSinceUp = block.timestamp - startedAt;
