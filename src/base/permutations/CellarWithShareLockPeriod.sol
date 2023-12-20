@@ -133,11 +133,12 @@ contract CellarWithShareLockPeriod is Cellar {
 
     /**
      * @notice called at the end of deposit.
+     * @param position the position to deposit to.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(uint256 assets, uint256 shares, address receiver) internal override {
+    function afterDeposit(uint32 position, uint256 assets, uint256 shares, address receiver) internal override {
         userShareLockStartTime[receiver] = block.timestamp;
-        super.afterDeposit(assets, shares, receiver);
+        super.afterDeposit(position, assets, shares, receiver);
     }
 
     /**

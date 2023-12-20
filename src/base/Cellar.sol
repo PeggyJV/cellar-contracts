@@ -729,6 +729,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     error Cellar__IlliquidWithdraw(address illiquidPosition);
 
+    // TODO maybe should include the depositAsset in these values? Just in case in the future we need to use it.
     /**
      * @notice called at the beginning of deposit.
      */
@@ -739,10 +740,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     /**
      * @notice called at the end of deposit.
+     * @param position the position to deposit to.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(uint256 assets, uint256, address) internal virtual {
-        _depositTo(holdingPosition, assets);
+    function afterDeposit(uint32 position, uint256 assets, uint256, address) internal virtual {
+        _depositTo(position, assets);
     }
 
     /**
@@ -755,17 +757,24 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Called when users enter the cellar via deposit or mint.
      */
-    function _enter(uint256 assets, uint256 shares, address receiver) internal {
+    function _enter(
+        ERC20 depositAsset,
+        uint32 position,
+        uint256 assets,
+        uint256 shares,
+        address receiver
+    ) internal virtual {
+        // TODO it is moderately weird that this function thinks assets is in terms of the accounting asset, but it in an advanced cellar that is not true.
         beforeDeposit(assets, shares, receiver);
 
         // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
+        depositAsset.safeTransferFrom(msg.sender, address(this), assets);
 
         _mint(receiver, shares);
 
         emit Deposit(msg.sender, receiver, assets, shares);
 
-        afterDeposit(assets, shares, receiver);
+        afterDeposit(position, assets, shares, receiver);
     }
 
     /**
@@ -774,7 +783,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
      */
-    function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual override nonReentrant returns (uint256 shares) {
         // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
         (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
@@ -783,7 +792,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
-        _enter(assets, shares, receiver);
+        _enter(asset, holdingPosition, assets, shares, receiver);
     }
 
     /**
@@ -800,7 +809,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
-        _enter(assets, shares, receiver);
+        _enter(asset, holdingPosition, assets, shares, receiver);
     }
 
     /**

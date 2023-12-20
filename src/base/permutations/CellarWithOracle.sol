@@ -47,7 +47,7 @@ contract CellarWithOracle is Cellar {
     /**
      * @notice The decimals the Cellar is expecting the oracle to have.
      */
-    uint8 public constant ORACLE_DECIMALS = 18;
+    uint8 internal constant ORACLE_DECIMALS = 18;
 
     /**
      * @notice Some failure occurred while trying to setup/use the oracle.
