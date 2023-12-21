@@ -58,53 +58,50 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
     UniswapV3PositionTracker public tracker;
     BalancerPoolAdaptor public balancerPoolAdaptor;
 
-    CellarWithOracleWithBalancerFlashLoans public ghoCellar;
-    CellarWithOracleWithBalancerFlashLoans public swethCellar;
+    CellarWithOracleWithBalancerFlashLoans public okxCellar;
 
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
     // Positions.
-    uint32 usdcPositionId = 3;
-    uint32 usdtPositionId = 5;
-    uint32 ghoPositionId = 6;
-    uint32 GHO_USDC_PositionId = 1_000_002;
-    uint32 GHO_USDT_PositionId = 1_000_003;
+    uint32 stethPositionId = 10;
 
     function run() external {
-        address uniswapAdaptor = deployer.getAddress("Uniswap V3 Adaptor V1.4");
-
         vm.startBroadcast();
 
         // Create Cellars and Share Price Oracles.
-        ghoCellar = _createCellar("Turbo GHO", "TurboGHO", USDC, usdcPositionId, abi.encode(0), 1e6, 0.8e18);
+        okxCellar = _createCellar(
+            "Turbo stETH (stETH Deposit)",
+            "TurboSTETH2",
+            STETH,
+            stethPositionId,
+            abi.encode(0),
+            0.001e18,
+            0.85e18
+        );
 
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0050e4;
         uint64 gracePeriod = 1 days / 6;
         uint16 observationsToUse = 4;
-        address automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
+        address automationAdmin = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
         uint216 startingAnswer = 1e18;
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 10e4;
         _createSharePriceOracle(
-            "Turbo GHO Share Price Oracle V0.1",
-            address(ghoCellar),
+            "TurboSTETH2 Share Price Oracle V0.0",
+            address(okxCellar),
             heartbeat,
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
+            automationAdmin,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
         );
 
-        ghoCellar.addAdaptorToCatalogue(uniswapAdaptor);
-        ghoCellar.addPositionToCatalogue(ghoPositionId);
-        ghoCellar.addPositionToCatalogue(usdtPositionId);
-        ghoCellar.addPositionToCatalogue(GHO_USDC_PositionId);
-        ghoCellar.addPositionToCatalogue(GHO_USDT_PositionId);
+        okxCellar.transferOwnership(automationAdmin);
 
         vm.stopBroadcast();
     }
@@ -119,9 +116,10 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         uint64 platformCut
     ) internal returns (CellarWithOracleWithBalancerFlashLoans) {
         // Approve new cellar to spend assets.
-        string memory nameToUse = string.concat(cellarName, " V0.1");
+        string memory nameToUse = string.concat(cellarName, " V0.0");
         address cellarAddress = deployer.getAddress(nameToUse);
-        holdingAsset.approve(cellarAddress, initialDeposit);
+        require(false, "is this needed anymore");
+        // holdingAsset.approve(cellarAddress, initialDeposit);
 
         bytes memory creationCode;
         bytes memory constructorArgs;
@@ -153,7 +151,7 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry,
+        address _automationAdmin,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -167,7 +165,10 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry,
+            automationRegistryV2,
+            automationRegistrarV2,
+            _automationAdmin,
+            LINK,
             _startingAnswer,
             _allowedAnswerChangeLower,
             _allowedAnswerChangeUpper
