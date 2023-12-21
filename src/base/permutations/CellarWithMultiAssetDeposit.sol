@@ -93,19 +93,19 @@ contract CellarWithMultiAssetDeposit is Cellar {
 
         (
             ERC20 depositAsset,
-            uint256 unadjustedAssets,
-            uint256 adjustedAssets,
+            uint256 assetsConvertedToAsset,
+            uint256 assetsConvertedToAssetWithFeeRemoved,
             uint32 position
         ) = _getDepositAssetAndAdjustedAssetsAndPosition(assets);
 
-        // Perform share calculation using adjustedAssets.
+        // Perform share calculation using assetsConvertedToAssetWithFeeRemoved.
         // Check for rounding error since we round down in previewDeposit.
-        // NOTE for totalAssets, we add the delta between unadjustedAssets, and adjustedAssets, so that the fee the caller pays
+        // NOTE for totalAssets, we add the delta between assetsConvertedToAsset, and assetsConvertedToAssetWithFeeRemoved, so that the fee the caller pays
         // to join with the alternative asset is factored into share price calcualtion.
         if (
             (shares = _convertToShares(
-                adjustedAssets,
-                _totalAssets + (unadjustedAssets - adjustedAssets),
+                assetsConvertedToAssetWithFeeRemoved,
+                _totalAssets + (assetsConvertedToAsset - assetsConvertedToAssetWithFeeRemoved),
                 _totalSupply
             )) == 0
         ) revert Cellar__ZeroShares();
@@ -118,13 +118,22 @@ contract CellarWithMultiAssetDeposit is Cellar {
 
     function _getDepositAssetAndAdjustedAssetsAndPosition(
         uint256 assets
-    ) internal view returns (ERC20 depositAsset, uint256 unadjustedAssets, uint256 adjustedAssets, uint32 position) {
+    )
+        internal
+        view
+        returns (
+            ERC20 depositAsset,
+            uint256 assetsConvertedToAsset,
+            uint256 assetsConvertedToAssetWithFeeRemoved,
+            uint32 position
+        )
+    {
         uint256 msgDataLength = msg.data.length;
         if (msgDataLength == 68) {
             // Caller has not encoded an alternative asset, so return address(0).
             depositAsset = asset;
-            adjustedAssets = assets;
-            unadjustedAssets = assets;
+            assetsConvertedToAssetWithFeeRemoved = assets;
+            assetsConvertedToAsset = assets;
             position = holdingPosition;
         } else if (msgDataLength == 100) {
             // Caller has encoded an extra arguments, try to decode it as an address.
@@ -134,10 +143,10 @@ contract CellarWithMultiAssetDeposit is Cellar {
             if (!assetData.isSupported) revert AdvancedCellar__AlternativeAssetNotSupported();
 
             // Convert assets from depositAsset to asset.
-            unadjustedAssets = priceRouter.getValue(depositAsset, assets, asset);
+            assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
 
             // Collect alternative asset fee.
-            adjustedAssets = unadjustedAssets.mulDivDown(1e8 - assetData.depositFee, 1e8);
+            assetsConvertedToAssetWithFeeRemoved = assetsConvertedToAsset.mulDivDown(1e8 - assetData.depositFee, 1e8);
 
             position = assetData.holdingPosition;
         } else {
