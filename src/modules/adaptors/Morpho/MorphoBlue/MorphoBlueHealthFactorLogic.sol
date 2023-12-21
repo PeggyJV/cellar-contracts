@@ -38,12 +38,7 @@ contract MorphoBlueHealthFactorLogic {
      * @return currentHF The health factor of the position atm
      */
     function _getHealthFactor(Id _id, MarketParams _market) internal view virtual returns (uint256) {
-        uint256 borrowAmount = uint256(
-            (morphoBlue.position(id, address(this)).borrowerShares).toAssetsUp(
-                _market.totalBorrowAssets,
-                _market.totalBorrowShares
-            ) // TODO - can probably reformat with param _market in full
-        ); // in delegateCall context - TODO -  make sure we get the tuple properly.
+        uint256 borrowAmount = _userBorrowBalance(_id, _market);
         if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
 
         uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
@@ -69,5 +64,23 @@ contract MorphoBlueHealthFactorLogic {
 
     function _userCollateralBalance(Id _id, MarketParams _market) internal view virtual returns (uint256) {
         return uint256((morphoBlue.position(_id)(msg.sender)).collateral);
+    }
+
+    function _userBorrowBalance(Id _id, MarketParams _market) internal view returns (uint256) {
+        return
+            uint256(
+                (morphoBlue.position(id, address(this)).borrowerShares).toAssetsUp(
+                    _market.totalBorrowAssets,
+                    _market.totalBorrowShares
+                )
+            );
+    }
+
+    /**
+     * @notice Caller calls `accrueInterest` on specified MB market
+     * @param _market The specified MB market
+     */
+    function _accrueInterest(MarketParams _market) internal virtual {
+        morphoBlue.accrueInterest(_market);
     }
 }

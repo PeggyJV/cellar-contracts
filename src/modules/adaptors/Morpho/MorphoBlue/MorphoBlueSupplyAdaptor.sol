@@ -237,11 +237,5 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
         return morphoBlue.expectedSupplyAssets(morpho, marketParams, msg.sender); // alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
 
-    /**
-     * @notice Caller calls `accrueInterest` on specified MB market
-     * @param _market The specified MB market
-     */
-    function _accrueInterest(MarketParams _market) internal virtual {
-        morphoBlue.accrueInterest(_market);
-    }
+    
 }
