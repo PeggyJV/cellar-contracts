@@ -38,7 +38,7 @@ contract SequencerPriceRouterTest is Test {
     }
 
     function testSequencerUptimeFeedLogic() external {
-        // Sequencer is currently up so precising succeeds.
+        // Sequencer is currently up so pricing succeeds.
         sequencerPriceRouter.getPriceInUSD(USDC);
 
         // But if sequencer goes down.
