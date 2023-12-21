@@ -19,6 +19,10 @@ contract SequencerPriceRouterTest is Test {
     address public USDC_USD_FEED = 0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3;
     Registry public registry;
 
+    // Variables so this contract can act as a mock sequencer uptime fee.
+    int256 mockAnswer = type(int256).max;
+    uint256 mockStartedAt = 0;
+
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "ARBITRUM_RPC_URL";
@@ -85,9 +89,6 @@ contract SequencerPriceRouterTest is Test {
         // settings = PriceRouter.AssetSettings(1, USDC_USD_FEED);
         // sequencerPriceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
     }
-
-    int256 mockAnswer = type(int256).max;
-    uint256 mockStartedAt = 0;
 
     function latestRoundData()
         public
