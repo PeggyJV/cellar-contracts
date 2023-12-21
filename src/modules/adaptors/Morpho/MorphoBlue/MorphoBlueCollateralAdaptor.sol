@@ -51,7 +51,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(address _morphoBlue, uint256 _healthFactor) {
+    constructor(address _morphoBlue, uint256 _healthFactor) MorphoBlueHealthFactorLogic(_morphoBlue) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         morphoBlue = IMorpho(_morphoBlue);
         minimumHealthFactor = _healthFactor;
@@ -110,11 +110,12 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     /**
      * @notice Returns the cellar's balance of the collateralAsset position.
      * @param adaptorData the collateral asset deposited into Morpho Blue
-     * TODO:
+     * TODO - could use the periphery library `MorphoBalancesLib` to get the expected balance (w/ simulated interest) but for now we just query the getter. We may switch to using the periphery library.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        // return _userCollateralBalance(fraxlendPair, msg.sender);
+        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = morphoBlue.idToMarketParams(id); // could have this as a passed in param
+        return _userCollateralBalance(id, market);
     }
 
     /**
@@ -164,25 +165,19 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         MarketParams memory market = morphoBlue.idToMarketParams(id);
         address morphoBlueAddress = address(morphoBlue);
 
-        // if (_collateralAmount == type(uint256).max) {
-        //     _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
-        // } // TODO: EIN
+        if (_collateralAmount == type(uint256).max) {
+            _collateralAmount = _userCollateralBalance(id, market);
+        } // TODO: EIN - does it revert if the collateral would make the position not healthy?
 
         // remove collateral
         _removeCollateral(market, _collateralAmount);
 
-        // TODO: EIN - math for LTV calculation within the tx to ensure that tx doesn't endanger cellar borrow position, if any.
+        // TODO - might want to check the market to see if it even has a LLTV. If it doesn't, I guess no liquidations can occur?
 
-        // HF can be calcualted by
-        // mutative call kicks contract to accrue interest
-        // we call balances of the cellar
-        // we just calcualte the HF
-
-        // uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV
-        // // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
-        // if (minimumHealthFactor > (_getHealthFactor(_fraxlendPair, _exchangeRate))) {
-        //     revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
-        // }
+        // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
+        if (minimumHealthFactor > (_getHealthFactor(id, market))) {
+            revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(id);
+        }
     }
 
     //============================================ Helper Functions ===========================================
@@ -222,13 +217,4 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     function _removeCollateral(MarketParams _marketParams, uint256 _assets) internal virtual {
         morphoBlue.withdrawCollateral(_marketParams, _assets, address(this), address(this));
     }
-
-    // /**
-    //  * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
-    //  * @param _fraxlendPair The specified FraxLendPair
-    //  * @return exchangeRate needed to calculate the current health factor
-    //  */
-    // function _getExchangeRateInfo(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-    //     exchangeRate = _fraxlendPair.exchangeRateInfo().highExchangeRate;
-    // }
 }

@@ -5,6 +5,7 @@ pragma solidity 0.8.21;
 import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
 import { MathLib, WAD } from "src/interfaces/external/Morpho/Morpho Blue/libraries/MathLib.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/Morpho Blue/libraries/SharesMathLib.sol";
+import { IOracle } from "src/interfaces/external/Morpho/Morpho Blue/libraries/IOracle.sol";
 
 /**
  * @title Morpho Blue Health Factor Logic contract.
@@ -36,26 +37,37 @@ contract MorphoBlueHealthFactorLogic {
      * @param _id The specified Morpho Blue market Id
      * @return currentHF The health factor of the position atm
      */
-    function _getHealthFactor(Id _id) internal view virtual returns (uint256) {
+    function _getHealthFactor(Id _id, MarketParams _market) internal view virtual returns (uint256) {
         uint256 borrowAmount = uint256(
             (morphoBlue.position(id, address(this)).borrowerShares).toAssetsUp(
-                market(_id).totalBorrowAssets,
-                market(_id).totalBorrowShares
-            )
+                _market.totalBorrowAssets,
+                _market.totalBorrowShares
+            ) // TODO - can probably reformat with param _market in full
         ); // in delegateCall context - TODO -  make sure we get the tuple properly.
         if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
 
+        uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
+
         uint256 collateralAmount = uint256(
-            (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
-        ); // TODO -  make sure we get the tuple properly.
+            _userCollateralBalance(_id, _market).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
+        ); // typecasting uint256 not sure if needed.
+
+        // uint256 collateralAmount = uint256(
+        //     (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
+        // ); // TODO -  remove if going with "reformatted" versions w/ _userCollateralBalance
+
         if (collateralAmount == 0) return 0;
 
         // calculate the currentPositionLTV then compare it against the max lltv for this position
         // TODO check precision for all below.
         uint256 currentPositionLTV = borrowAmount.mulDivDown(1e18, _collateralAmount);
-        uint256 positionMaxLTV = (marketParams.lltv) * collateralAmount;
+        uint256 positionMaxLTV = (_market.lltv) * collateralAmount;
 
         // convert LTVs to HF
         uint256 currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
+    }
+
+    function _userCollateralBalance(Id _id, MarketParams _market) internal view virtual returns (uint256) {
+        return uint256((morphoBlue.position(_id)(msg.sender)).collateral);
     }
 }
