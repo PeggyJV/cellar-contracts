@@ -66,13 +66,31 @@ contract SequencerPriceRouterTest is Test {
         sequencerPriceRouter.getPriceInUSD(USDC);
     }
 
-    // TODO can I write tests that use a different forked state of when the sequencer was down?
+    function testSequencerFeed() external {
+        // Setup forked environment.
+        string memory rpcKey = "ARBITRUM_RPC_URL";
+        uint256 blockNumber = 160355845;
+
+        uint256 forkId = vm.createFork(vm.envString(rpcKey), blockNumber);
+        vm.selectFork(forkId);
+
+        (, int256 answer, , , ) = latestRoundData();
+        console.log("Answer", uint256(answer));
+        // sequencerPriceRouter = new SequencerPriceRouter(address(this), 3_600, address(this), registry, WETH);
+
+        // PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        // PriceRouter.AssetSettings memory settings;
+
+        // settings = PriceRouter.AssetSettings(1, USDC_USD_FEED);
+        // sequencerPriceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+    }
 
     int256 mockAnswer = type(int256).max;
     uint256 mockStartedAt = 0;
 
     function latestRoundData()
-        external
+        public
         view
         returns (uint80 roundID, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {

@@ -16,7 +16,15 @@ contract SequencerPriceRouter is PriceRouter {
 
     //============================== IMMUTABLES ===============================
 
+    /**
+     * @notice Address for the networks sequencer uptime feed.
+     */
     IChainlinkAggregator internal immutable sequencerUptimeFeed;
+
+    /**
+     * @notice The amount of time that must pass from when the sequencer comes back online
+     *         to when we can continue pricing again.
+     */
     uint256 internal immutable gracePeriod;
 
     constructor(
