@@ -8,8 +8,14 @@ import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol"
 /**
  * @title Morpho Blue Collateral Adaptor
  * @notice Allows addition and removal of collateralAssets to Morpho Blue pairs for a Cellar.
+ * @dev This adaptor is specifically for Morpho Blue Primitive contracts.
+ *      To interact with a different version or custom market, a new
+ *      adaptor will inherit from this adaptor
+ *      and override the interface helper functions. MB refers to Morpho
+ *      Blue
  * @author crispymangoes, 0xEinCodes
  * TODO: THIS IS A WIP AND HAS LOTS OF TODOS AND REFERENCE TO FRAXLEND. THE STRATEGIST FUNCTIONS (NOT COMMENTED OUT) HAVE BASIC DIRECTION FOR MORPHO BLUE LENDING MARKETS
+ * TODO - The periphery libraries from MB may be used depending on how much gas they use. For now we will not use them but we will test to see which is more gas efficient.
  */
 contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
@@ -19,7 +25,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     // adaptorData = abi.encode(MarketParams marketParams)
     // Where:
     // `marketParams` is the  struct this adaptor is working with.
-    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData?
+    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData? See detailed thoughts in MorphoBlueSupplyAdaptor.sol
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -64,7 +70,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice User deposits collateralToken to Morpho Blue pair
+     * @notice User deposits collateralToken to Morpho Blue market
      * @param assets the amount of assets to provide as collateral on Morpho Blue
      * @param adaptorData adaptor data containing the abi encoded Id for specific Morpho Blue Lending Market
      * @dev configurationData is NOT used
@@ -75,7 +81,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         _validateMBMarket(id);
 
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        // (address _loanToken, , , ) = morphoBlue.idToMarketParams(id); // See IMorpho for `idToMarketParams` and uncomment this if we go with the conventional IMorphoBlue interface function
         ERC20 collateralToken = ERC20(market.collateralToken);
         collateralToken.safeApprove(address(morphoBlue), assets);
 
@@ -168,6 +173,11 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
         // TODO: EIN - math for LTV calculation within the tx to ensure that tx doesn't endanger cellar borrow position, if any.
 
+        // HF can be calcualted by
+        // mutative call kicks contract to accrue interest
+        // we call balances of the cellar
+        // we just calcualte the HF
+
         // uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV
         // // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         // if (minimumHealthFactor > (_getHealthFactor(_fraxlendPair, _exchangeRate))) {
@@ -189,32 +199,19 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     }
 
     //============================== Interface Details ==============================
-    // The Frax Pair interface can slightly change between versions.
-    // To account for this, FTokenAdaptors (including debt and collateral adaptors) will use the below internal functions when
-    // interacting with Frax Pairs, this way new pairs can be added by creating a
-    // new contract that inherits from this one, and overrides any function it needs
-    // so it conforms with the new Frax Pair interface.
+    // General message on interface and virtual functions below: The Morpho Blue protocol is meant to be a primitive layer to DeFi, and so other projects may build atop of MB. These possible future projects may implement the same interface to simply interact with MB, and thus this adaptor is implementing a design that allows for future adaptors to simply inherit this "Base Morpho Adaptor" and override what they need appropriately to work with whatever project. Aspects that may be adjusted include using the flexible `bytes` param within `morphoBlue.supplyCollateral()` for example.
 
-    // Current versions in use for `FraxLendPair` include v1 and v2.
-
-    // IMPORTANT: This `CollateralFTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
-    // whereas CollateralFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
-    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptor for the
-    // most current version, v2. This is in anticipation that more FraxLendPairs will
-    // be deployed following v2 in the near future. When later versions are deployed,
-    // then the described inheritance pattern above will be used.
-
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
-    // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
-    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
+    // Current versions in use are just for the primitive Morpho Blue deployments.
+    // IMPORTANT: Going forward, other versions will be renamed w/ descriptive titles for new projects extending off of these primitive contracts.
     //===============================================================================
 
     /**
      * @notice Increment collateral amount in cellar account within fraxlend pair
      * @param _fraxlendPair The specified Fraxlend Pair
      * @param amountToDeposit The amount of collateral to add to Fraxlend Pair position
+     * @dev This function has been made virtual in case there are markets that a Cellar wants to work with that use bytes or other custom aspects. Of course more testing would be needed for those bespoke markets.
      */
-    function _addCollateral(MarketParams _marketParams, uint256 _assets) internal {
+    function _addCollateral(MarketParams _marketParams, uint256 _assets) internal virtual {
         morphoBlue.supplyCollateral(_marketParams, _assets, address(this), bytes);
     }
 

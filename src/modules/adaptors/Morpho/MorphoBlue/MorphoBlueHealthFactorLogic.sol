@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Math } from "src/utils/Math.sol";
-import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
+// import { Math } from "src/utils/Math.sol";
+import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
+import { MathLib, WAD } from "src/interfaces/external/Morpho/Morpho Blue/libraries/MathLib.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/Morpho Blue/libraries/SharesMathLib.sol";
 
 /**
  * @title Morpho Blue Health Factor Logic contract.
@@ -10,88 +12,50 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  *         the MorphoBlueCollateralAdaptor && MorphoBlueDebtAdaptor.
  * @author crispymangoes, 0xEinCodes
  * NOTE: helper functions made virtual in case future Morpho Blue Pair versions require different implementation logic.
+ * NOTE: The library from Morpho provides exposed getters give cellar totalSupply and totalBorrow with interest accrued, although they are simulated values they have been tested compared to their actual Morpho Blue prod contract (within their test suite). This helper contract DOES NOT USE THE LIBRARIES FOR NOW and will try them during the testing phase of development. We will see if the libraries are more gas-efficient vs using getters. QUESTION FOR MORPHO TEAM - library for balances is usable and accurate to depend on. Do we want any failsafes just in case?
  */
 contract MorphoBlueHealthFactorLogic {
-    using Math for uint256;
+    // using Math for uint256;
+    type Id is bytes32; // NOTE not sure I need this
+
+    // libraries from Morpho Blue codebase to ensure same mathematic methods for HF calcs
+    using MathLib for uint128;
+    using MathLib for uint256;
+    using UtilsLib for uint256;
+    using SharesMathLib for uint256;
+
+    // Constant from MorphoBlue
+    uint256 constant ORACLE_PRICE_SCALE = 1e36;
+
+    constructor(addres _morphoBlue) {
+        morphoBlue = IMorpho(_morphoBlue);
+    }
 
     /**
      * @notice The ```_getHealthFactor``` function returns the current health factor of a respective position given an exchange rate
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
+     * @param _id The specified Morpho Blue market Id
      * @return currentHF The health factor of the position atm
      */
-    function _getHealthFactor(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
-        // // calculate the borrowShares
-        // uint256 borrowerShares = _userBorrowShares(_fraxlendPair, address(this));
-        // uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `isSolvent()` function in actual Fraxlend contracts.
-        // if (_borrowerAmount == 0) return 1.05e18;
-        // uint256 _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
-        // if (_collateralAmount == 0) return 0;
+    function _getHealthFactor(Id _id) internal view virtual returns (uint256) {
+        uint256 borrowAmount = uint256(
+            (morphoBlue.position(id, address(this)).borrowerShares).toAssetsUp(
+                market(_id).totalBorrowAssets,
+                market(_id).totalBorrowShares
+            )
+        ); // in delegateCall context - TODO -  make sure we get the tuple properly.
+        if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
 
-        // (uint256 LTV_PRECISION, uint256 EXCHANGE_PRECISION) = _getConstants(_fraxlendPair);
-        // uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
-        //     _collateralAmount;
+        uint256 collateralAmount = uint256(
+            (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
+        ); // TODO -  make sure we get the tuple properly.
+        if (collateralAmount == 0) return 0;
 
-        // // get maxLTV from fraxlendPair
-        // uint256 fraxlendPairMaxLTV = _maxLTV(_fraxlendPair);
+        // calculate the currentPositionLTV then compare it against the max lltv for this position
+        // TODO check precision for all below.
+        uint256 currentPositionLTV = borrowAmount.mulDivDown(1e18, _collateralAmount);
+        uint256 positionMaxLTV = (marketParams.lltv) * collateralAmount;
 
-        // // convert LTVs to HF
-        // uint256 currentHF = fraxlendPairMaxLTV.mulDivDown(1e18, currentPositionLTV);
-
-        // // compare HF to current HF.
-        // return currentHF;
+        // convert LTVs to HF
+        uint256 currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
     }
-
-    // /**
-    //  * @notice Converts a given number of borrow shares to debtToken amount from specified 'v2' FraxLendPair
-    //  * @dev This is one of the adjusted functions from v1 to v2. fraxlendPair.toBorrowAmount() calls into the respective version (v2 by default) of FraxLendPair.
-    //  * @param _fraxlendPair The specified FraxLendPair
-    //  * @param _shares Shares of debtToken
-    //  * @param _roundUp Whether to round up after division
-    //  * @param _previewInterest Whether to preview interest accrual before calculation
-    //  * @return amount of debtToken
-    //  */
-    // function _toBorrowAmount(
-    //     IFToken _fraxlendPair,
-    //     uint256 _shares,
-    //     bool _roundUp,
-    //     bool _previewInterest
-    // ) internal view virtual returns (uint256) {
-    //     return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
-    // }
-
-    // /**
-    //  * @notice Get current collateral balance for caller in fraxlend pair
-    //  * @param _fraxlendPair The specified Fraxlend Pair
-    //  * @return sharesAccToFraxlend of user in fraxlend pair
-    //  */
-    // function _userBorrowShares(
-    //     IFToken _fraxlendPair,
-    //     address _user
-    // ) internal view virtual returns (uint256 sharesAccToFraxlend) {
-    //     return _fraxlendPair.userBorrowShares(_user); // get fraxlendPair's record of borrowShares atm
-    // }
-
-    // /**
-    //  * @notice Get current collateral balance for caller in fraxlend pair
-    //  * @param _fraxlendPair The specified Fraxlend Pair
-    //  * @param _user The specified user
-    //  * @return collateralBalance of user in fraxlend pair
-    //  */
-    // function _userCollateralBalance(
-    //     IFToken _fraxlendPair,
-    //     address _user
-    // ) internal view virtual returns (uint256 collateralBalance) {
-    //     return _fraxlendPair.userCollateralBalance(_user);
-    // }
-
-    // function _getConstants(
-    //     IFToken _fraxlendPair
-    // ) internal view virtual returns (uint256 LTV_PRECISION, uint256 EXCHANGE_PRECISION) {
-    //     (LTV_PRECISION, , , , EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
-    // }
-
-    // function _maxLTV(IFToken _fraxlendPair) internal view virtual returns (uint256 maxLTV) {
-    //     maxLTV = _fraxlendPair.maxLTV();
-    // }
 }

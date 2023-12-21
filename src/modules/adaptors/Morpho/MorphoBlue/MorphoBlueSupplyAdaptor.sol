@@ -19,7 +19,7 @@ import { MorphoLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/
 contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-    // type Id is bytes32; // NOTE not sure I need this
+    type Id is bytes32; // NOTE not sure I need this
     using MorphoLib for IMorpho;
     using MorphoBalancesLib for IMorpho;
 
@@ -58,7 +58,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
      */
     bool public immutable ACCOUNT_FOR_INTEREST;
 
-    constructor(bool _accountForInterest, address _morphoBlue) {
+    constructor(bool _accountForInterest, address _morphoBlue) MorphoBlueHealthFactorLogic(morphoBlue) {
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         morphoBlue = IMorpho(_morphoBlue);
     }
@@ -187,12 +187,10 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     //============================================ Interface Helper Functions ===========================================
 
     //============================== Interface Details ==============================
-    // The Morpho Blue protocol is meant to be a primitive layer to DeFi, and so other projects may build atop of MB. These possible future projects may implement the same interface to simply interact with MB, and thus this adaptor is implementing a design that allows for future adaptors to simply inherit this "Base Morpho Adaptor" and override what they need appropriately to work with whatever project.
+    // General message on interface and virtual functions below: The Morpho Blue protocol is meant to be a primitive layer to DeFi, and so other projects may build atop of MB. These possible future projects may implement the same interface to simply interact with MB, and thus this adaptor is implementing a design that allows for future adaptors to simply inherit this "Base Morpho Adaptor" and override what they need appropriately to work with whatever project. Aspects that may be adjusted include using the flexible `bytes` param within `morphoBlue.supplyCollateral()` for example.
 
     // Current versions in use are just for the primitive Morpho Blue deployments.
-    // Going forwa
     // IMPORTANT: Going forward, other versions will be renamed w/ descriptive titles for new projects extending off of these primitive contracts.
-
     //===============================================================================
 
     /**
