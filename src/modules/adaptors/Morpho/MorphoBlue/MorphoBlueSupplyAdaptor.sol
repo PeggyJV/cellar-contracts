@@ -3,6 +3,8 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
+import { MorphoBalancesLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/MorphoBalancesLib.sol";
+import { MorphoLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
 
 /**
  * @title Morpho Blue Supply Adaptor
@@ -13,18 +15,23 @@ import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol"
  *      Blue
  * @notice Allows Cellars to lend loanToken to respective Morpho Blue Lending Markets.
  * @author crispymangoes, 0xEinCodes
- * THIS IS STILL A ROUGH WIP FULL OF TODO's, but is conceptual at least at a high-level architecture along other Morpho Blue Adaptors.
  */
 contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-    type Id is bytes32;
+    // type Id is bytes32; // NOTE not sure I need this
+    using MorphoLib for IMorpho;
+    using MorphoBalancesLib for IMorpho;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(MarketParams marketParams)
     // Where:
     // `marketParams` is the  struct this adaptor is working with.
-    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData?
+    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData? I think we should. It is used as bytes32 within Morpho, but I think it's just ID. So if we pass in bytes32 Id, decode that, then pass it into the functions we should access what we need from Morpho. Talk to Crispy on it, but could just test/try compiling and see what works.
+    // More design notes: MorphoBalancesLib, MorphoLib, MorphoStorageLib are periphery contrats with getters for integration. There may be useful things from it.
+    // Questions: 1. From `MorphoBalancesLib.sol` it seems that balances can be obtained that have latest accruedInterest applied except for total borrow shares (and it doesn't have interest accrual applied to it anyways). This makes sense bc underlying borrow amounts are increased, and supply assets, not share amounts.
+    // NOTE - if we have a cellar as the fee_recipient for a morpho market, then we cannot use some of the getters within the periphery contracts as outlined in their natspec.
+    // Referencing `MorphoBalancesLibTest.t.sol` from Morpho Blue codebase to use `MorphoBalancesLib.sol` for exposed getters for morpho blue markets (for user and in total)
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -58,7 +65,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     // ============================================ Global Functions ===========================================
     /**
-     * TODO: this is where I left off. EIN - I'd like to set up the basic skeleton for me to pick up again for Morpho Blue.
      * @dev Identifier unique to this adaptor for a shared registry.
      * Normally the identifier would just be the address of this contract, but this
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
@@ -70,7 +76,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Morpho Blue to spend its assets, then call deposit to lend its assets.
+     * @notice Allows user, if Cellar has a MBSupplyAdaptorPosition as its holding position, to deposit into MB markets.
+     * @dev Cellar must approve Morpho Blue to spend its assets, then call deposit to lend its assets.
      * @param assets the amount of assets to lend on Morpho Blue
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market Id
      * @dev configurationData is NOT used
@@ -114,26 +121,25 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
      * @notice Returns the amount of loanToken that can be withdrawn.
      * @dev Compares loanToken supplied to loanToken borrowed to check for liquidity.
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
-     * TODO: this code is from Fraxlend adaptor, but hopefully something similar can work with Morpho Blue
      */
-    // function withdrawableFrom(
-    //     bytes memory adaptorData,
-    //     bytes memory
-    // ) public view override returns (uint256 withdrawableFrax) {
-    //     IFToken fToken = abi.decode(adaptorData, (IFToken));
-    //     (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
-    //     if (totalFraxBorrowed >= totalFraxSupplied) return 0;
-    //     uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
-    //     uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
-    //     withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;
-    // }
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory
+    ) public view override returns (uint256 withdrawableFrax) {
+        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morpho.expectedMarketBalances(morpho, market);
+        if (totalBorrowAssets >= totalSupplyAssets) return 0;
+        uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
+        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(morpho, market, msg.sender);
+        withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
+    }
 
     /**
-     * @notice Returns the cellar's balance of the loanToken position.
+     * @notice Returns the cellar's balance of the supplyToken position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // IFToken fToken = abi.decode(adaptorData, (IFToken));
-        // return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
+        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        return _balanceOf(market, msg.sender); // TODO maybe reduce to just 1 param (lose the `user` param)
     }
 
     /**
@@ -153,18 +159,19 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    // /**
-    //  * @notice Allows a strategist to call `addInterest` on a Frax Pair they are using.
-    //  * @dev A strategist might want to do this if a Frax Lend pair has not been interacted
-    //  *      in a while, and the strategist does not plan on interacting with it during a
-    //  *      rebalance.
-    //  * @dev Calling this can increase the share price during the rebalance,
-    //  *      so a strategist should consider moving some assets into reserves.
-    //  */
-    // function callAddInterest(IFToken fToken) public {
-    //     _validateFToken(fToken);
-    //     _addInterest(fToken);
-    // }
+    /**
+     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
+     * @dev A strategist might want to do this if a MB market has not been interacted with
+     *      in a while, and the strategist does not plan on interacting with it during a
+     *      rebalance.
+     * @dev Calling this can increase the share price during the rebalance,
+     *      so a strategist should consider moving some assets into reserves.
+     */
+    function accrueInterest(Id id) public {
+        _validateMBMarket(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        _accrueInterest(market);
+    }
 
     /**
      * @notice Validates that a given Id is set up as a position in the Cellar.
@@ -180,20 +187,12 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     //============================================ Interface Helper Functions ===========================================
 
     //============================== Interface Details ==============================
-    // The Frax Pair interface can slightly change between versions.
-    // To account for this, FTokenAdaptors will use the below internal functions when
-    // interacting with Frax Pairs, this way new pairs can be added by creating a
-    // new contract that inherits from this one, and overrides any function it needs
-    // so it conforms with the new Frax Pair interface.
+    // The Morpho Blue protocol is meant to be a primitive layer to DeFi, and so other projects may build atop of MB. These possible future projects may implement the same interface to simply interact with MB, and thus this adaptor is implementing a design that allows for future adaptors to simply inherit this "Base Morpho Adaptor" and override what they need appropriately to work with whatever project.
 
-    // Current versions in use for `FraxLendPair` include v1 and v2.
+    // Current versions in use are just for the primitive Morpho Blue deployments.
+    // Going forwa
+    // IMPORTANT: Going forward, other versions will be renamed w/ descriptive titles for new projects extending off of these primitive contracts.
 
-    // IMPORTANT: This `FTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
-    // whereas FTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
-    // The reasoning to name it like this was to set up the base FTokenAdaptor for the
-    // most current version, v2. This is in anticipation that more FraxLendPairs will
-    // be deployed following v2 in the near future. When later versions are deployed,
-    // then the described inheritance pattern above will be used.
     //===============================================================================
 
     /**
@@ -232,69 +231,19 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
         morphoBlue.withdraw(_market, _assets, _shares, _onBehalf, _receiver);
     }
 
-    // /**
-    //  * @notice Converts a given number of shares to $FRAX amount from specified 'v2' FraxLendPair
-    //  * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetAmount() calls into the respective version (v2 by default) of FraxLendPair
-    //  * @param fToken The specified FraxLendPair
-    //  * @param shares Shares of asset (fToken)
-    //  * @param roundUp Whether to round up after division
-    //  * @param previewInterest Whether to preview interest accrual before calculation
-    //  *      * TODO: most likely don't need an internal function like this to work with Morpho Blue. This was from Fraxlend adaptor work. Will explore more when we look to develop this more.
-
-    //  */
-    // function _toAssetAmount(
-    //     IFToken fToken,
-    //     uint256 shares,
-    //     bool roundUp,
-    //     bool previewInterest
-    // ) internal view virtual returns (uint256) {
-    //     return fToken.toAssetAmount(shares, roundUp, previewInterest);
-    // }
-
     /**
      * @dev Returns the amount of tokens owned by `account`.
      * TODO: most likely don't need an internal function like this to work with Morpho Blue. This was from Fraxlend adaptor work. Will explore more when we look to develop this more.
      */
-    function _balanceOf(IFToken fToken, address user) internal view virtual returns (uint256) {
-        // return fToken.balanceOf(user);
+    function _balanceOf(MarketParams marketParams, address user) internal view virtual returns (uint256) {
+        return morphoBlue.expectedSupplyAssets(morpho, marketParams, msg.sender); // alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
 
-    // /**
-    //  * @notice gets all pair level accounting numbers from specified 'v2' FraxLendPair
-    //  * @param fToken The specified FraxLendPair
-    //  * @return totalAssetAmount Total assets deposited and interest accrued, total claims
-    //  * @return totalAssetShares Total fTokens
-    //  * @return totalBorrowAmount Total borrows
-    //  * @return totalBorrowShares Total borrow shares
-    //  * @return totalCollateral Total collateral
-    //  * TODO: most likely don't need an internal function like this to work with Morpho Blue. This was from Fraxlend adaptor work. Will explore more when we look to develop this more.
-    //  */
-    // function _getPairAccounting(
-    //     IFToken fToken
-    // )
-    //     internal
-    //     view
-    //     virtual
-    //     returns (
-    //         uint128 totalAssetAmount,
-    //         uint128 totalAssetShares,
-    //         uint128 totalBorrowAmount,
-    //         uint128 totalBorrowShares,
-    //         uint256 totalCollateral
-    //     )
-    // {
-    //     (totalAssetAmount, totalAssetShares, totalBorrowAmount, totalBorrowShares, totalCollateral) = fToken
-    //         .getPairAccounting();
-    // }
-
-    // /**
-    //  * @notice Caller calls `addInterest` on specified 'v2' FraxLendPair
-    //  * @dev ftoken.addInterest() calls into the respective version (v2 by default) of FraxLendPair
-    //  * @param fToken The specified FraxLendPair
-    //  * TODO: most likely don't need an internal function like this to work with Morpho Blue. This was from Fraxlend adaptor work. Will explore more when we look to develop this more.
-
-    //  */
-    // function _addInterest(IFToken fToken) internal virtual {
-    //     fToken.addInterest(false);
-    // }
+    /**
+     * @notice Caller calls `accrueInterest` on specified MB market
+     * @param _market The specified MB market
+     */
+    function _accrueInterest(MarketParams _market) internal virtual {
+        morphoBlue.accrueInterest(_market);
+    }
 }
