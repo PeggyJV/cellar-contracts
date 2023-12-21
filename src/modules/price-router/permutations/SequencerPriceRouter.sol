@@ -45,13 +45,7 @@ contract SequencerPriceRouter is PriceRouter {
      *         to price assets, as the datafeeds could be stale, and need to be updated.
      */
     function _runPreFlightCheck() internal view override {
-        (
-            ,
-            /*uint80 roundID*/ int256 answer,
-            uint256 startedAt /*uint256 updatedAt*/ /*uint80 answeredInRound*/,
-            ,
-
-        ) = sequencerUptimeFeed.latestRoundData();
+        (, int256 answer, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
 
         // This check should make TXs from L1 to L2 revert if someone tried interacting with the cellar while the sequencer is down.
         // Answer == 0: Sequencer is up
