@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 // import { Math } from "src/utils/Math.sol";
-import { IMorpho, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams, Market, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MathLib, WAD } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MathLib.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
@@ -18,7 +18,6 @@ import { UtilsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/Ut
  */
 contract MorphoBlueHealthFactorLogic {
     // using Math for uint256;
-    type Id is bytes32; // NOTE not sure I need this
 
     // libraries from Morpho Blue codebase to ensure same mathematic methods for HF calcs
     using MathLib for uint128;
@@ -44,15 +43,13 @@ contract MorphoBlueHealthFactorLogic {
      * @param _market The specified Morpho Blue market
      * @return currentHF The health factor of the position atm
      */
-    function _getHealthFactor(Id _id, MarketParams memory _market) internal view virtual returns (uint256) {
+    function _getHealthFactor(Id _id, MarketParams memory _market) internal view virtual returns (uint256 currentHF) {
         uint256 borrowAmount = _userBorrowBalance(_id);
         if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
 
         uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
 
-        uint256 collateralAmount = uint256(
-            _userCollateralBalance(_id, _market).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
-        ); // typecasting uint256 not sure if needed.
+        uint256 collateralAmount = uint256(_userCollateralBalance(_id).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)); // typecasting uint256 not sure if needed.
 
         // uint256 collateralAmount = uint256(
         //     (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
@@ -66,13 +63,13 @@ contract MorphoBlueHealthFactorLogic {
         uint256 positionMaxLTV = (_market.lltv) * collateralAmount;
 
         // convert LTVs to HF
-        uint256 currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
+        currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
     }
 
     /**
      * @dev helper function that returns actual collateral position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      */
-    function _userCollateralBalance(Id _id, MarketParams memory _market) internal view virtual returns (uint256) {
+    function _userCollateralBalance(Id _id) internal view virtual returns (uint256) {
         return uint256(morphoBlue.position(_id, msg.sender).collateral);
     }
 

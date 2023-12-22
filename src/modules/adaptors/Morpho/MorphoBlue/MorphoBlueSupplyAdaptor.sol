@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
@@ -121,13 +121,10 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     ) public view override returns (uint256 withdrawableSupply) {
         Id id = abi.decode(adaptorData, (Id));
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(
-            morphoBlue,
-            market
-        );
+        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
         if (totalBorrowAssets >= totalSupplyAssets) return 0;
         uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
-        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(morphoBlue, market, msg.sender);
+        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
         withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
     }
 
@@ -139,15 +136,16 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        return _balanceOf(market, msg.sender); // TODO maybe reduce to just 1 param (lose the `user` param)
+        return _balanceOf(market); // TODO maybe reduce to just 1 param (lose the `user` param)
     }
 
     /**
      * @notice Returns loanToken.
      * @return ERC20 loanToken.
      */
-    function assetOf(bytes memory _id) public view override returns (ERC20) {
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
         return ERC20(market.loanToken);
     }
 
@@ -202,7 +200,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _onBehalf The address that MB market records as having supplied this amount of `loanToken` as a lender.
      */
     function _deposit(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
-        morphoBlue.supply(_market, _assets, 0, _onBehalf, bytes(0));
+        morphoBlue.supply(_market, _assets, 0, _onBehalf, hex"");
     }
 
     /**
@@ -221,6 +219,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
      */
     function _balanceOf(MarketParams memory _market) internal view virtual returns (uint256) {
-        return morphoBlue.expectedSupplyAssets(morphoBlue, _market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
+        return morphoBlue.expectedSupplyAssets(_market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
 }

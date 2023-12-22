@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
-import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 
 /**
@@ -239,6 +239,6 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _onBehalf The address of the debt-account reduced due to this repayment within MB market.
      */
     function _repayAsset(MarketParams memory _market, uint256 _sharesToRepay, address _onBehalf) internal virtual {
-        morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, bytes(0)); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
+        morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, hex""); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
     }
 }

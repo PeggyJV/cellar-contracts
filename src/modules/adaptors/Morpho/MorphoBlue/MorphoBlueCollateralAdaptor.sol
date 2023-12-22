@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
-import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 
 /**
  * @title Morpho Blue Collateral Adaptor
@@ -109,16 +109,16 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
-        MarketParams memory market = morphoBlue.idToMarketParams(id); // could have this as a passed in param
-        return _userCollateralBalance(id, market);
+        return _userCollateralBalance(id);
     }
 
     /**
      * @notice Returns collateral asset.
      * @return The collateral asset in ERC20 type.
      */
-    function assetOf(bytes memory _id) public view override returns (ERC20) {
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
         return ERC20(market.collateralToken);
     }
 
@@ -160,11 +160,10 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     function removeCollateral(Id _id, uint256 _collateralAmount) public {
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        address morphoBlueAddress = address(morphoBlue);
 
-        _accrueInterest(_id);
+        _accrueInterest(market);
         if (_collateralAmount == type(uint256).max) {
-            _collateralAmount = _userCollateralBalance(_id, market);
+            _collateralAmount = _userCollateralBalance(_id);
         } // TODO - EIN - does it revert if the collateral would make the position not healthy?
 
         // remove collateral
@@ -218,7 +217,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _assets The amount of collateral to add to MB Market position.
      */
     function _addCollateral(MarketParams memory _market, uint256 _assets) internal virtual {
-        morphoBlue.supplyCollateral(_market, _assets, address(this), bytes(0));
+        morphoBlue.supplyCollateral(_market, _assets, address(this), hex"");
     }
 
     /**
