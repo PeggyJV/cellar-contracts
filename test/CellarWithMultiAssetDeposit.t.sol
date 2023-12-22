@@ -6,6 +6,7 @@ import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol"
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { CellarWithMultiAssetDeposit } from "src/base/permutations/CellarWithMultiAssetDeposit.sol";
+import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
@@ -30,9 +31,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
     uint32 private usdcPosition = 1;
     uint32 private wethPosition = 2;
     uint32 private wbtcPosition = 3;
-    uint32 private usdcCLRPosition = 4;
-    uint32 private wethCLRPosition = 5;
-    uint32 private wbtcCLRPosition = 6;
     uint32 private usdtPosition = 7;
 
     uint256 private initialAssets;
@@ -99,7 +97,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPosition(0, wethPosition, abi.encode(true), false);
         cellar.addPositionToCatalogue(wbtcPosition);
-        cellar.addPosition(0, wbtcPosition, abi.encode(true), false);
         cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(0, usdtPosition, abi.encode(true), false);
 
@@ -160,7 +157,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
     function testDepositWithAlternativeAssetSameAsBase(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000_000e6);
 
-        // Setup Cellar to accept USDT deposits.
+        // Setup Cellar to accept USDC deposits.
         cellar.setAlternativeAssetData(USDC, usdcPosition, 0);
 
         deal(address(USDC), address(this), assets);
@@ -182,8 +179,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
             "Cellar totalSupply should equal initial + new deposit."
         );
     }
-
-    // TODO check for reverts.
 
     function testAlternativeAssetFeeLogic(uint256 assets, uint32 fee) external {
         assets = bound(assets, 1e6, 1_000_000_000e6);
@@ -216,7 +211,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
 
         uint256 expectedSharePrice = (initialAssets + assetsIn).mulDivDown(1e6, cellar.totalSupply());
 
-        // Since share price is 1:1, and USDT is hardcoded to equal the same as USDC, below checks should pass.
         assertApproxEqAbs(
             cellar.previewRedeem(1e6),
             expectedSharePrice,
@@ -236,5 +230,102 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
             0.000002e18,
             "User preview redeem should equal assets in with fee."
         );
+    }
+
+    function testDroppingAnAlternativeAsset() external {
+        uint256 assets = 100e6;
+
+        cellar.setAlternativeAssetData(USDT, usdtPosition, 0);
+
+        deal(address(USDT), address(this), assets);
+        USDT.safeApprove(address(cellar), assets);
+
+        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT);
+
+        // USDT deposits work.
+        address(cellar).functionCall(depositCallData);
+
+        // But if USDT is dropped, deposits revert.
+        cellar.dropAlternativeAssetData(USDT);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CellarWithMultiAssetDeposit.CellarWithMultiAssetDeposit__AlternativeAssetNotSupported.selector
+                )
+            )
+        );
+        address(cellar).functionCall(depositCallData);
+
+        (bool isSupported, uint32 holdingPosition, uint32 fee) = cellar.alternativeAssetData(USDT);
+        assertEq(isSupported, false, "USDT should not be supported.");
+        assertEq(holdingPosition, 0, "Holding position should be zero.");
+        assertEq(fee, 0, "Fee should be zero.");
+    }
+
+    // ======================== Test Reverts ==========================
+    function testDepositReverts() external {
+        uint256 assets = 100e6;
+
+        deal(address(USDT), address(this), assets);
+        USDT.safeApprove(address(cellar), assets);
+
+        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT);
+
+        // Try depositing with an asset that is not setup.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CellarWithMultiAssetDeposit.CellarWithMultiAssetDeposit__AlternativeAssetNotSupported.selector
+                )
+            )
+        );
+        address(cellar).functionCall(depositCallData);
+
+        // User messes up the calldata.
+        depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT, address(0));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CellarWithMultiAssetDeposit.CellarWithMultiAssetDeposit__CallDataLengthNotSupported.selector
+                )
+            )
+        );
+        address(cellar).functionCall(depositCallData);
+    }
+
+    function testOwnerReverts() external {
+        // Owner tries to setup cellar to accept alternative deposits but messes up the inputs.
+
+        // Tries setting up using a holding position not used by the cellar.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotUsed.selector, wbtcPosition)));
+        cellar.setAlternativeAssetData(WBTC, wbtcPosition, 0);
+
+        // setting up but with a mismatched underlying and position.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, USDC, USDT)));
+        cellar.setAlternativeAssetData(USDC, usdtPosition, 0);
+
+        // Setting up a debt holding position.
+        uint32 debtWethPosition = 8;
+        ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
+        registry.trustAdaptor(address(debtAdaptor));
+        registry.trustPosition(debtWethPosition, address(debtAdaptor), abi.encode(WETH));
+        cellar.addPositionToCatalogue(debtWethPosition);
+        cellar.addPosition(0, debtWethPosition, abi.encode(0), true);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidHoldingPosition.selector, debtWethPosition))
+        );
+        cellar.setAlternativeAssetData(WETH, debtWethPosition, 0);
+
+        // Tries setting fee to be too large.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CellarWithMultiAssetDeposit.CellarWithMultiAssetDeposit__AlternativeAssetFeeTooLarge.selector
+                )
+            )
+        );
+        cellar.setAlternativeAssetData(USDT, usdtPosition, 0.10000001e8);
     }
 }

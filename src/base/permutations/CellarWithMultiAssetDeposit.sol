@@ -8,22 +8,53 @@ contract CellarWithMultiAssetDeposit is Cellar {
     using SafeTransferLib for ERC20;
     using Address for address;
 
-    error AdvancedCellar__AlternativeAssetFeeTooLarge();
-    error AdvancedCellar__AlternativeAssetNotSupported();
-    error AdvancedCellar__CallDataLengthNotSupported();
+    // ========================================= STRUCTS =========================================
 
-    event AlternativeAssetUpdated(address asset, uint32 holdingPosition, uint32 depositFee);
-    event AlternativeAssetDropped(address asset);
-
-    uint32 internal constant MAX_ALTERNATIVE_ASSET_FEE = 0.1e8;
-
+    /**
+     * @notice Stores data needed for multi-asset deposits into this cellar.
+     * @param isSupported bool indicating that mapped asset is supported
+     * @param holdingPosition the holding position to deposit alternative assets into
+     * @param depositFee fee taken for depositing this alternative asset
+     */
     struct AlternativeAssetData {
         bool isSupported;
         uint32 holdingPosition;
         uint32 depositFee;
     }
 
-    mapping(ERC20 => AlternativeAssetData) internal alternativeAssetData;
+    // ========================================= CONSTANTS =========================================
+
+    /**
+     * @notice The max possible fee that can be charged for an alternative asset deposit.
+     */
+    uint32 internal constant MAX_ALTERNATIVE_ASSET_FEE = 0.1e8;
+
+    // ========================================= GLOBAL STATE =========================================
+
+    /**
+     * @notice Maps alternative assets to alternative asset data.
+     */
+    mapping(ERC20 => AlternativeAssetData) public alternativeAssetData;
+
+    //============================== ERRORS ===============================
+
+    error CellarWithMultiAssetDeposit__AlternativeAssetFeeTooLarge();
+    error CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
+    error CellarWithMultiAssetDeposit__CallDataLengthNotSupported();
+
+    //============================== EVENTS ===============================
+
+    /**
+     * @notice Emitted when an alternative asset is added or updated.
+     */
+    event AlternativeAssetUpdated(address asset, uint32 holdingPosition, uint32 depositFee);
+
+    /**
+     * @notice Emitted when an alternative asser is removed.
+     */
+    event AlternativeAssetDropped(address asset);
+
+    //============================== IMMUTABLES ===============================
 
     constructor(
         address _owner,
@@ -51,6 +82,14 @@ contract CellarWithMultiAssetDeposit is Cellar {
         )
     {}
 
+    //============================== OWNER FUNCTIONS ===============================
+
+    /**
+     * @notice Allows the owner to add, or update an existing alternative asset deposit.
+     * @param _alternativeAsset the ERC20 alternative asset that can be deposited
+     * @param _alternativeHoldingPosition the holding position to direct alternative asset deposits to
+     * @param _alternativeAssetFee the fee to charge for depositing this alternative asset
+     */
     function setAlternativeAssetData(
         ERC20 _alternativeAsset,
         uint32 _alternativeHoldingPosition,
@@ -62,7 +101,8 @@ contract CellarWithMultiAssetDeposit is Cellar {
             revert Cellar__AssetMismatch(address(_alternativeAsset), address(_assetOf(_alternativeHoldingPosition)));
         if (getPositionData[_alternativeHoldingPosition].isDebt)
             revert Cellar__InvalidHoldingPosition(_alternativeHoldingPosition);
-        if (_alternativeAssetFee > MAX_ALTERNATIVE_ASSET_FEE) revert AdvancedCellar__AlternativeAssetFeeTooLarge();
+        if (_alternativeAssetFee > MAX_ALTERNATIVE_ASSET_FEE)
+            revert CellarWithMultiAssetDeposit__AlternativeAssetFeeTooLarge();
 
         alternativeAssetData[_alternativeAsset] = AlternativeAssetData(
             true,
@@ -73,6 +113,10 @@ contract CellarWithMultiAssetDeposit is Cellar {
         emit AlternativeAssetUpdated(address(_alternativeAsset), _alternativeHoldingPosition, _alternativeAssetFee);
     }
 
+    /**
+     * @notice Allows the owner to stop an alternative asset from being deposited.
+     * @param _alternativeAsset the asset to not allow for alternative asset deposits anymore
+     */
     function dropAlternativeAssetData(ERC20 _alternativeAsset) external {
         _onlyOwner();
         delete alternativeAssetData[_alternativeAsset];
@@ -83,6 +127,8 @@ contract CellarWithMultiAssetDeposit is Cellar {
 
     /**
      * @notice Deposits assets into the cellar, and returns shares to receiver.
+     * @dev Compliant with ERC4626 standard, but additionally allows for multi-asset deposits
+     *      by encoding the asset to deposit at the end of the normal deposit params.
      * @param assets amount of assets deposited by user.
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
@@ -116,6 +162,11 @@ contract CellarWithMultiAssetDeposit is Cellar {
         _enter(depositAsset, position, assets, shares, receiver);
     }
 
+    //============================== HELPER FUNCTION ===============================
+
+    /**
+     * @notice Reads message data to determine if user is trying to deposit with an alternative asset or wants to do a normal deposit.
+     */
     function _getDepositAssetAndAdjustedAssetsAndPosition(
         uint256 assets
     )
@@ -140,7 +191,7 @@ contract CellarWithMultiAssetDeposit is Cellar {
             (, , depositAsset) = abi.decode(msg.data[4:], (uint256, address, ERC20));
 
             AlternativeAssetData memory assetData = alternativeAssetData[depositAsset];
-            if (!assetData.isSupported) revert AdvancedCellar__AlternativeAssetNotSupported();
+            if (!assetData.isSupported) revert CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
 
             // Convert assets from depositAsset to asset.
             assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
@@ -150,7 +201,7 @@ contract CellarWithMultiAssetDeposit is Cellar {
 
             position = assetData.holdingPosition;
         } else {
-            revert AdvancedCellar__CallDataLengthNotSupported();
+            revert CellarWithMultiAssetDeposit__CallDataLengthNotSupported();
         }
     }
 }
