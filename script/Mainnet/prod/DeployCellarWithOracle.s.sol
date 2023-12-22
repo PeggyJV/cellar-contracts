@@ -68,11 +68,11 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
 
         // Create Cellars and Share Price Oracles.
         curveCellar = _createCellar(
-            "Test Curve Cellar",
-            "TestCurveCellar",
+            "Test Cellar With Oracle",
+            "TestCellarWithOracle",
             USDC,
             usdcPositionId,
-            abi.encode(true),
+            abi.encode(0),
             0.1e6,
             0.8e18
         );
@@ -82,10 +82,10 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         uint64 gracePeriod = 30 days;
         uint16 observationsToUse = 4;
         uint216 startingAnswer = 1e18;
-        uint256 allowedAnswerChangeLower = 0.8e4;
-        uint256 allowedAnswerChangeUpper = 10e4;
+        uint256 allowedAnswerChangeLower = 0.1e4;
+        uint256 allowedAnswerChangeUpper = 100e4;
         _createSharePriceOracle(
-            "Test Curve Cellar Share Price Oracle V0.0",
+            "Test Cellar With Oracle Share Price Oracle V0.0",
             address(curveCellar),
             heartbeat,
             deviationTrigger,
