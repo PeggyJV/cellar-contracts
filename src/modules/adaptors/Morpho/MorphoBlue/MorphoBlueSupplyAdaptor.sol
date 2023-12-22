@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
@@ -36,16 +36,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     // NA
     //====================================================================
 
-    struct MarketParams {
-        address loanToken;
-        address collateralToken;
-        address oracle;
-        address irm;
-        uint256 lltv;
-    }
-
-    IMorpho public morphoBlue;
-
     /**
      * @notice Attempted to interact with a Morpho Blue Lending Market that the Cellar is not using.
      */
@@ -58,7 +48,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     bool public immutable ACCOUNT_FOR_INTEREST;
 
-    constructor(bool _accountForInterest, address _morphoBlue) MorphoBlueHealthFactorLogic(morphoBlue) {
+    constructor(bool _accountForInterest, address _morphoBlue) MorphoBlueHealthFactorLogic(_morphoBlue) {
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         morphoBlue = IMorpho(_morphoBlue);
     }
@@ -92,7 +82,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         // (address _loanToken, , , ) = morphoBlue.idToMarketParams(id); // See IMorpho for `idToMarketParams` and uncomment this if we go with the conventional IMorphoBlue interface function
         ERC20 loanToken = ERC20(market.loanToken);
         loanToken.safeApprove(address(morphoBlue), assets);
-        _deposit(market, loanToken, assets, address(this));
+        _deposit(market, assets, address(this));
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(loanToken, address(morphoBlue));
@@ -114,7 +104,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         Id id = abi.decode(adaptorData, (Id));
         _validateMBMarket(id);
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        _withdraw(market, assets, receiver, address(this)); // TODO: likely don't need _onBehalf
+        _withdraw(market, assets, address(this));
     }
 
     /**
@@ -211,7 +201,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _assets The amount of `loanToken` to transfer to MB market.
      * @param _onBehalf The address that MB market records as having supplied this amount of `loanToken` as a lender.
      */
-    function _deposit(MarketParams _market, uint256 _assets, address _onBehalf) internal virtual {
+    function _deposit(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
         morphoBlue.supply(_market, _assets, 0, _onBehalf, bytes(0));
     }
 
@@ -221,8 +211,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _assets The amount to withdraw
      * @param _onBehalf The address to which the Asset Tokens will be transferred
      */
-    function _withdraw(MarketParams _market, uint256 _assets, uint256 _shares, address _onBehalf) internal virtual {
-        morphoBlue.withdraw(_market, _assets, _shares, _onBehalf, _onBehalf);
+    function _withdraw(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
+        morphoBlue.withdraw(_market, _assets, 0, _onBehalf, _onBehalf);
     }
 
     /**
@@ -230,7 +220,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _market The specified MB Market
      * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
      */
-    function _balanceOf(MarketParams _market) internal view virtual returns (uint256) {
+    function _balanceOf(MarketParams memory _market) internal view virtual returns (uint256) {
         return morphoBlue.expectedSupplyAssets(morphoBlue, _market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
 }

@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
 import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 
 /**
  * @title Morpho Blue Debt Token Adaptor
@@ -17,6 +18,7 @@ import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue
 contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
+    using SharesMathLib for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(MarketParams marketParams)
@@ -111,8 +113,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
         _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
-        return _userBorrowBalance(id, market);
+        return _userBorrowBalance(id);
     }
 
     /**
@@ -165,8 +166,9 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function RepayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
 
+        // TODO: as per chat w/ Crispy accrueInterest() and then add a conditional logic check that it takes the total debt if the passed in repayAmount is greater than the debt that is actually within the position.
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        ERC20 tokenToRepay = ERC20(market.loanToken());
+        ERC20 tokenToRepay = ERC20(market.loanToken);
 
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
 
@@ -174,13 +176,13 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         uint256 totalBorrowAssets = morphoBlue.market(_id).totalBorrowAssets;
         uint256 totalBorrowShares = morphoBlue.market(_id).totalBorrowShares;
 
-        uint256 sharesToRepay = debtAmountToRepay.toSharesUp(debtAmountToRepay, totalBorrowAssets, totalBorrowShares); // get the total assets and total borrow shares of the market
+        uint256 sharesToRepay = debtAmountToRepay.toSharesUp(totalBorrowAssets, totalBorrowShares); // get the total assets and total borrow shares of the market
 
         // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has.
         // TODO - check if Morpho Blue reverts if there is no debt.
 
         tokenToRepay.safeApprove(address(morphoBlue), type(uint256).max);
-        _repayAsset(market, 0, sharesToRepay, address(this));
+        _repayAsset(market, sharesToRepay, address(this));
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));
     }
 
@@ -226,8 +228,8 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _borrowAmount The amount of borrowAsset to borrow
      * @param _onBehalf The receiver of the amount of `loanToken` borrowed and receiver of debt accounting-wise.
      */
-    function _borrowAsset(MarketParams _market, uint256 _borrowAmount, address _onBehalf) internal virtual {
-        morphoBlue.borrow(_market, _borrowAmount, 0, _onBehalf, _onBehalf, _onBehalf);
+    function _borrowAsset(MarketParams memory _market, uint256 _borrowAmount, address _onBehalf) internal virtual {
+        morphoBlue.borrow(_market, _borrowAmount, 0, _onBehalf, _onBehalf);
     }
 
     /**
@@ -236,7 +238,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _sharesToRepay The amount of borrowShares to repay
      * @param _onBehalf The address of the debt-account reduced due to this repayment within MB market.
      */
-    function _repayAsset(MarketParams _market, uint256 _sharesToRepay, address _onBehalf) internal virtual {
+    function _repayAsset(MarketParams memory _market, uint256 _sharesToRepay, address _onBehalf) internal virtual {
         morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, bytes(0)); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
     }
 }

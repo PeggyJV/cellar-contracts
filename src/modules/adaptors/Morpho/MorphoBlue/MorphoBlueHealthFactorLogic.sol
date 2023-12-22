@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 // import { Math } from "src/utils/Math.sol";
-import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { IMorpho, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MathLib, WAD } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MathLib.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
@@ -44,8 +44,8 @@ contract MorphoBlueHealthFactorLogic {
      * @param _market The specified Morpho Blue market
      * @return currentHF The health factor of the position atm
      */
-    function _getHealthFactor(Id _id, MarketParams _market) internal view virtual returns (uint256) {
-        uint256 borrowAmount = _userBorrowBalance(_id, _market);
+    function _getHealthFactor(Id _id, MarketParams memory _market) internal view virtual returns (uint256) {
+        uint256 borrowAmount = _userBorrowBalance(_id);
         if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
 
         uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
@@ -72,28 +72,28 @@ contract MorphoBlueHealthFactorLogic {
     /**
      * @dev helper function that returns actual collateral position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      */
-    function _userCollateralBalance(Id _id, MarketParams _market) internal view virtual returns (uint256) {
-        return uint256((morphoBlue.position(_id)(msg.sender)).collateral);
+    function _userCollateralBalance(Id _id, MarketParams memory _market) internal view virtual returns (uint256) {
+        return uint256(morphoBlue.position(_id, msg.sender).collateral);
     }
 
     /**
      * @dev helper function that returns actual borrow position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      */
-    function _userBorrowBalance(Id _id, MarketParams _market) internal view returns (uint256) {
-        return
-            uint256(
-                (morphoBlue.position(_id, address(this)).borrowerShares).toAssetsUp(
-                    _market.totalBorrowAssets,
-                    _market.totalBorrowShares
-                )
-            );
+    function _userBorrowBalance(Id _id) internal view returns (uint256) {
+        Market memory market = morphoBlue.market(_id);
+        return (
+            uint256((morphoBlue.position(_id, address(this)).borrowShares)).toAssetsUp(
+                market.totalBorrowAssets,
+                market.totalBorrowShares
+            )
+        );
     }
 
     /**
      * @notice Caller calls `accrueInterest` on specified MB market
      * @param _market The specified MB market
      */
-    function _accrueInterest(MarketParams _market) internal virtual {
+    function _accrueInterest(MarketParams memory _market) internal virtual {
         morphoBlue.accrueInterest(_market);
     }
 }

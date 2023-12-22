@@ -162,6 +162,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
         address morphoBlueAddress = address(morphoBlue);
 
+        _accrueInterest(_id);
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(_id, market);
         } // TODO - EIN - does it revert if the collateral would make the position not healthy?
@@ -216,8 +217,8 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _market The specified MB market.
      * @param _assets The amount of collateral to add to MB Market position.
      */
-    function _addCollateral(MarketParams _market, uint256 _assets) internal virtual {
-        morphoBlue.supplyCollateral(_market, _assets, address(this), bytes);
+    function _addCollateral(MarketParams memory _market, uint256 _assets) internal virtual {
+        morphoBlue.supplyCollateral(_market, _assets, address(this), bytes(0));
     }
 
     /**
@@ -225,7 +226,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _market The specified MB market.
      * @param _assets The amount of collateral to remove from MB Market position.
      */
-    function _removeCollateral(MarketParams _market, uint256 _assets) internal virtual {
+    function _removeCollateral(MarketParams memory _market, uint256 _assets) internal virtual {
         morphoBlue.withdrawCollateral(_market, _assets, address(this), address(this));
     }
 }
