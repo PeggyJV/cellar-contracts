@@ -70,6 +70,7 @@ contract SequencerPriceRouterTest is Test {
         sequencerPriceRouter.getPriceInUSD(USDC);
     }
 
+    // TODO update this test once chainlink responds
     function testSequencerFeed() external {
         // Setup forked environment.
         string memory rpcKey = "ARBITRUM_RPC_URL";
