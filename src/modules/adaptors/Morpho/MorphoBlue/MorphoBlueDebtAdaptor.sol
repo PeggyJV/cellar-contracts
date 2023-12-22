@@ -10,7 +10,6 @@ import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol"
  * @notice Allows Cellars to borrow assets from Morpho Blue pairs.
  * @author crispymangoes, 0xEinCodes
  *  * TODO: THIS IS A WIP AND HAS LOTS OF TODOS AND REFERENCE TO FRAXLEND. THE STRATEGIST FUNCTIONS (NOT COMMENTED OUT) HAVE BASIC DIRECTION FOR MORPHO BLUE LENDING MARKETS
-
  */
 contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
@@ -151,18 +150,25 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function RepayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
-        // ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
-        // uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
-        // uint256 sharesToRepay = _toBorrowShares(_fraxlendPair, debtTokenToRepay, false, true);
-        // uint256 sharesAccToFraxlend = _userBorrowShares(_fraxlendPair, address(this)); // get fraxlendPair's record of borrowShares atm
-        // if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // NOTE: from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
 
-        // // take the smaller btw sharesToRepay and sharesAccToFraxlend
-        // if (sharesAccToFraxlend < sharesToRepay) {
-        //     sharesToRepay = sharesAccToFraxlend;
-        // }
-        // tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        ERC20 tokenToRepay = ERC20(market.loanToken());
 
+        ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
+        uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
+
+        // using Morpho sharesLibrary we can calculate the sharesToRepay from the debtAmount
+        uint256 totalBorrowAssets = morphoBlue.market(id).totalBorrowAssets;
+                uint256 totalBorrowShares= morphoBlue.market(id).totalBorrowShares;
+
+        uint256 sharesToRepay = debtAmountToRepay.toSharesUp(debtAmountToRepay,totalBorrowAssets ,totalBorrowShares); // get the total assets and total borrow shares of the market
+        // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has.
+        // TODO - check if Morpho Blue reverts if there is no debt.
+
+        // take the smaller btw sharesToRepay and sharesAccToFraxlend
+        tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
+
+        // TODO - EIN - this is where you left off for the night. Just gotta find the mutative function calls in morpho blue to repay the asset.
         // _repayAsset(_fraxlendPair, sharesToRepay);
 
         // _revokeExternalApproval(tokenToRepay, address(_fraxlendPair));
