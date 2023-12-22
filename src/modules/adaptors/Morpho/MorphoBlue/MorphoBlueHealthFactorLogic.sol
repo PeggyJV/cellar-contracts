@@ -35,6 +35,7 @@ contract MorphoBlueHealthFactorLogic {
     /**
      * @notice The ```_getHealthFactor``` function returns the current health factor of a respective position given an exchange rate
      * @param _id The specified Morpho Blue market Id
+     * @param _market The specified Morpho Blue market
      * @return currentHF The health factor of the position atm
      */
     function _getHealthFactor(Id _id, MarketParams _market) internal view virtual returns (uint256) {
@@ -62,10 +63,16 @@ contract MorphoBlueHealthFactorLogic {
         uint256 currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
     }
 
+    /**
+     * @dev helper function that returns actual collateral position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
+     */
     function _userCollateralBalance(Id _id, MarketParams _market) internal view virtual returns (uint256) {
         return uint256((morphoBlue.position(_id)(msg.sender)).collateral);
     }
 
+    /**
+     * @dev helper function that returns actual borrow position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
+     */
     function _userBorrowBalance(Id _id, MarketParams _market) internal view returns (uint256) {
         return
             uint256(

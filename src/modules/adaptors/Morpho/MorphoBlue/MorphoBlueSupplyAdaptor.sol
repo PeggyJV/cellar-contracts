@@ -8,12 +8,12 @@ import { MorphoLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/
 
 /**
  * @title Morpho Blue Supply Adaptor
+ *  * @notice Allows Cellars to lend loanToken to respective Morpho Blue Lending Markets.
  * @dev This adaptor is specifically for Morpho Blue Primitive contracts.
  *      To interact with a different version or custom market, a new
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue
- * @notice Allows Cellars to lend loanToken to respective Morpho Blue Lending Markets.
  * @author crispymangoes, 0xEinCodes
  */
 contract MorphoBlueSupplyAdaptor is BaseAdaptor {
@@ -121,11 +121,16 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
      * @notice Returns the amount of loanToken that can be withdrawn.
      * @dev Compares loanToken supplied to loanToken borrowed to check for liquidity.
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
+     * @param adaptorData encoded bytes32 MB id that represents the MB market for this position.
+     * @return withdrawableSupply liquid amount of `loanToken` cellar has lent to specified MB market.
+     * TODO - this uses periphery libraries that sim expected interest, do we want to use the alternative method which means calling getters within Morpho.sol directly? This would depend on having `accrueInterest()` called by us prior to calling this or called by some other market participant.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
         bytes memory
-    ) public view override returns (uint256 withdrawableFrax) {
+    ) public view override returns (uint256 withdrawableSupply) {
+        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
         (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morpho.expectedMarketBalances(morpho, market);
         if (totalBorrowAssets >= totalSupplyAssets) return 0;
         uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
@@ -135,6 +140,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     /**
      * @notice Returns the cellar's balance of the supplyToken position.
+     * @param adaptorData encoded bytes32 MB id that represents the MB market for this position.
+     * @return Cellar's balance of the supplyToken position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
@@ -144,6 +151,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     /**
      * @notice Returns loanToken.
+     * @return ERC20 loanToken.
      */
     function assetOf(bytes memory _id) public view override returns (ERC20) {
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
@@ -152,6 +160,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
 
     /**
      * @notice This adaptor returns collateral, and not debt.
+     * @return Whether or not this position is a debt position
      */
     function isDebt() public pure override returns (bool) {
         return false;
@@ -194,48 +203,31 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     //===============================================================================
 
     /**
-     * @notice Deposit loanToken into specified Morpho Blue lending market
-     * @dev ftoken.deposit() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fToken The specified FraxLendPair
-     * @param amount The amount of $FRAX Token to transfer to Pair
-     * @param receiver The address to receive the Asset Shares (fTokens)
+     * @notice Deposit loanToken into specified MB lending market.
+     * @param _market The specified MB market.
+     * @param _assets The amount of `loanToken` to transfer to MB market.
+     * @param _onBehalf The address that MB market records as having supplied this amount of `loanToken` as a lender.
      */
-    function _deposit(
-        MarketParams _market,
-        uint256 _assets,
-        uint256 _shares,
-        address _onBehalf,
-        bytes memory _data
-    ) internal virtual {
-        morphoBlue.supply(_market, _assets, _shares, _onBehalf, _data);
+    function _deposit(MarketParams _market, uint256 _assets, address _onBehalf) internal virtual {
+        morphoBlue.supply(_market, _assets, 0, _onBehalf, bytes(0));
     }
 
     /**
-     * @notice Withdraw $FRAX from specified 'v2' FraxLendPair
-     * @dev ftoken.withdraw() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fToken The specified FraxLendPair
-     * @param assets The amount to withdraw
-     * @param receiver The address to which the Asset Tokens will be transferred
-     * @param owner The owner of the Asset Shares (fTokens)
-     * TODO: likely don't need _onBehalf
+     * @notice Withdraw loanToken into specified MB lending market.
+     * @param _market The specified MB Market
+     * @param _assets The amount to withdraw
+     * @param _onBehalf The address to which the Asset Tokens will be transferred
      */
-    function _withdraw(
-        MarketParams _market,
-        uint256 _assets,
-        uint256 _shares,
-        address _onBehalf,
-        address _receiver
-    ) internal virtual {
-        morphoBlue.withdraw(_market, _assets, _shares, _onBehalf, _receiver);
+    function _withdraw(MarketParams _market, uint256 _assets, uint256 _shares, address _onBehalf) internal virtual {
+        morphoBlue.withdraw(_market, _assets, _shares, _onBehalf, _onBehalf);
     }
 
     /**
      * @dev Returns the amount of tokens owned by `account`.
-     * TODO: most likely don't need an internal function like this to work with Morpho Blue. This was from Fraxlend adaptor work. Will explore more when we look to develop this more.
+     * @param _market The specified MB Market
+     * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
      */
-    function _balanceOf(MarketParams marketParams, address user) internal view virtual returns (uint256) {
-        return morphoBlue.expectedSupplyAssets(morpho, marketParams, msg.sender); // alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
+    function _balanceOf(MarketParams _market) internal view virtual returns (uint256) {
+        return morphoBlue.expectedSupplyAssets(morpho, _market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
-
-    
 }

@@ -14,7 +14,6 @@ import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol"
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue
  * @author crispymangoes, 0xEinCodes
- * TODO: THIS IS A WIP AND HAS LOTS OF TODOS AND REFERENCE TO FRAXLEND. THE STRATEGIST FUNCTIONS (NOT COMMENTED OUT) HAVE BASIC DIRECTION FOR MORPHO BLUE LENDING MARKETS
  * TODO - The periphery libraries from MB may be used depending on how much gas they use. For now we will not use them but we will test to see which is more gas efficient.
  */
 contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
@@ -111,6 +110,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @notice Returns the cellar's balance of the collateralAsset position.
      * @param adaptorData the collateral asset deposited into Morpho Blue
      * TODO - could use the periphery library `MorphoBalancesLib` to get the expected balance (w/ simulated interest) but for now we just query the getter. We may switch to using the periphery library.
+     * @return Cellar's balance of provided collateral to specified MB market.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
@@ -119,7 +119,8 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     }
 
     /**
-     * @notice Returns collateral asset
+     * @notice Returns collateral asset.
+     * @return The collateral asset in ERC20 type.
      */
     function assetOf(bytes memory _id) public view override returns (ERC20) {
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
@@ -128,6 +129,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
     /**
      * @notice This adaptor returns collateral, and not debt.
+     * @return Whether or not this position is a debt position
      */
     function isDebt() public pure override returns (bool) {
         return false;
@@ -136,9 +138,9 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     //============================================ Strategist Functions ===========================================
 
     /**
-     * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param _collateralToDeposit The amount of collateral to add to Fraxlend Pair position
+     * @notice Allows strategists to add collateral to the respective cellar position on specified MB Market, enabling borrowing.
+     * @param _id encoded bytes32 MB id that represents the MB market for this position.
+     * @param _collateralToDeposit The amount of `collateralToken` to add to specified MB market position.
      */
     function addCollateral(Id id, uint256 _collateralToDeposit) public {
         _validateMBMarket(id);
@@ -156,18 +158,18 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     }
 
     /**
-     * @notice Allows strategists to remove collateral from the respective cellar position on FraxLend.
-     * @param _collateralAmount The amount of collateral to remove from fraxlend pair position
-     * @param _fraxlendPair The specified Fraxlend Pair
+     * @notice Allows strategists to remove collateral from the respective cellar position on specified MB Market.
+     * @param _id encoded bytes32 MB id that represents the MB market for this position.
+     * @param _collateralAmount The amount of collateral to remove from specified MB market position.
      */
-    function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
+    function removeCollateral(Id id, uint256 _collateralAmount) public {
         _validateMBMarket(id);
         MarketParams memory market = morphoBlue.idToMarketParams(id);
         address morphoBlueAddress = address(morphoBlue);
 
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(id, market);
-        } // TODO: EIN - does it revert if the collateral would make the position not healthy?
+        } // TODO - EIN - does it revert if the collateral would make the position not healthy?
 
         // remove collateral
         _removeCollateral(market, _collateralAmount);
@@ -215,20 +217,20 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     }
 
     /**
-     * @notice Increment collateral amount in cellar account within fraxlend pair
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param amountToDeposit The amount of collateral to add to Fraxlend Pair position
-     * @dev This function has been made virtual in case there are markets that a Cellar wants to work with that use bytes or other custom aspects. Of course more testing would be needed for those bespoke markets.
+     * @notice Increment collateral amount in cellar account within specified MB Market.
+     * @param _market The specified MB market.
+     * @param _assets The amount of collateral to add to MB Market position.
      */
-    function _addCollateral(MarketParams _marketParams, uint256 _assets) internal virtual {
-        morphoBlue.supplyCollateral(_marketParams, _assets, address(this), bytes);
+    function _addCollateral(MarketParams _market, uint256 _assets) internal virtual {
+        morphoBlue.supplyCollateral(_market, _assets, address(this), bytes);
     }
 
     /**
      * @notice Decrement collateral amount in cellar account within Morpho Blue lending market
-     * TODO: review onBehalf and receiver
+     * @param _market The specified MB market.
+     * @param _assets The amount of collateral to remove from MB Market position.
      */
-    function _removeCollateral(MarketParams _marketParams, uint256 _assets) internal virtual {
-        morphoBlue.withdrawCollateral(_marketParams, _assets, address(this), address(this));
+    function _removeCollateral(MarketParams _market, uint256 _assets) internal virtual {
+        morphoBlue.withdrawCollateral(_market, _assets, address(this), address(this));
     }
 }
