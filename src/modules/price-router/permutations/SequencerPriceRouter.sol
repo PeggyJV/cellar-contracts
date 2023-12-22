@@ -54,7 +54,6 @@ contract SequencerPriceRouter is PriceRouter {
             revert SequencerPriceRouter__SequencerDown();
         }
 
-        // TODO better understand why this adds a grace period, and why we use startedAt instead of updatedAt.
         // Make sure the grace period has passed after the
         // sequencer is back up.
         uint256 timeSinceUp = block.timestamp - startedAt;
