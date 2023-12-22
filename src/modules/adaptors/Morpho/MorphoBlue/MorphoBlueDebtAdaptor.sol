@@ -146,7 +146,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     /**
      * @notice Allows strategists to repay loan debt on Morph Blue Lending Market. Make sure to call addInterest() beforehand to ensure we are repaying what is required.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * TODO: EIN THIS IS WHERE YOU LEFT OFF ON ROUGH IMPLEMENTATION
+     * TODO: handle maxAvailable()
      */
     function RepayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
@@ -159,7 +159,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
         // using Morpho sharesLibrary we can calculate the sharesToRepay from the debtAmount
         uint256 totalBorrowAssets = morphoBlue.market(id).totalBorrowAssets;
-                uint256 totalBorrowShares= morphoBlue.market(id).totalBorrowShares;
+        uint256 totalBorrowShares= morphoBlue.market(id).totalBorrowShares;
 
         uint256 sharesToRepay = debtAmountToRepay.toSharesUp(debtAmountToRepay,totalBorrowAssets ,totalBorrowShares); // get the total assets and total borrow shares of the market
         // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has.
@@ -168,10 +168,9 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         // take the smaller btw sharesToRepay and sharesAccToFraxlend
         tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
 
-        // TODO - EIN - this is where you left off for the night. Just gotta find the mutative function calls in morpho blue to repay the asset.
-        // _repayAsset(_fraxlendPair, sharesToRepay);
-
-        // _revokeExternalApproval(tokenToRepay, address(_fraxlendPair));
+        // TODO - reformat to an internal virtual helper possibly like borrow function
+        morphoBlue.repay(market, 0, sharesToRepay, address(this),bytes(0)); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
+        _revokeExternalApproval(tokenToRepay, address(morphoBlue));
     }
 
     /**
