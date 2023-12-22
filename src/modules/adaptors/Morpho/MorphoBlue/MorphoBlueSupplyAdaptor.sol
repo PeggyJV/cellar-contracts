@@ -2,9 +2,10 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
-import { MorphoBalancesLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/MorphoBalancesLib.sol";
-import { MorphoLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
+import { IMorpho } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
+import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
+import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
 
 /**
  * @title Morpho Blue Supply Adaptor
@@ -16,10 +17,9 @@ import { MorphoLib } from "src/interfaces/external/Morpho/Morpho Blue/periphery/
  *      Blue
  * @author crispymangoes, 0xEinCodes
  */
-contract MorphoBlueSupplyAdaptor is BaseAdaptor {
+contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-    type Id is bytes32; // NOTE not sure I need this
     using MorphoLib for IMorpho;
     using MorphoBalancesLib for IMorpho;
 
@@ -114,7 +114,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
         Id id = abi.decode(adaptorData, (Id));
         _validateMBMarket(id);
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        _withdraw(market, loanToken, assets, receiver, address(this)); // TODO: likely don't need _onBehalf
+        _withdraw(market, assets, receiver, address(this)); // TODO: likely don't need _onBehalf
     }
 
     /**
@@ -131,10 +131,13 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     ) public view override returns (uint256 withdrawableSupply) {
         Id id = abi.decode(adaptorData, (Id));
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morpho.expectedMarketBalances(morpho, market);
+        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(
+            morphoBlue,
+            market
+        );
         if (totalBorrowAssets >= totalSupplyAssets) return 0;
         uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
-        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(morpho, market, msg.sender);
+        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(morphoBlue, market, msg.sender);
         withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
     }
 
@@ -228,6 +231,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
      * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
      */
     function _balanceOf(MarketParams _market) internal view virtual returns (uint256) {
-        return morphoBlue.expectedSupplyAssets(morpho, _market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
+        return morphoBlue.expectedSupplyAssets(morphoBlue, _market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
     }
 }

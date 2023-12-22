@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
+import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 
 /**
  * @title Morpho Blue Collateral Adaptor
@@ -38,11 +38,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @notice Removal of collateral causes Cellar Health Factor below what is required
      */
     error MorphoBlueCollateralAdaptor__HealthFactorTooLow(Id id);
-
-    /**
-     * @notice The Morpho Blue contract on current network.
-     */
-    IMorpho public immutable morphoBlue;
 
     /**
      * @notice Minimum Health Factor enforced after every removeCollateral() strategist function call.
@@ -142,12 +137,12 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _id encoded bytes32 MB id that represents the MB market for this position.
      * @param _collateralToDeposit The amount of `collateralToken` to add to specified MB market position.
      */
-    function addCollateral(Id id, uint256 _collateralToDeposit) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function addCollateral(Id _id, uint256 _collateralToDeposit) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         ERC20 collateralToken = ERC20(market.collateralToken);
 
-        uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
+        uint256 amountToDeposit = _maxAvailable(collateralToken, _collateralToDeposit);
         address morphoBlueAddress = address(morphoBlue);
         collateralToken.safeApprove(morphoBlueAddress, amountToDeposit);
 
@@ -162,13 +157,13 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _id encoded bytes32 MB id that represents the MB market for this position.
      * @param _collateralAmount The amount of collateral to remove from specified MB market position.
      */
-    function removeCollateral(Id id, uint256 _collateralAmount) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function removeCollateral(Id _id, uint256 _collateralAmount) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         address morphoBlueAddress = address(morphoBlue);
 
         if (_collateralAmount == type(uint256).max) {
-            _collateralAmount = _userCollateralBalance(id, market);
+            _collateralAmount = _userCollateralBalance(_id, market);
         } // TODO - EIN - does it revert if the collateral would make the position not healthy?
 
         // remove collateral
@@ -177,8 +172,8 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         // TODO - might want to check the market to see if it even has a LLTV. If it doesn't, I guess no liquidations can occur?
 
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
-        if (minimumHealthFactor > (_getHealthFactor(id, market))) {
-            revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(id);
+        if (minimumHealthFactor > (_getHealthFactor(_id, market))) {
+            revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(_id);
         }
     }
 

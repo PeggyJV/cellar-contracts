@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
+import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 
 /**
  * @title Morpho Blue Debt Token Adaptor
@@ -41,11 +41,6 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @notice Attempted repayment when no debt position in Morpho Blue Lending Market for cellar
      */
     error MorphoBlueDebtAdaptor__CannotRepayNoDebt(Id id);
-
-    /**
-     * @notice The Morpho Blue contract on current network.
-     */
-    IMorpho public immutable morphoBlue;
 
     /**
      * @notice This bool determines how this adaptor accounts for interest.
@@ -114,8 +109,10 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @return Cellar's balance of the respective MB market loanToken
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        return _userBorrowBalance(_id, market);
+        Id id = abi.decode(adaptorData, (Id));
+        _validateMBMarket(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        return _userBorrowBalance(id, market);
     }
 
     /**
@@ -124,7 +121,9 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @return `loanToken` from respective MB market
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+        Id id = abi.decode(adaptorData, (Id));
+        _validateMBMarket(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
         return ERC20(market.loanToken);
     }
 
@@ -151,7 +150,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_getHealthFactor(_id, market))) {
-            revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(_id);
+            revert MorphoBlueDebtAdaptor__HealthFactorTooLow(_id);
         }
     }
 
@@ -166,14 +165,14 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function RepayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
 
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         ERC20 tokenToRepay = ERC20(market.loanToken());
 
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
 
         // using Morpho sharesLibrary we can calculate the sharesToRepay from the debtAmount
-        uint256 totalBorrowAssets = morphoBlue.market(id).totalBorrowAssets;
-        uint256 totalBorrowShares = morphoBlue.market(id).totalBorrowShares;
+        uint256 totalBorrowAssets = morphoBlue.market(_id).totalBorrowAssets;
+        uint256 totalBorrowShares = morphoBlue.market(_id).totalBorrowShares;
 
         uint256 sharesToRepay = debtAmountToRepay.toSharesUp(debtAmountToRepay, totalBorrowAssets, totalBorrowShares); // get the total assets and total borrow shares of the market
 
@@ -194,9 +193,9 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      *      so a strategist should consider moving some assets into reserves.
      * @param _id encoded bytes32 MB id that represents the MB market for this position.
      */
-    function accrueInterest(Id id) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function accrueInterest(Id _id) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         _accrueInterest(market);
     }
 
@@ -238,6 +237,6 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _onBehalf The address of the debt-account reduced due to this repayment within MB market.
      */
     function _repayAsset(MarketParams _market, uint256 _sharesToRepay, address _onBehalf) internal virtual {
-        morphoBlue.repay(market, 0, sharesToRepay, address(this), bytes(0)); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
+        morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, bytes(0)); // See IMorpho.sol for more detail, but the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
     }
 }

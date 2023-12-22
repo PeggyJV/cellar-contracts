@@ -2,10 +2,11 @@
 pragma solidity 0.8.21;
 
 // import { Math } from "src/utils/Math.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol";
-import { MathLib, WAD } from "src/interfaces/external/Morpho/Morpho Blue/libraries/MathLib.sol";
-import { SharesMathLib } from "src/interfaces/external/Morpho/Morpho Blue/libraries/SharesMathLib.sol";
-import { IOracle } from "src/interfaces/external/Morpho/Morpho Blue/libraries/IOracle.sol";
+import { IMorpho, MarketParams } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { MathLib, WAD } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MathLib.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
+import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
+import { UtilsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/UtilsLib.sol";
 
 /**
  * @title Morpho Blue Health Factor Logic contract.
@@ -25,10 +26,15 @@ contract MorphoBlueHealthFactorLogic {
     using UtilsLib for uint256;
     using SharesMathLib for uint256;
 
+    /**
+     * @notice The Morpho Blue contract on current network.
+     */
+    IMorpho public immutable morphoBlue;
+
     // Constant from MorphoBlue
     uint256 constant ORACLE_PRICE_SCALE = 1e36;
 
-    constructor(addres _morphoBlue) {
+    constructor(address _morphoBlue) {
         morphoBlue = IMorpho(_morphoBlue);
     }
 
@@ -56,7 +62,7 @@ contract MorphoBlueHealthFactorLogic {
 
         // calculate the currentPositionLTV then compare it against the max lltv for this position
         // TODO check precision for all below.
-        uint256 currentPositionLTV = borrowAmount.mulDivDown(1e18, _collateralAmount);
+        uint256 currentPositionLTV = borrowAmount.mulDivDown(1e18, collateralAmount);
         uint256 positionMaxLTV = (_market.lltv) * collateralAmount;
 
         // convert LTVs to HF
@@ -76,7 +82,7 @@ contract MorphoBlueHealthFactorLogic {
     function _userBorrowBalance(Id _id, MarketParams _market) internal view returns (uint256) {
         return
             uint256(
-                (morphoBlue.position(id, address(this)).borrowerShares).toAssetsUp(
+                (morphoBlue.position(_id, address(this)).borrowerShares).toAssetsUp(
                     _market.totalBorrowAssets,
                     _market.totalBorrowShares
                 )
