@@ -15,7 +15,7 @@ import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/librari
  *      Blue
  * @author crispymangoes, 0xEinCodes
  */
-contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
+contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using SharesMathLib for uint256;
@@ -163,7 +163,7 @@ contract MorphoDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _id Encoded bytes32 MB id that represents the MB market for this position.
      * @param _debtTokenRepayAmount The amount of `loanToken` to repay.
      */
-    function RepayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
+    function repayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
 
         // TODO: as per chat w/ Crispy accrueInterest() and then add a conditional logic check that it takes the total debt if the passed in repayAmount is greater than the debt that is actually within the position.

@@ -160,6 +160,39 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     //============================================ Strategist Functions ===========================================
 
     /**
+     * @notice Allows strategists to lend specific asset on Morpho Blue market
+     * TODO
+     */
+    function supplyToMorphoBlue(Id _id, MarketParams memory _market, uint256 _assets, address _onBehalf) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+        ERC20 loanToken = ERC20(market.loanToken);
+        _assets = _maxAvailable(loanToken, _assets);
+        loanToken.safeApprove(address(morphoBlue), _assets);
+        _deposit(market, _assets, address(this));
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(loanToken, address(morphoBlue));
+    }
+
+    /**
+     * @notice Allows strategists to withdraw underlying asset plus interest.
+     * TODO - do we want to allow strategists to specify shares?
+     */
+    function withdrawFromMorphoBlue(Id _id, uint256 _assets) public {
+        // Run external receiver check.
+        _externalReceiverCheck(receiver);
+        _validateMBMarket(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        ERC20 loanToken = ERC20(market.loanToken);
+        _accrueInterest(market); // TODO - if we end up using periphery library (like we currently are) for _balanceOf() then we may not need to kick `accrueInterest()`. We sacrifice losing some dust / noise though I think. Need to test this.
+        if (_assets == type(uint256).max) {
+            _assets = _balanceOf(market);; // TODO get supply amount from morpho blue
+        }
+        // Withdraw assets from Morpho Blue.
+        _withdraw(market, _assets, address(this));
+    }
+
+    /**
      * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
      * @dev A strategist might want to do this if a MB market has not been interacted with
      *      in a while, and the strategist does not plan on interacting with it during a

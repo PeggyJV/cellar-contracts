@@ -177,6 +177,20 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         }
     }
 
+    /**
+     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
+     * @dev A strategist might want to do this if a MB market has not been interacted with
+     *      in a while, and the strategist does not plan on interacting with it during a
+     *      rebalance.
+     * @dev Calling this can increase the share price during the rebalance,
+     *      so a strategist should consider moving some assets into reserves.
+     */
+    function accrueInterest(Id id) public {
+        _validateMBMarket(id);
+        MarketParams memory market = morphoBlue.idToMarketParams(id);
+        _accrueInterest(market);
+    }
+
     //============================================ Helper Functions ===========================================
 
     /**
@@ -196,20 +210,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     // Current versions in use are just for the primitive Morpho Blue deployments.
     // IMPORTANT: Going forward, other versions will be renamed w/ descriptive titles for new projects extending off of these primitive contracts.
     //===============================================================================
-
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     */
-    function accrueInterest(Id id) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
-        _accrueInterest(market);
-    }
 
     /**
      * @notice Increment collateral amount in cellar account within specified MB Market.

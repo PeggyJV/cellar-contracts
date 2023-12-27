@@ -54,7 +54,14 @@ import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralF
 
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 
+import { MorphoBlueDebtAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueDebtAdaptor.sol";
+import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
+import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueCollateralAdaptor.sol";
+import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
+
 contract AdaptorHelperFunctions {
+    type Id is bytes32; // for Morpho Blue
+
     // ========================================= General FUNCTIONS =========================================
 
     function _createBytesDataForSwapWithUniv3(
@@ -285,6 +292,46 @@ contract AdaptorHelperFunctions {
                 tokenToRepay,
                 amountToRepay
             );
+    }
+
+    // ========================================= Morpho Blue FUNCTIONS =========================================
+
+    // TODO - MorphoBlueSupplyAdaptor Functions
+
+    // MorphoBlueCollateralAdaptor Functions
+
+    function _createBytesDataToAddCollateralToMorphoBlue(
+        Id _id,
+        uint256 _collateralToDeposit
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.addCollateral.selector, _id, _collateralToDeposit);
+    }
+
+    function _createBytesDataToRemoveCollateralToMorphoBlue(
+        Id _id,
+        uint256 _collateralAmount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _id, _collateralAmount);
+    }
+
+    function _createBytesDataToAccrueInterestToMorphoBlue(Id _id) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.accrueInterest.selector, _id);
+    }
+
+    // MorphoBlueDebtAdaptor Functions
+
+    function _createBytesDataToBorromFromMorphoBlue(
+        Id _id,
+        uint256 _amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.borrowFromMorphoBlue.selector, _id, _amountToBorrow);
+    }
+
+    function _createBytesDataToRepayDebtToMorphoBlue(
+        Id _id,
+        uint256 _debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _id, _debtTokenRepayAmount);
     }
 
     // ========================================= Balancer FUNCTIONS =========================================
