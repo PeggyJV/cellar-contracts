@@ -163,7 +163,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @notice Allows strategists to lend specific asset on Morpho Blue market
      * TODO
      */
-    function supplyToMorphoBlue(Id _id, MarketParams memory _market, uint256 _assets, address _onBehalf) public {
+    function lendToMorphoBlue(Id _id, uint256 _assets) public {
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
         ERC20 loanToken = ERC20(market.loanToken);
@@ -180,13 +180,12 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function withdrawFromMorphoBlue(Id _id, uint256 _assets) public {
         // Run external receiver check.
-        _externalReceiverCheck(receiver);
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
-        ERC20 loanToken = ERC20(market.loanToken);
+        _externalReceiverCheck(address(this));
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         _accrueInterest(market); // TODO - if we end up using periphery library (like we currently are) for _balanceOf() then we may not need to kick `accrueInterest()`. We sacrifice losing some dust / noise though I think. Need to test this.
         if (_assets == type(uint256).max) {
-            _assets = _balanceOf(market);; // TODO get supply amount from morpho blue
+            _assets = _balanceOf(market); // TODO get supply amount from morpho blue
         }
         // Withdraw assets from Morpho Blue.
         _withdraw(market, _assets, address(this));

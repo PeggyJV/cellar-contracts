@@ -296,7 +296,17 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Morpho Blue FUNCTIONS =========================================
 
-    // TODO - MorphoBlueSupplyAdaptor Functions
+    // MorphoBlueSupplyAdaptor Functions
+    function _createBytesDataToLendOnMorphoBlue(
+        Id _id,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.lendToMorphoBlue.selector, _id, _assets);
+    }
+
+    function _createBytesDataToWithdrawFromMorphoBlue(Id _id, uint256 _assets) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _id, _assets);
+    }
 
     // MorphoBlueCollateralAdaptor Functions
 
