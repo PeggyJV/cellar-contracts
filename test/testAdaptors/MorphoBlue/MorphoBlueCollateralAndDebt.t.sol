@@ -10,6 +10,7 @@ import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoB
 import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { Morpho } from "test/testAdaptors/MorphoBlue/Morpho.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 
 /**
  * @notice Test provision of collateral and borrowing on MorphoBlue Markets
@@ -20,6 +21,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     using SafeTransferLib for ERC20;
     using Math for uint256;
     type Id is bytes32;
+    using SharesMathLib for uint256;
 
     MorphoBlueCollateralAdaptor public morphoBlueCollateralAdaptor;
     MorphoBlueDebtAdaptor public morphoBlueDebtAdaptor;
@@ -640,15 +642,15 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCallsSecondAdaptor });
         cellar.callOnAdaptor(data);
 
-        // TODO - Check that we have the right amount of USDC borrowed (commented out stuff from fraxlend using fraxlend helpers)
-        // assertApproxEqAbs(
-        //     (getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar))) +
-        //         getFraxlendDebtBalance(UNI_FRAX_PAIR, address(cellar)),
-        //     mkrFraxToBorrow + uniFraxToBorrow,
-        //     1
-        // );
+        // Check that we have the right amount of USDC borrowed
+        assertApproxEqAbs(
+            (getMorphoBlueDebtBalance(wethMarketId, address(cellar))) +
+                getMorphoBlueDebtBalance(wbtcMarketId, address(cellar)),
+            wethUSDCToBorrow + wbtcUSDCToBorrow,
+            1
+        );
 
-        // assertApproxEqAbs(FRAX.balanceOf(address(cellar)), mkrFraxToBorrow + uniFraxToBorrow, 1);
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), wethUSDCToBorrow + wbtcUSDCToBorrow, 1);
 
         uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total USDC.
         deal(address(USDC), address(cellar), (wethUSDCToBorrow + wbtcUSDCToBorrow) * 2);
@@ -660,20 +662,19 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         newData2[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
-        // TODO - asserts (commented out stuff from fraxlend using fraxlend helpers)
-        // assertApproxEqAbs(
-        //     getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar)),
-        //     0,
-        //     1,
-        //     "Cellar should have zero debt recorded within Fraxlend Pair"
-        // );
+        assertApproxEqAbs(
+            getMorphoBlueDebtBalance(wethMarketId, address(cellar)),
+            0,
+            1,
+            "Cellar should have zero debt recorded within Morpho Blue Market"
+        );
 
-        // assertApproxEqAbs(
-        //     getFraxlendDebtBalance(UNI_FRAX_PAIR, address(cellar)),
-        //     uniFraxToBorrow,
-        //     1,
-        //     "Cellar should still have debt for UNI Fraxlend Pair"
-        // );
+        assertApproxEqAbs(
+            getMorphoBlueDebtBalance(wbtcMarketId, address(cellar)),
+            wbtcUSDCToBorrow,
+            1,
+            "Cellar should still have debt for WBTC Morpho Blue Market"
+        );
 
         deal(address(WETH), address(cellar), 0);
 
@@ -784,66 +785,74 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data);
     }
 
-    // TODO - EIN THIS IS WHERE YOU LEFT OFF
-    // function testLTV(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100e18);
-    //     initialAssets = cellar.totalAssets();
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+    function testLTV(uint256 assets) external {
+        assets = bound(assets, 1e18, 100e18);
+        initialAssets = cellar.totalAssets();
+        console.log("Cellar WETH balance: %s, initialAssets: %s", WETH.balanceOf(address(cellar)), initialAssets);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // carry out a proper addCollateral() call
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-    //     uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
+        // carry out a proper addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethMarketId, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    //     assertEq(MKR.balanceOf(address(cellar)), initialAssets);
+        // Take out a loan
+        uint256 borrowAmount = priceRouter.getValue(WETH, assets.mulDivDown(1e4, 1.35e4), USDC); // calculate a borrow amount that would make the position unhealthy (health factor wise)
 
-    //     // Take out a FRAX loan.
-    //     uint256 fraxToBorrow = priceRouter.getValue(MKR, assets.mulDivDown(1e4, 1.35e4), FRAX);
-    //     adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethMarketId, borrowAmount);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__HealthFactorTooLow.selector,
+                    wethMarketId
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
 
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__HealthFactorTooLow.selector, MKR_FRAX_PAIR)
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
+        // add collateral to be able to borrow amount desired
+        deal(address(WETH), address(cellar), 3 * assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethMarketId, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    //     // add collateral to be able to borrow amount desired
-    //     deal(address(MKR), address(cellar), 3 * assets);
-    //     adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
+        assertEq(WETH.balanceOf(address(cellar)), assets * 2);
 
-    //     assertEq(MKR.balanceOf(address(cellar)), assets * 2);
+        uint256 newCellarCollateralBalance = uint256(morphoBlue.position(wethMarketId, address(cellar)).collateral);
+        assertEq(newCellarCollateralBalance, 2 * assets);
 
-    //     newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
-    //     assertEq(newCellarCollateralBalance, 2 * assets);
-
-    //     // Try taking out more FRAX now
-    //     uint256 moreFraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
-    //     adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, moreFraxToBorrow);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data); // should transact now
-    // }
+        // Try taking out more USDC now
+        uint256 moreUSDCToBorrow = priceRouter.getValue(WETH, assets / 2, USDC);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethMarketId, moreUSDCToBorrow);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // should transact now
+    }
 
     // /// Fraxlend Collateral and Debt Specific Helpers
 
-    // function getFraxlendDebtBalance(address _fraxlendPair, address _user) internal view returns (uint256) {
-    //     IFToken fraxlendPair = IFToken(_fraxlendPair);
-    //     return _toBorrowAmount(fraxlendPair, fraxlendPair.userBorrowShares(_user), false, ACCOUNT_FOR_INTEREST);
-    // }
+    // make sure to call `accrueInterest()` beforehand to ensure we get proper debt balance returned
+    function getMorphoBlueDebtBalance(Id _id, address _user) internal view returns (uint256) {
+        Market memory market = morphoBlue.market(_id);
+        return (
+            uint256((morphoBlue.position(_id, _user).borrowShares)).toAssetsUp(
+                market.totalBorrowAssets,
+                market.totalBorrowShares
+            )
+        );
+    }
 
-    // function _toBorrowAmount(
-    //     IFToken _fraxlendPair,
-    //     uint256 _shares,
-    //     bool _roundUp,
-    //     bool _previewInterest
-    // ) internal view virtual returns (uint256) {
-    //     return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
-    // }
+    // make sure to call `accrueInterest()` beforehand to ensure we get proper supply balance returned
+    function getMorphoBlueSupplyBalance(Id _id, address _user) internal view returns (uint256) {
+        Market memory market = morphoBlue.market(_id);
+        return (
+            uint256((morphoBlue.position(_id, _user).supplyShares)).toAssetsUp(
+                market.totalSupplyAssets,
+                market.totalSupplyShares
+            )
+        );
+    }
 }

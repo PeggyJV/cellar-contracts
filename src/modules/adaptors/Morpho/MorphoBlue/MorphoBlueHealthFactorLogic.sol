@@ -67,7 +67,22 @@ contract MorphoBlueHealthFactorLogic {
     }
 
     /**
+     * @dev helper function that returns actual supply position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
+     * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
+     */
+    function _userSupplyBalance(Id _id) internal view returns (uint256) {
+        Market memory market = morphoBlue.market(_id);
+        return (
+            uint256((morphoBlue.position(_id, address(this)).supplyShares)).toAssetsUp(
+                market.totalSupplyAssets,
+                market.totalSupplyShares
+            )
+        );
+    }
+
+    /**
      * @dev helper function that returns actual collateral position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
+     * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
     function _userCollateralBalance(Id _id) internal view virtual returns (uint256) {
         return uint256(morphoBlue.position(_id, msg.sender).collateral);
@@ -75,6 +90,7 @@ contract MorphoBlueHealthFactorLogic {
 
     /**
      * @dev helper function that returns actual borrow position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
+     * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
     function _userBorrowBalance(Id _id) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
