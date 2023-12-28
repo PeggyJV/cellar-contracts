@@ -178,7 +178,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
         uint256 sharesToRepay = debtAmountToRepay.toSharesUp(totalBorrowAssets, totalBorrowShares); // get the total assets and total borrow shares of the market
 
-        // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has.
+        // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has. If it does, that's how we handle doing type(uint256).max when we don't owe that much.
         // TODO - check if Morpho Blue reverts if there is no debt.
 
         tokenToRepay.safeApprove(address(morphoBlue), type(uint256).max);
