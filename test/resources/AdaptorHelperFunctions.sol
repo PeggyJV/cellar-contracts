@@ -330,7 +330,7 @@ contract AdaptorHelperFunctions {
 
     // MorphoBlueDebtAdaptor Functions
 
-    function _createBytesDataToBorromFromMorphoBlue(
+    function _createBytesDataToBorrowFromMorphoBlue(
         Id _id,
         uint256 _amountToBorrow
     ) internal pure returns (bytes memory) {

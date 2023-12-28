@@ -34,7 +34,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     uint32 public morphoBlueCollateralUSDCPosition = 1_000_005;
     uint32 public morphoBlueDebtUSDCPosition = 1_000_006;
     uint32 public morphoBlueSupplyWBTCPosition = 1_000_007;
-    uint32 public morphoBlueWBTCCollateralPosition = 1_000_008;
+    uint32 public morphoBlueCollateralWBTCPosition = 1_000_008;
     uint32 public morphoBlueWBTCDebtPosition = 1_000_009;
 
     // adaptorData for above positions
@@ -136,7 +136,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             abi.encode(wethMarketId)
         );
         registry.trustPosition(morphoBlueDebtWETHPosition, address(morphoBlueDebtAdaptor), abi.encode(wethMarketId));
-        registry.trustPosition(morphoBlueDebtWETHPosition, address(morphoBlueDebtAdaptor), abi.encode(wethMarketId));
         registry.trustPosition(
             morphoBlueSupplyUSDCPosition,
             address(morphoBlueSupplyAdaptor),
@@ -154,7 +153,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             abi.encode(wbtcMarketId)
         );
         registry.trustPosition(
-            morphoBlueWBTCCollateralPosition,
+            morphoBlueCollateralWBTCPosition,
             address(morphoBlueCollateralAdaptor),
             abi.encode(wbtcMarketId)
         );
@@ -371,6 +370,28 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         assertEq(mkrFToken.userCollateralBalance(address(cellar)), 0);
     }
 
+    // externalReceiver triggers when doing Strategist Function calls via adaptorCall within collateral adaptor.
+    function testBlockExternalReceiver(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100e18);
+        deal(address(WETH), address(this), assets);
+        cellar.setHoldingPosition(morphoBlueCollateralWETHPosition);
+        cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ WETH MorphoBlue weth:usdc market
+        // Strategist tries to withdraw USDC to their own wallet using Adaptor's `withdraw` function.
+        address maliciousStrategist = vm.addr(10);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            MorphoBlueCollateralAdaptor.withdraw.selector,
+            100_000e18,
+            maliciousStrategist,
+            abi.encode(wethMarketId),
+            abi.encode(0)
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
     // TODO - test that it reverts with untracked positions
     // TODO - write test checking balanceOf() within morphoBlueCollateralAdaptor
 
@@ -393,7 +414,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC); // TODO assumes that wethMarketId is a WETH:USDC market. Correct this if otherwise.
-        adaptorCalls[0] = _createBytesDataToBorromFromMorphoBlue(wethMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethMarketId, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         bytes memory adaptorData = abi.encode(wethMarketId);
@@ -429,7 +450,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data);
 
         // try borrowing from the wrong market that is untracked by cellar
-        adaptorCalls[0] = _createBytesDataToBorromFromMorphoBlue(usdcMarketId, assets / 2);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(usdcMarketId, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         vm.expectRevert(
             bytes(
@@ -457,7 +478,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC); // TODO assumes that wethMarketId is a WETH:USDC market. Correct this if otherwise.
-        adaptorCalls[0] = _createBytesDataToBorromFromMorphoBlue(wethMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethMarketId, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         bytes memory adaptorData = abi.encode(wethMarketId);
@@ -496,7 +517,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC); // TODO assumes that wethMarketId is a WETH:USDC market. Correct this if otherwise.
-        adaptorCalls[0] = _createBytesDataToBorromFromMorphoBlue(wethMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethMarketId, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         bytes memory adaptorData = abi.encode(wethMarketId);
@@ -521,84 +542,65 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         );
     }
 
-    // TODO - EIN THIS IS WHERE YOU LEFT OFF
-    // // This check stops strategists from taking on any debt in positions they do not set up properly.
-    // function testLoanInUntrackedPosition(uint256 assets) external {
-    //     uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
-    //     registry.trustPosition(
-    //         fraxlendCollateralUNIPosition,
-    //         address(collateralFTokenAdaptor),
-    //         abi.encode(UNI_FRAX_PAIR)
-    //     );
-    //     // purposely do not trust a fraxlendDebtUNIPosition
-    //     cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
-    //     cellar.addPosition(5, fraxlendCollateralUNIPosition, abi.encode(0), false);
-    //     assets = bound(assets, 0.1e18, 100e18);
-    //     uint256 uniFraxToBorrow = priceRouter.getValue(UNI, assets / 2, FRAX);
+    // This check stops strategists from taking on any debt in positions they do not set up properly.
+    // Try sending out adaptorCalls that has a call with an position that is unregistered within the cellar, should lead to a revert from the adaptor that is trusted.
+    function testLoanInUntrackedPosition(uint256 assets) external {
+        // purposely do not trust a debt position with WBTC with the cellar
+        cellar.addPositionToCatalogue(morphoBlueCollateralWBTCPosition); // decimals is 8 for wbtc
+        cellar.addPosition(5, morphoBlueCollateralWBTCPosition, abi.encode(0), false);
+        assets = bound(assets, 0.1e8, 100e8);
+        uint256 MBWbtcUsdcBorrowAmount = priceRouter.getValue(WBTC, assets / 2, USDC); // assume wbtcMarketId corresponds to a wbtc-usdc market on morpho blue
 
-    //     deal(address(UNI), address(cellar), assets);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
-    //     bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor
-    //     bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
-    //     adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
-    //     adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, uniFraxToBorrow);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCallsFirstAdaptor });
-    //     data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCallsSecondAdaptor });
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 DebtFTokenAdaptor.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
-    //                 address(UNI_FRAX_PAIR)
-    //             )
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
+        deal(address(WBTC), address(cellar), assets);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor
+        bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcMarketId, assets);
+        adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wbtcMarketId, MBWbtcUsdcBorrowAmount);
+        data[0] = Cellar.AdaptorCall({
+            adaptor: address(morphoBlueCollateralAdaptor),
+            callData: adaptorCallsFirstAdaptor
+        });
+        data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCallsSecondAdaptor });
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked.selector,
+                    wbtcMarketId
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
 
-    // // have strategist call repay function when no debt owed. Expect revert.
-    // function testRepayingDebtThatIsNotOwed(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100e18);
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
+    // have strategist call repay function when no debt owed. Expect revert.
+    // TODO - refine this as we see how morpho blue responds to attempts to repay debt positions that do not exist
+    function testRepayingDebtThatIsNotOwed(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100e18);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
 
-    //     adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFraxLendPair, assets / 2);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__CannotRepayNoDebt.selector, MKR_FRAX_PAIR)
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // // externalReceiver triggers when doing Strategist Function calls via adaptorCall.
-    // function testBlockExternalReceiver(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100e18);
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
-    //     // Strategist tries to withdraw USDC to their own wallet using Adaptor's `withdraw` function.
-    //     address maliciousStrategist = vm.addr(10);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = abi.encodeWithSelector(
-    //         CollateralFTokenAdaptor.withdraw.selector,
-    //         100_000e18,
-    //         maliciousStrategist,
-    //         abi.encode(MKR_FRAX_PAIR, MKR),
-    //         abi.encode(0)
-    //     );
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
-    //     vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
-    //     cellar.callOnAdaptor(data);
-    // }
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethMarketId, assets / 2);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__CannotRepayNoDebt.selector,
+                    wethMarketId
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
 
     /// MorphoBlueDebtAdaptor AND MorphoBlueCollateralAdaptor tests
 
-    // // okay just seeing if we can handle multiple fraxlend positions
+    // // okay just seeing if we can handle multiple morpho blue positions
+    // // EIN THIS IS WHERE YOU LEFT OFF
     // // TODO: EIN - Reformat adaptorCall var names and troubleshoot why uniFraxToBorrow has to be 1e18 right now
-    // function testMultipleFraxlendPositions() external {
+    // function testMultipleMorphoBluePositions() external {
     //     uint256 assets = 1e18;
 
     //     // Add new assets related to new fraxlendMarket; UNI_FRAX
