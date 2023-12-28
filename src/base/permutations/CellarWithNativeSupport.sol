@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Cellar, Registry, ERC20 } from "src/base/Cellar.sol";
+import { Cellar, Registry, ERC20, Math, SafeTransferLib, Address } from "src/base/Cellar.sol";
 
-contract CellarWithViewFunctions is Cellar {
+contract CellarWithNativeSuppport is Cellar {
+    //============================== IMMUTABLES ===============================
+
     constructor(
         address _owner,
         Registry _registry,
@@ -30,14 +32,8 @@ contract CellarWithViewFunctions is Cellar {
         )
     {}
 
-    function getCreditPosition(uint256 index) external view returns (uint32 position) {
-        return creditPositions[index];
-    }
-
-    function getPositionDataView(
-        uint32 position
-    ) external view returns (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configurationData) {
-        Registry.PositionData memory data = getPositionData[position];
-        return (data.adaptor, data.isDebt, data.adaptorData, data.configurationData);
-    }
+    /**
+     * @notice Implement receive so Cellar can accept native transfers.
+     */
+    receive() external payable {}
 }

@@ -212,7 +212,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         for (uint256 i = 0; i < 6; i++) {
             assertEq(positions[i], expectedPositions[i], "Positions should have been written to Cellar.");
             uint32 position = positions[i];
-            (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionData(position);
+            (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionDataView(position);
             assertEq(adaptor, expectedAdaptor[i], "Position adaptor not initialized properly.");
             assertEq(isDebt, false, "There should be no debt positions.");
             assertEq(adaptorData, expectedAdaptorData[i], "Position adaptor data not initialized properly.");
@@ -514,7 +514,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         assertFalse(cellar.isPositionUsed(wethPosition), "`isPositionUsed` should be false for WETH.");
-        (address zeroAddressAdaptor, , , ) = cellar.getPositionData(wethPosition);
+        (address zeroAddressAdaptor, , , ) = cellar.getPositionDataView(wethPosition);
         assertEq(zeroAddressAdaptor, address(0), "Removing position should have deleted position data.");
         // Check that adding a credit position as debt reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, wethPosition)));
@@ -567,7 +567,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Check that addPosition sets position data.
         cellar.addPosition(4, wethPosition, abi.encode(true), false);
         (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configurationData) = cellar
-            .getPositionData(wethPosition);
+            .getPositionDataView(wethPosition);
         assertEq(adaptor, address(erc20Adaptor), "Adaptor should be the ERC20 adaptor.");
         assertTrue(!isDebt, "Position should not be debt.");
         assertEq(adaptorData, abi.encode((WETH)), "Adaptor data should be abi encoded WETH.");
@@ -987,7 +987,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        Cellar debtCellar = _createCellarWithViewFunctions(
+        CellarWithViewFunctions debtCellar = _createCellarWithViewFunctions(
             cellarName,
             USDC,
             usdcPosition,
@@ -1001,7 +1001,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         debtCellar.addPosition(0, debtWethPosition, abi.encode(0), true);
 
         //constructor should set isDebt
-        (, bool isDebt, , ) = debtCellar.getPositionData(debtWethPosition);
+        (, bool isDebt, , ) = debtCellar.getPositionDataView(debtWethPosition);
         assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
         assertEq(debtCellar.getDebtPositions().length, 1, "Cellar should have 1 debt position");
 
@@ -1010,7 +1010,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         debtCellar.addPosition(0, debtWbtcPosition, abi.encode(0), true);
         assertEq(debtCellar.getDebtPositions().length, 2, "Cellar should have 2 debt positions");
 
-        (, isDebt, , ) = debtCellar.getPositionData(debtWbtcPosition);
+        (, isDebt, , ) = debtCellar.getPositionDataView(debtWbtcPosition);
         assertTrue(isDebt, "Constructor should have set WBTC as a debt position.");
         assertEq(debtCellar.getDebtPositions().length, 2, "Cellar should have 2 debt positions");
 

@@ -244,7 +244,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Get position data given position id.
      */
-    mapping(uint32 => Registry.PositionData) public getPositionData;
+    mapping(uint32 => Registry.PositionData) internal getPositionData;
 
     /**
      * @notice Get the ids of the credit positions currently used by the cellar.
