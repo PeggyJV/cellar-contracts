@@ -139,6 +139,10 @@ contract WithdrawQueue is ReentrancyGuard {
 
     /**
      * @notice Allows user to add/update their withdraw request.
+     * @notice It is possible for a withdraw request with a zero executionSharePrice to be made, and solved.
+     *         If this happens, users will be selling their shares for no assets in return.
+     *         To determine a safe executionSharePrice, share.previewRedeem should be used to get
+     *         a good share price, then the user can lower it from there to make their request fill faster.
      */
     function updateWithdrawRequest(ERC4626 share, WithdrawRequest calldata userRequest) external nonReentrant {
         WithdrawRequest storage request = userWithdrawRequest[msg.sender][share];
