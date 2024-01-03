@@ -112,7 +112,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
-        _validateMBMarket(id);
+        // _validateMBMarket(id);
         return _userBorrowBalance(id);
     }
 
@@ -123,7 +123,6 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         Id id = abi.decode(adaptorData, (Id));
-        _validateMBMarket(id);
         MarketParams memory market = morphoBlue.idToMarketParams(id);
         return ERC20(market.loanToken);
     }

@@ -85,7 +85,7 @@ contract MorphoBlueHealthFactorLogic {
      * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
     function _userCollateralBalance(Id _id) internal view virtual returns (uint256) {
-        return uint256(morphoBlue.position(_id, msg.sender).collateral);
+        return uint256(morphoBlue.position(_id, address(this)).collateral);
     }
 
     /**
