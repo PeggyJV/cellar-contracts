@@ -123,8 +123,13 @@ contract CellarWithShareLockPeriod is Cellar {
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
      */
-    function beforeDeposit(uint256 assets, uint256 shares, address receiver) internal view override {
-        super.beforeDeposit(assets, shares, receiver);
+    function beforeDeposit(
+        ERC20 depositAsset,
+        uint256 assets,
+        uint256 shares,
+        address receiver
+    ) internal view override {
+        super.beforeDeposit(depositAsset, assets, shares, receiver);
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
