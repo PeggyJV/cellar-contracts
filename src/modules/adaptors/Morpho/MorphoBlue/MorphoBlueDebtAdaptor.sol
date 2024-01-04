@@ -113,7 +113,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
         // _validateMBMarket(id);
-        return _userBorrowBalance(id);
+        return _userBorrowBalance(id, msg.sender);
     }
 
     /**
@@ -208,7 +208,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _id encoded bytes32 MB id that represents the MB market for this position.
      */
     function _validateMBMarket(Id _id) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_id)));
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(_id)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(_id);

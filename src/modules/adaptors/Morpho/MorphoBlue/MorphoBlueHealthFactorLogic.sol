@@ -7,6 +7,8 @@ import { MathLib, WAD } from "src/interfaces/external/Morpho/MorphoBlue/librarie
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
 import { UtilsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/UtilsLib.sol";
+import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Morpho Blue Health Factor Logic contract.
@@ -24,6 +26,7 @@ contract MorphoBlueHealthFactorLogic {
     using MathLib for uint256;
     using UtilsLib for uint256;
     using SharesMathLib for uint256;
+    using MorphoLib for IMorpho;
 
     /**
      * @notice The Morpho Blue contract on current network.
@@ -44,12 +47,27 @@ contract MorphoBlueHealthFactorLogic {
      * @return currentHF The health factor of the position atm
      */
     function _getHealthFactor(Id _id, MarketParams memory _market) internal view virtual returns (uint256 currentHF) {
-        uint256 borrowAmount = _userBorrowBalance(_id);
+        uint256 borrowAmount = _userBorrowBalance(_id, address(this));
+        console.log("borrowAmount: %s", borrowAmount);
         if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
+
+        // TODO - EIN THIS IS WHERE YOU LEFT OFF
+        // TODO: this might fix things here as the currentPositionLTV is way too small (likely cause of decimals). Get the decimals of collateral and debt tokens. Compare them. You want the resultant decimals to be 18. So we'll need to calculate a normalizingScaler and apply that to the currentPositionLTV calc. ORRRRR WE SOMEHOW GET THE NEEDED PRECISION CONSTANTS OR FOLLOW HOW WE DID IT WITH FRAXLEND: SEE COMMENTED OUT CODE BELOW FROM FRAXLEND
+        // (uint256 LTV_PRECISION, uint256 EXCHANGE_PRECISION) = _getConstants(_fraxlendPair);
+        // uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
+        //     _collateralAmount;
 
         uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
 
-        uint256 collateralAmount = uint256(_userCollateralBalance(_id).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)); // typecasting uint256 not sure if needed.
+        // get collateralAmount in borrowAmount for LTV calculations
+        uint256 collateralAmount = _userCollateralBalance(_id, address(this));
+        console.log(
+            "userCollateralBalance: %s, collateralPrice: %s, collateralAmount: %s",
+            _userCollateralBalance(_id, address(this)),
+            collateralPrice,
+            collateralAmount
+        );
+        collateralAmount = collateralAmount.mulDivDown(collateralPrice, ORACLE_PRICE_SCALE); // typecasting uint256 not sure if needed.
 
         // uint256 collateralAmount = uint256(
         //     (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
@@ -59,43 +77,42 @@ contract MorphoBlueHealthFactorLogic {
 
         // calculate the currentPositionLTV then compare it against the max lltv for this position
         // TODO check precision for all below.
-        uint256 currentPositionLTV = borrowAmount.mulDivDown(1e18, collateralAmount);
-        uint256 positionMaxLTV = (_market.lltv) * collateralAmount;
+        uint256 currentPositionLTV = borrowAmount.mulDivUp(1e36, collateralAmount); // (decimal math --> 6 + 18 / 18) --> we need to have this be dependent on the borrow decimals and the collateral decimals
+        // uint256 positionMaxLTV = (_market.lltv);
 
+        console.log("positionMaxLTV: %s, currentPositionLTV: %s", _market.lltv, currentPositionLTV);
         // convert LTVs to HF
-        currentHF = positionMaxLTV.mulDivDown(1e18, currentPositionLTV);
+        currentHF = (_market.lltv).mulDivDown(1e18, currentPositionLTV);
+        console.log("EIN"); // TODO - EIN THIS IS WHERE YOU LEFT OFF. THE ABOVE LoC is reverting because it is dividing or modulo by zero. Console log the values and see what's going on. Hunch is that currentPositionLTV is weirdly small. Need to console log it and further investigate. This was all to get the testTakingOutloans() test to work and thus all loan tests.
     }
 
     /**
      * @dev helper function that returns actual supply position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
-    function _userSupplyBalance(Id _id) internal view returns (uint256) {
+    function _userSupplyBalance(Id _id, address _user) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
-        return (
-            uint256((morphoBlue.position(_id, address(this)).supplyShares)).toAssetsUp(
-                market.totalSupplyAssets,
-                market.totalSupplyShares
-            )
-        );
+        // this currently doesn't account for interest, that needs to be done before calling this helper.
+        return (morphoBlue.supplyShares(_id, _user).toAssetsDown(market.totalSupplyAssets, market.totalSupplyShares));
     }
 
     /**
      * @dev helper function that returns actual collateral position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
-    function _userCollateralBalance(Id _id) internal view virtual returns (uint256) {
-        return uint256(morphoBlue.position(_id, address(this)).collateral);
+    function _userCollateralBalance(Id _id, address _user) internal view virtual returns (uint256) {
+        // return uint256(morphoBlue.position(_id, address(this)).collateral);
+        return morphoBlue.collateral(_id, _user);
     }
 
     /**
      * @dev helper function that returns actual borrow position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
-    function _userBorrowBalance(Id _id) internal view returns (uint256) {
+    function _userBorrowBalance(Id _id, address _user) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
         return (
-            uint256((morphoBlue.position(_id, address(this)).borrowShares)).toAssetsUp(
+            uint256((morphoBlue.position(_id, _user).borrowShares)).toAssetsUp(
                 market.totalBorrowAssets,
                 market.totalBorrowShares
             )

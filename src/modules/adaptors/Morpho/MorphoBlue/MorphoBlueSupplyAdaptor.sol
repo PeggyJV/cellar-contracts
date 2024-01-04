@@ -135,8 +135,11 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
-        return _balanceOf(market); // TODO maybe reduce to just 1 param (lose the `user` param)
+        return _userSupplyBalance(id, msg.sender);
+
+        // below LoCs are if we use periphery library
+        // MarketParams memory market = morphoBlue.idToMarketParams(id);
+        // return _balanceOf(market); // TODO maybe reduce to just 1 param (lose the `user` param)
     }
 
     /**
@@ -183,9 +186,11 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         _externalReceiverCheck(address(this));
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        _accrueInterest(market); // TODO - if we end up using periphery library (like we currently are) for _balanceOf() then we may not need to kick `accrueInterest()`. We sacrifice losing some dust / noise though I think. Need to test this.
+        _accrueInterest(market); // TODO - if we end up using periphery library for _balanceOf() then we may not need to kick `accrueInterest()`. We sacrifice losing some dust / noise though I think. Need to test this.
         if (_assets == type(uint256).max) {
-            _assets = _balanceOf(market); // TODO get supply amount from morpho blue
+            _assets = _userSupplyBalance(_id, address(this));
+            // // below is if we used periphery library code
+            // _assets = _balanceOf(market); // TODO get supply amount from morpho blue
         }
         // Withdraw assets from Morpho Blue.
         _withdraw(market, _assets, address(this));

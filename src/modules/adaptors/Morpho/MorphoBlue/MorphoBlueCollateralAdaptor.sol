@@ -106,10 +106,11 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param adaptorData the collateral asset deposited into Morpho Blue
      * TODO - could use the periphery library `MorphoBalancesLib` to get the expected balance (w/ simulated interest) but for now we just query the getter. We may switch to using the periphery library.
      * @return Cellar's balance of provided collateral to specified MB market.
+     * @dev normal static call, thus msg.sender for sommelier focus is calling cellar
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
-        return _userCollateralBalance(id);
+        return _userCollateralBalance(id, msg.sender);
     }
 
     /**
@@ -143,13 +144,12 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         ERC20 collateralToken = ERC20(market.collateralToken);
 
         uint256 amountToDeposit = _maxAvailable(collateralToken, _collateralToDeposit);
-        address morphoBlueAddress = address(morphoBlue);
-        collateralToken.safeApprove(morphoBlueAddress, amountToDeposit);
+        collateralToken.safeApprove(address(morphoBlue), amountToDeposit);
 
         _addCollateral(market, amountToDeposit);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(collateralToken, morphoBlueAddress);
+        _revokeExternalApproval(collateralToken, address(morphoBlue));
     }
 
     /**
@@ -163,7 +163,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
         _accrueInterest(market);
         if (_collateralAmount == type(uint256).max) {
-            _collateralAmount = _userCollateralBalance(_id);
+            _collateralAmount = _userCollateralBalance(_id, address(this));
         } // TODO - EIN - does it revert if the collateral would make the position not healthy?
 
         // remove collateral

@@ -25,6 +25,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     using stdStorage for StdStorage;
     using Address for address;
     using MarketParamsLib for MarketParams;
+        using SharesMathLib for uint256;
+
 
     MorphoBlueSupplyAdaptor public morphoBlueSupplyAdaptor;
     // TODO - do we need mocks adaptors?
@@ -49,10 +51,10 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     bool ACCOUNT_FOR_INTEREST = true;
 
-    //============================================ VIP ===========================================
+   //============================================ VIP ===========================================
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
-    IMorpho public morphoBlue = IMorpho();
+    IMorpho public morphoBlue = ();
     address DEFAULT_IRM = address(0);
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
@@ -63,7 +65,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     Id private wbtcUsdcMarketId;
     Id private usdcDaiMarketId;
     Id private usdcDaiMarketId2;
-    Id private UNTRUSTED_mbMarketFakeId = 1_009_000;
+    Id private UNTRUSTED_mbMarketFakeId = Id.wrap(bytes32(abi.encode(1_000_009)));
 
     uint256 initialAssets;
     uint256 initialLend;
@@ -177,11 +179,11 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             address(morphoBlueSupplyAdaptor),
             abi.encode(wbtcUsdcMarketId)
         );
-        registry.trustPosition(
-            morphoBlueSupplyUSDCPosition2,
-            address(morphoBlueSupplyAdaptor),
-            abi.encode(usdcDaiMarketId2)
-        );
+        // registry.trustPosition(
+        //     morphoBlueSupplyUSDCPosition2,
+        //     address(morphoBlueSupplyAdaptor),
+        //     abi.encode(usdcDaiMarketId2)
+        // );
 
         string memory cellarName = "Morpho Blue Supply Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -190,7 +192,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Approve new cellar to spend assets.
         address cellarAddress = deployer.getAddress(cellarName);
         deal(address(USDC), address(this), initialDeposit);
-        WETH.approve(cellarAddress, initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
 
         creationCode = type(Cellar).creationCode;
         constructorArgs = abi.encode(
@@ -238,7 +240,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         cellar.callOnAdaptor(data);
 
-        initialLend = _userSupplyBalance(usdcDaiMarketId);
+        initialLend = _userSupplyBalance(usdcDaiMarketId, address(cellar));
         assertEq(
             initialLend,
             initialAssets,
@@ -278,35 +280,35 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     //     );
     // }
 
-    // function testLendingUSDC(uint256 assets) external {
-    //     cellar.setHoldingPosition(usdcPosition); // set holding position back to erc20Position
+    function testLendingUSDC(uint256 assets) external {
+        cellar.setHoldingPosition(usdcPosition); // set holding position back to erc20Position
 
-    //     assets = bound(assets, 0.01e8, 100_000_000e8);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assets = bound(assets, 0.01e8, 100_000_000e8);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Strategist rebalances to lend USDC.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     // Lend USDC on Morpho Blue.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
-    //     }
+        // Strategist rebalances to lend USDC.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Lend USDC on Morpho Blue.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     uint256 newSupplyBalance = _userSupplyBalance(usdcDaiMarketId, address(cellar));
-    //     // check supply share balance for cellar has increased.
-    //     assertTrue(newSupplyBalance, initialLend, "Cellar should have supplied more USDC to MB market");
-    //     assertApproxEqAbs(
-    //         newSupplyBalance,
-    //         assets + initialAssets,
-    //         2,
-    //         "Rebalance should have lent all USDC on Morpho Blue."
-    //     );
-    // }
+        uint256 newSupplyBalance = _userSupplyBalance(usdcDaiMarketId, address(cellar));
+        // check supply share balance for cellar has increased.
+        assertTrue(newSupplyBalance, initialLend, "Cellar should have supplied more USDC to MB market");
+        assertApproxEqAbs(
+            newSupplyBalance,
+            assets + initialAssets,
+            2,
+            "Rebalance should have lent all USDC on Morpho Blue."
+        );
+    }
 
     // // w/ holdingPosition as morphoBlueSupplyUSDC, we make sure that strategists can lend to the holding position outright. ie.) some airdropped assets were swapped to USDC to use in morpho blue.
     // function testStrategistLendWithHoldingPosition(uint256 assets) external {
