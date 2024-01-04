@@ -57,7 +57,7 @@ contract MorphoBlueHealthFactorLogic {
         // uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
         //     _collateralAmount;
 
-        uint256 collateralPrice = IOracle(_market.oracle).price(); // TODO - make sure this is uint256 or if it i needs to be typecast.
+        uint256 collateralPrice = IOracle(_market.oracle).price(); // recall from IOracle.sol that the units will be 10 ** (36 - collateralUnits + borrowUnits) BUT collateralPrice is in units of borrow.
 
         // get collateralAmount in borrowAmount for LTV calculations
         uint256 collateralAmount = _userCollateralBalance(_id, address(this));
@@ -67,23 +67,23 @@ contract MorphoBlueHealthFactorLogic {
             collateralPrice,
             collateralAmount
         );
-        collateralAmount = collateralAmount.mulDivDown(collateralPrice, ORACLE_PRICE_SCALE); // typecasting uint256 not sure if needed.
+        uint256 collateralAmountInBorrowUnits = collateralAmount.mulDivDown(collateralPrice, ORACLE_PRICE_SCALE); // typecasting uint256 not sure if needed.
 
         // uint256 collateralAmount = uint256(
         //     (morphoBlue.position(_id)(address(this)).collateral).mulDivDown(collateralPrice, ORACLE_PRICE_SCALE)
         // ); // TODO -  remove if going with "reformatted" versions w/ _userCollateralBalance
 
-        if (collateralAmount == 0) return 0;
+        if (collateralAmountInBorrowUnits == 0) return 0;
 
         // calculate the currentPositionLTV then compare it against the max lltv for this position
         // TODO check precision for all below.
-        uint256 currentPositionLTV = borrowAmount.mulDivUp(1e36, collateralAmount); // (decimal math --> 6 + 18 / 18) --> we need to have this be dependent on the borrow decimals and the collateral decimals
-        // uint256 positionMaxLTV = (_market.lltv);
+        uint256 LTV_PRECISION = 1e18;
+        uint256 currentPositionLTV = borrowAmount.mulDivUp(LTV_PRECISION, collateralAmountInBorrowUnits); // TODO - confirm that this is the precision we want via console logs.
 
-        console.log("positionMaxLTV: %s, currentPositionLTV: %s", _market.lltv, currentPositionLTV);
+        console.log("positionMaxLTV: %s, currentPositionLTV: %s, collateralAmountInBorrowUnits: %s", _market.lltv, currentPositionLTV, collateralAmountInBorrowUnits);
         // convert LTVs to HF
         currentHF = (_market.lltv).mulDivDown(1e18, currentPositionLTV);
-        console.log("EIN"); // TODO - EIN THIS IS WHERE YOU LEFT OFF. THE ABOVE LoC is reverting because it is dividing or modulo by zero. Console log the values and see what's going on. Hunch is that currentPositionLTV is weirdly small. Need to console log it and further investigate. This was all to get the testTakingOutloans() test to work and thus all loan tests.
+        console.log("CURRENT HF: %s, max HF: %s", currentHF, 1.05e18); // TODO - EIN THIS IS WHERE YOU LEFT OFF. THE ABOVE LoC is reverting because it is dividing or modulo by zero. Console log the values and see what's going on. Hunch is that currentPositionLTV is weirdly small. Need to console log it and further investigate. This was all to get the testTakingOutloans() test to work and thus all loan tests.
     }
 
     /**

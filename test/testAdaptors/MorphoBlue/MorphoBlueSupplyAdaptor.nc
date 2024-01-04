@@ -54,8 +54,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
    //============================================ VIP ===========================================
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
-    IMorpho public morphoBlue = ();
-    address DEFAULT_IRM = address(0);
+    IMorpho public morphoBlue = IMorpho();
+    address DEFAULT_IRM = (); 
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     MarketParams private wethUsdcMarket;

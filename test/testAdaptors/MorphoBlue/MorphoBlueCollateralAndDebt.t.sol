@@ -45,8 +45,8 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     //============================================ VIP ===========================================
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
-    IMorpho public morphoBlue = ();
-    address DEFAULT_IRM = address(0);
+    IMorpho public morphoBlue = IMorpho();
+    address DEFAULT_IRM = ();
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     // Chainlink PriceFeeds
@@ -130,10 +130,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockDaiUsd));
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
-        mockWethUsd.setMockAnswer(2200e8);
-        mockUsdcUsd.setMockAnswer(1e8);
-        mockWbtcUsd.setMockAnswer(42000e8);
-        mockDaiUsd.setMockAnswer(1e8);
+        // set mock prices for chainlink price feeds, but add in params to adjust the morphoBlue price format needed --> recall from IOracle.sol that the units will be 10 ** (36 - collateralUnits + borrowUnits)
+
+        mockWethUsd.setMockAnswer(2200e8, WETH, USDC);
+        mockUsdcUsd.setMockAnswer(1e8, USDC, USDC);
+        mockWbtcUsd.setMockAnswer(42000e8, WBTC, USDC);
+        mockDaiUsd.setMockAnswer(1e8, DAI, USDC);
 
         // Setup Cellar:
 
@@ -478,25 +480,20 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     /// MorphoBlueDebtAdaptor tests
 
     // test taking loans w/ a morpho blue market
-    // TODO - not sure why this is failing with "low-level delegate call failed"
-    function testTakingOutLoans() external {
-        uint256 assets = 1e18;
-        // assets = bound(assets, 1e18, 100e18);
+    function testTakingOutLoans(uint256 assets) external {
+        assets = bound(assets, 1e18, 100e18);
         initialAssets = cellar.totalAssets();
         console.log("Cellar WETH balance: %s, initialAssets: %s", WETH.balanceOf(address(cellar)), initialAssets);
         deal(address(WETH), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // TODO EIN THIS IS WHERE YOU LEFT OFF - prank being a supplier, supply USDC so overflows don't happen when borrowing. See if that works.
         vm.startPrank(SUPPLIER); // SUPPLIER
-        uint256 supplyAmount = priceRouter.getValue(WETH, assets * 1000, USDC); // TODO assumes that wethUsdcMarketId is a WETH:USDC market. Correct this if otherwise.
+        uint256 supplyAmount = priceRouter.getValue(WETH, assets * 1000, USDC); // assumes that wethUsdcMarketId is a WETH:USDC market. Correct this if otherwise.
 
         deal(address(USDC), SUPPLIER, supplyAmount);
         USDC.safeApprove(address(morphoBlue), supplyAmount);
         morphoBlue.supply(wethUsdcMarket, supplyAmount, 0, SUPPLIER, hex"");
         vm.stopPrank();
-
-        // ///
 
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -510,22 +507,22 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        // bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
 
-        // vm.prank(address(cellar));
-        // uint256 newBalance = morphoBlueDebtAdaptor.balanceOf(adaptorData);
-        // assertApproxEqAbs(
-        //     newBalance,
-        //     borrowAmount,
-        //     1,
-        //     "Cellar should have debt recorded within Morpho Blue market equal to assets / 2"
-        // );
-        // assertApproxEqAbs(
-        //     USDC.balanceOf(address(cellar)),
-        //     borrowAmount,
-        //     1,
-        //     "Cellar should have borrow amount equal to assets / 2"
-        // );
+        vm.prank(address(cellar));
+        uint256 newBalance = morphoBlueDebtAdaptor.balanceOf(adaptorData);
+        assertApproxEqAbs(
+            newBalance,
+            borrowAmount,
+            1,
+            "Cellar should have debt recorded within Morpho Blue market equal to assets / 2"
+        );
+        assertApproxEqAbs(
+            USDC.balanceOf(address(cellar)),
+            borrowAmount,
+            1,
+            "Cellar should have borrow amount equal to assets / 2"
+        );
     }
 
     // test taking loan w/ the wrong pair that we provided collateral to
