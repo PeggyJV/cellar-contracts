@@ -5,6 +5,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
+import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 
 /**
  * @title Morpho Blue Debt Token Adaptor
@@ -19,6 +20,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using SharesMathLib for uint256;
+    using MorphoLib for IMorpho;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(MarketParams marketParams)
@@ -164,18 +166,22 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function repayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
-
-        // TODO: as per chat w/ Crispy accrueInterest() and then add a conditional logic check that it takes the total debt if the passed in repayAmount is greater than the debt that is actually within the position.
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        ERC20 tokenToRepay = ERC20(market.loanToken);
+        _accrueInterest(market); // either call this or use periphery library.
 
+        ERC20 tokenToRepay = ERC20(market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
 
         // using Morpho sharesLibrary we can calculate the sharesToRepay from the debtAmount
         uint256 totalBorrowAssets = morphoBlue.market(_id).totalBorrowAssets;
         uint256 totalBorrowShares = morphoBlue.market(_id).totalBorrowShares;
-
         uint256 sharesToRepay = debtAmountToRepay.toSharesUp(totalBorrowAssets, totalBorrowShares); // get the total assets and total borrow shares of the market
+
+        // MorphoBlue reverts w/ underflow/overflow error if trying to repay with more than we have. That said, we will manage when strategists try to pass in type(uint256).max
+        uint256 sharesAccToMorphoBlue = morphoBlue.borrowShares(_id, address(this));
+        if (sharesAccToMorphoBlue < sharesToRepay) {
+            sharesToRepay = sharesAccToMorphoBlue;
+        }
 
         // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has. If it does, that's how we handle doing type(uint256).max when we don't owe that much.
         // TODO - check if Morpho Blue reverts if there is no debt. If it doesn't have its own revert, then use MorphoBlueDebtAdaptor__CannotRepayNoDebt();
