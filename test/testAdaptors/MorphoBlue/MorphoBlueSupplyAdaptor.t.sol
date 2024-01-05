@@ -241,7 +241,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             initialLend,
             initialAssets,
             "Should be equal as the test setup includes lending initialDeposit of USDC into Morpho Blue"
-        ); 
+        );
     }
 
     // Set up has supply usdc position fully trusted (cellar and registry), weth and wbtc supply positions trusted w/ registry. mbsupplyusdc position is holding position.
@@ -316,6 +316,38 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         assertGt(newSupplyBalance, initialLend, "Cellar should have supplied more USDC to MB market");
         assertEq(newSupplyBalance, assets + initialAssets, "Rebalance should have lent all USDC on Morpho Blue.");
     }
+
+    // function testBalanceCalculationMethods(uint256 assets) external {
+    //     cellar.setHoldingPosition(usdcPosition); // set holding position back to erc20Position
+
+    //     assets = bound(assets, 0.01e6, 100_000_000e6);
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+
+    //     // Strategist rebalances to lend USDC.
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     // Lend USDC on Morpho Blue.
+    //     {
+    //         bytes[] memory adaptorCalls = new bytes[](1);
+    //         adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+    //         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
+    //     }
+
+    //     // Perform callOnAdaptor.
+    //     cellar.callOnAdaptor(data);
+
+    //     uint256 newSupplyBalanceAccToMBLib = _userSupplyBalance(usdcDaiMarketId, address(cellar));
+    //     uint256 supplyBalanceDirectFromMorphoBlue = uint256(
+    //         (morphoBlue.position(wethUsdcMarketId, address(cellar)).supplyShares).toAssetsDown(
+    //             market.totalSupplyAssets,
+    //             market.totalSupplyShares
+    //         )
+    //     );
+    //     bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+    //             vm.prank(address(cellar));
+
+    //     uint256 balanceOfAccToSupplyAdaptor = morphoBlueSupplyAdaptor.balanceOf(adaptorData);
+    // }
 
     // w/ holdingPosition as morphoBlueSupplyUSDC, we make sure that strategists can lend to the holding position outright. ie.) some airdropped assets were swapped to USDC to use in morpho blue.
     function testStrategistLendWithHoldingPosition(uint256 assets) external {

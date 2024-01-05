@@ -351,6 +351,13 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             assets,
             "Assets (except initialAssets) should be collateral provided to Morpho Blue Market."
         );
+
+        // test balanceOf() of collateralAdaptor
+        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        vm.prank(address(cellar));
+        uint256 newBalance = morphoBlueCollateralAdaptor.balanceOf(adaptorData);
+
+        assertEq(newBalance, newCellarCollateralBalance, "CollateralAdaptor - balanceOf() additional tests");
     }
 
     // carry out a total assets test checking that balanceOf works for adaptors.
@@ -474,8 +481,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data);
     }
 
-    // // TODO - write test checking balanceOf() within morphoBlueCollateralAdaptor
-
     /// MorphoBlueDebtAdaptor tests
 
     // test taking loans w/ a morpho blue market
@@ -514,7 +519,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             newBalance,
             borrowAmount,
             1,
-            "Cellar should have debt recorded within Morpho Blue market equal to assets / 2"
+            "DebtAdaptor - balanceOf() additional tests: Cellar should have debt recorded within Morpho Blue market equal to assets / 2"
         );
         assertApproxEqAbs(
             USDC.balanceOf(address(cellar)),
@@ -634,8 +639,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         vm.expectRevert(bytes("inconsistent input"));
         cellar.callOnAdaptor(data);
     }
-
-    // // TODO - write test checking balanceOf() within morphoBlueDebtAdaptor
 
     function testRepayPartialDebt(uint256 assets) external {
         assets = bound(assets, 1e18, 100e18);
