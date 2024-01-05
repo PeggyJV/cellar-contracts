@@ -241,7 +241,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             initialLend,
             initialAssets,
             "Should be equal as the test setup includes lending initialDeposit of USDC into Morpho Blue"
-        );
+        ); 
     }
 
     // Set up has supply usdc position fully trusted (cellar and registry), weth and wbtc supply positions trusted w/ registry. mbsupplyusdc position is holding position.
