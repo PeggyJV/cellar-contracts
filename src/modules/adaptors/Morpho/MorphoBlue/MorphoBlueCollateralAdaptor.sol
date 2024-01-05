@@ -21,10 +21,9 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(MarketParams marketParams)
+    // adaptorData = abi.encode(Id id)
     // Where:
-    // `marketParams` is the  struct this adaptor is working with.
-    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData? See detailed thoughts in MorphoBlueSupplyAdaptor.sol
+    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -164,7 +163,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         _accrueInterest(market);
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(_id, address(this));
-        } // TODO - EIN - does it revert if the collateral would make the position not healthy?
+        }
 
         // remove collateral
         _removeCollateral(market, _collateralAmount);

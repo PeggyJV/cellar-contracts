@@ -24,14 +24,9 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using MorphoBalancesLib for IMorpho;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(MarketParams marketParams)
+    // adaptorData = abi.encode(Id id)
     // Where:
-    // `marketParams` is the  struct this adaptor is working with.
-    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData? I think we should. It is used as bytes32 within Morpho, but I think it's just ID. So if we pass in bytes32 Id, decode that, then pass it into the functions we should access what we need from Morpho. Talk to Crispy on it, but could just test/try compiling and see what works.
-    // More design notes: MorphoBalancesLib, MorphoLib, MorphoStorageLib are periphery contrats with getters for integration. There may be useful things from it.
-    // Questions: 1. From `MorphoBalancesLib.sol` it seems that balances can be obtained that have latest accruedInterest applied except for total borrow shares (and it doesn't have interest accrual applied to it anyways). This makes sense bc underlying borrow amounts are increased, and supply assets, not share amounts.
-    // NOTE - if we have a cellar as the fee_recipient for a morpho market, then we cannot use some of the getters within the periphery contracts as outlined in their natspec.
-    // Referencing `MorphoBalancesLibTest.t.sol` from Morpho Blue codebase to use `MorphoBalancesLib.sol` for exposed getters for morpho blue markets (for user and in total)
+    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market    // More design notes: MorphoBalancesLib, MorphoLib, MorphoStorageLib are periphery contrats with getters for integration. There may be useful things from it.
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -71,7 +66,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param assets the amount of assets to lend on Morpho Blue
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market Id
      * @dev configurationData is NOT used
-     * TODO: for adaptorData, see TODO at start of contract. Once that's sorted adjust rest of code as needed.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho Blue.
@@ -164,7 +158,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     /**
      * @notice Allows strategists to lend specific asset on Morpho Blue market
-     * TODO
      */
     function lendToMorphoBlue(Id _id, uint256 _assets) public {
         _validateMBMarket(_id);
@@ -179,7 +172,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     /**
      * @notice Allows strategists to withdraw underlying asset plus interest.
-     * TODO - do we want to allow strategists to specify shares?
      */
     function withdrawFromMorphoBlue(Id _id, uint256 _assets) public {
         // Run external receiver check.
@@ -250,12 +242,13 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         morphoBlue.withdraw(_market, _assets, 0, _onBehalf, _onBehalf);
     }
 
-    /**
-     * @dev Returns the amount of tokens owned by `account`.
-     * @param _market The specified MB Market
-     * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
-     */
-    function _balanceOf(MarketParams memory _market) internal view virtual returns (uint256) {
-        return morphoBlue.expectedSupplyAssets(_market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
-    }
+    // /**
+    //  * @dev Returns the amount of tokens owned by `account`.
+    //  * @param _market The specified MB Market
+    //  * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
+    //  * NOTE - this is only if we use the periphery library for this adaptor. It is not used right now as it is commented out
+    //  */
+    // function _balanceOf(MarketParams memory _market) internal view virtual returns (uint256) {
+    //     return morphoBlue.expectedSupplyAssets(_market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
+    // }
 }

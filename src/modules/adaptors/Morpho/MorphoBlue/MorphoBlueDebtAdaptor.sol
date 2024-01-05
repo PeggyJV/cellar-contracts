@@ -23,10 +23,9 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using MorphoLib for IMorpho;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(MarketParams marketParams)
+    // adaptorData = abi.encode(Id id)
     // Where:
-    // `marketParams` is the  struct this adaptor is working with.
-    // TODO: Question for Morpho --> should we actually use `bytes32 Id` for the adaptorData?
+    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -114,7 +113,6 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
-        // _validateMBMarket(id);
         return _userBorrowBalance(id, msg.sender);
     }
 
@@ -182,10 +180,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         if (sharesAccToMorphoBlue < sharesToRepay) {
             sharesToRepay = sharesAccToMorphoBlue;
         }
-
-        // TODO - check that Morpho Blue reverts if the repayment amount exceeds the amount of debt the user even has. If it does, that's how we handle doing type(uint256).max when we don't owe that much.
-        // TODO - check if Morpho Blue reverts if there is no debt. If it doesn't have its own revert, then use MorphoBlueDebtAdaptor__CannotRepayNoDebt();
-
+        
         tokenToRepay.safeApprove(address(morphoBlue), type(uint256).max);
         _repayAsset(market, sharesToRepay, address(this));
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));
