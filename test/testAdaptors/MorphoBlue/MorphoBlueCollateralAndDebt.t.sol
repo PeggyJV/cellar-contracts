@@ -47,7 +47,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
-    address DEFAULT_IRM = ();
+    address DEFAULT_IRM = (); 
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     // Chainlink PriceFeeds

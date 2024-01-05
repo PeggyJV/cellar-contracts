@@ -98,7 +98,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         Id id = abi.decode(adaptorData, (Id));
         _validateMBMarket(id);
         MarketParams memory market = morphoBlue.idToMarketParams(id);
-        _withdraw(market, assets, address(this));
+        _withdraw(market, assets, receiver);
     }
 
     /**
@@ -239,7 +239,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      * @param _onBehalf The address to which the Asset Tokens will be transferred
      */
     function _withdraw(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
-        morphoBlue.withdraw(_market, _assets, 0, _onBehalf, _onBehalf);
+        morphoBlue.withdraw(_market, _assets, 0, address(this), _onBehalf);
     }
 
     // /**

@@ -52,7 +52,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
-    address DEFAULT_IRM = ();
+    address DEFAULT_IRM = (); 
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     MarketParams private wethUsdcMarket;
@@ -265,10 +265,11 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
+        USDC.safeApprove(address(cellar), type(uint256).max);
         cellar.withdraw(assets / 2, address(this), address(this));
 
         assertEq(
-            USDC.balanceOf(address(cellar)),
+            USDC.balanceOf(address(this)),
             assets / 2,
             "testWithdraw: half of assets should have been withdrawn to cellar."
         );
@@ -540,15 +541,14 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         uint256 withdrawAmount = cellar.maxWithdraw(address(this));
         cellar.withdraw(withdrawAmount, address(this), address(this));
 
-        // TODO - Crispy, these asserts below should be address(this), but it seems to just be unwinding from morphoBlue and not safetransferring to the test address as it should be doing from morphoBlue (see their codebase for withdraw()).
         assertApproxEqAbs(
-            USDC.balanceOf(address(cellar)),
+            USDC.balanceOf(address(this)),
             withdrawAmount,
             1,
             "User should have gotten all their USDC (minus some dust)"
         );
         assertEq(
-            USDC.balanceOf(address(cellar)),
+            USDC.balanceOf(address(this)),
             withdrawAmount,
             "User should have gotten all their USDC (minus some dust)"
         );
@@ -629,7 +629,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Have user withdraw the loanToken.
         deal(address(USDC), address(this), 0);
         cellar.withdraw(liquidLoanToken2, address(this), address(this));
-        assertEq(USDC.balanceOf(address(cellar)), liquidLoanToken2, "User should have received liquid loanToken."); // TODO - Crispy, this should be address(this), but it seems to just be unwinding from morphoBlue and not safetransferring to the test address as it should be doing from morphoBlue (see their codebase for withdraw()).
+        assertEq(USDC.balanceOf(address(this)), liquidLoanToken2, "User should have received liquid loanToken."); 
     }
 
     // TODO - Review with Crispy as the pricing is stale although I tried troubleshooting with setMockUpdatedAt.As well, other tests with whale didn't throw stale pricing reverts
