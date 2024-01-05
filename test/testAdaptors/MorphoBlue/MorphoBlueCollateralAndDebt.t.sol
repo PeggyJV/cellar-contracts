@@ -47,10 +47,10 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     //============================================ VIP ===========================================
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
-    IMorpho public morphoBlue = ();
+    IMorpho public morphoBlue = IMorpho();
     address DEFAULT_IRM = ();
     uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-
+    
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
     MockDataFeedForMorphoBlue private mockUsdcUsd;
@@ -430,7 +430,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     }
 
     // test strategist input param for _collateralAmount to be type(uint256).max
-    // TODO - debug
     function testRemoveAllCollateralWithTypeUINT256Max(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
