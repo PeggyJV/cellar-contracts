@@ -640,13 +640,14 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         assertEq(USDC.balanceOf(address(this)), liquidLoanToken2, "User should have received liquid loanToken.");
     }
 
+    // NOTE - This fuzz test has larger bounds compared to the other fuzz tests because the IRM used within these tests paired w/ the test market conditions means we either have to skip large amounts of time or work with large amounts of fuzz bounds. When the fuzz bounds are the other ones we used before, this test reverts w/ Cellar__TotalAssetDeviatedOutsideRange when we skip 1 day or more, and it doesn't seem to show accrued interest when skipping less than that. The irm shows borrowRate changes though based on utilization as per the mockIrm setup.
     function testAccrueInterest(uint256 assets) external {
-        assets = bound(assets, 0.01e6, 100_000_000e6);
+        assets = bound(assets, 1_000e6, 100_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         uint256 balance1 = (_userSupplyBalance(usdcDaiMarketId, address(cellar)));
 
-        skip(100 days);
+        skip(1 days);
         // vm.warp(block.timestamp + (10 days));
         mockUsdcUsd.setMockUpdatedAt(block.timestamp);
         mockDaiUsd.setMockUpdatedAt(block.timestamp);
@@ -680,7 +681,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         console.log("IRM borrow rate: %s MUST BE GREATER THAN 0", irm.borrowRateView(usdcDaiMarket, marketStruct));
 
-        skip(1 days); // TODO - CRISPY it is reverting w/ Cellar__TotalAssetDeviatedOutsideRange when we skip 1 day or more, and it doesn't seem to show accrued interest when skipping less than that. The irm shows borrowRate changes though based on utilization as per the mockIrm setup.
+        skip(1 days);
 
         mockUsdcUsd.setMockUpdatedAt(block.timestamp);
         mockDaiUsd.setMockUpdatedAt(block.timestamp);

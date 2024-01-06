@@ -49,7 +49,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     address public morphoBlueOwner = ;
     address public DEFAULT_IRM = ;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-    address public FEE_RECIPIENT = address(9000);
 
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
