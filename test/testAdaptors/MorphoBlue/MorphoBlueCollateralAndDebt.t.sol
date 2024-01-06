@@ -44,12 +44,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     //============================================ VIP ===========================================
 
-    // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
+       // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
     address public morphoBlueOwner = ;
     address public DEFAULT_IRM = ;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-
+    
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
     MockDataFeedForMorphoBlue private mockUsdcUsd;
@@ -737,9 +737,8 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     /// MorphoBlueDebtAdaptor AND MorphoBlueCollateralAdaptor tests
 
     // okay just seeing if we can handle multiple morpho blue positions
-    function testMultipleMorphoBluePositions() external {
-        uint256 assets = 1e18;
-        // assets = bound(assets, 0.1e18, 100e18); // TODO - CRISPY - investigate why transferFrom is failing on the supply when fuzz testing.
+    function testMultipleMorphoBluePositions(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100e18); 
 
         // Add new assets positions to cellar
         cellar.addPositionToCatalogue(morphoBlueCollateralWBTCPosition);
@@ -761,7 +760,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(WBTC), address(cellar), wbtcAssets);
         uint256 wethUSDCToBorrow = priceRouter.getValue(WETH, assets / 2, USDC);
         uint256 wbtcUSDCToBorrow = priceRouter.getValue(WBTC, wbtcAssets / 2, USDC);
-        // uint256 wbtcUSDCToBorrow = 1e8; // NOTE - this test failed in fraxlend tests before and we had to resort to having the above line commented out and this line used instead.
 
         // Supply markets so we can test borrowing from cellar with multiple positions
         vm.startPrank(SUPPLIER); // SUPPLIER
@@ -774,13 +772,10 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         vm.stopPrank();
 
-        ///
-
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
-        bytes[] memory adaptorCallsFirstAdaptor = new bytes[](2); // collateralAdaptor, MKR already deposited due to cellar holding position
+        bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
-        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
-        adaptorCallsFirstAdaptor[1] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarketId, wbtcAssets);
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarketId, wbtcAssets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, wethUSDCToBorrow);
         adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarketId, wbtcUSDCToBorrow);
         data[0] = Cellar.AdaptorCall({
