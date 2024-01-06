@@ -13,10 +13,8 @@ import "test/resources/MainnetStarter.t.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
+import { IrmMock } from "src/mocks/IrmMock.sol";
 
-/**
- * TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
- */
 contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -52,8 +50,9 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
-    address DEFAULT_IRM = (); 
-    uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
+    address public morphoBlueOwner = ;
+    address public DEFAULT_IRM = ;
+    uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     MarketParams private wethUsdcMarket;
     MarketParams private wbtcUsdcMarket;
@@ -65,6 +64,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     uint256 initialAssets;
     uint256 initialLend;
+    IrmMock internal irm;
+    address public FEE_RECIPIENT = address(9000);
 
     function setUp() external {
         // Setup forked environment.
@@ -130,11 +131,18 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // note - oracle param w/ MarketParams struct is for collateral price
         // setup morphoBlue WETH:USDC market
 
+        irm = new IrmMock();
+
+        vm.startPrank(morphoBlueOwner);
+        morphoBlue.enableIrm(address(irm));
+        morphoBlue.setFeeRecipient(FEE_RECIPIENT);
+        vm.stopPrank();
+
         wethUsdcMarket = MarketParams({
             loanToken: address(USDC),
             collateralToken: address(WETH),
             oracle: address(mockWethUsd),
-            irm: DEFAULT_IRM,
+            irm: address(irm),
             lltv: DEFAULT_LLTV
         });
 
@@ -143,7 +151,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             loanToken: address(USDC),
             collateralToken: address(WBTC),
             oracle: address(mockWbtcUsd),
-            irm: DEFAULT_IRM,
+            irm: address(irm),
             lltv: DEFAULT_LLTV
         });
 
@@ -152,7 +160,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             loanToken: address(USDC),
             collateralToken: address(DAI),
             oracle: address(mockUsdcUsd),
-            irm: DEFAULT_IRM,
+            irm: address(irm),
             lltv: DEFAULT_LLTV
         });
 
@@ -629,17 +637,19 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Have user withdraw the loanToken.
         deal(address(USDC), address(this), 0);
         cellar.withdraw(liquidLoanToken2, address(this), address(this));
-        assertEq(USDC.balanceOf(address(this)), liquidLoanToken2, "User should have received liquid loanToken."); 
+        assertEq(USDC.balanceOf(address(this)), liquidLoanToken2, "User should have received liquid loanToken.");
     }
 
-    // TODO - Review with Crispy as the pricing is stale although I tried troubleshooting with setMockUpdatedAt.As well, other tests with whale didn't throw stale pricing reverts
     function testAccrueInterest(uint256 assets) external {
         assets = bound(assets, 0.01e6, 100_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         uint256 balance1 = (_userSupplyBalance(usdcDaiMarketId, address(cellar)));
 
-        vm.warp(block.timestamp + (10 days));
+        skip(100 days);
+        // vm.warp(block.timestamp + (10 days));
+        mockUsdcUsd.setMockUpdatedAt(block.timestamp);
+        mockDaiUsd.setMockUpdatedAt(block.timestamp);
 
         // Strategist rebalances to accrue interest in markets
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -648,7 +658,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlue(usdcDaiMarketId);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
-        mockUsdcUsd.setMockUpdatedAt(block.timestamp);
 
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
@@ -665,10 +674,24 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         morphoBlue.supplyCollateral(market, collateralToProvide, whaleBorrower, hex"");
 
         // now borrow
-        morphoBlue.borrow(market, assets / 3, 0, whaleBorrower, whaleBorrower);
+        morphoBlue.borrow(market, assets / 5, 0, whaleBorrower, whaleBorrower);
         vm.stopPrank();
+        Market memory marketStruct = morphoBlue.market(usdcDaiMarketId);
+
+        console.log("IRM borrow rate: %s MUST BE GREATER THAN 0", irm.borrowRateView(usdcDaiMarket, marketStruct));
+
+        skip(1 days); // TODO - CRISPY it is reverting w/ Cellar__TotalAssetDeviatedOutsideRange when we skip 1 day or more, and it doesn't seem to show accrued interest when skipping less than that. The irm shows borrowRate changes though based on utilization as per the mockIrm setup.
 
         mockUsdcUsd.setMockUpdatedAt(block.timestamp);
+        mockDaiUsd.setMockUpdatedAt(block.timestamp);
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlue(usdcDaiMarketId);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
         uint256 balance3 = (_userSupplyBalance(usdcDaiMarketId, address(cellar)));
 
         assertGt(balance3, balance2, "Supplied loanAsset into MorphoBlue should have accrued interest.");

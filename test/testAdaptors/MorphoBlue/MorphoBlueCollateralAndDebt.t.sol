@@ -13,12 +13,11 @@ import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/librari
 import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
 import "forge-std/console.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
+import { IrmMock } from "src/mocks/IrmMock.sol";
 
 /**
  * @notice Test provision of collateral and borrowing on MorphoBlue Markets
  * @author 0xEinCodes, crispymangoes
- * TODO refactor tests to work with a wstETH:WETH market (wsteth is the collateral)
- * TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
  */
 contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -47,8 +46,10 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
-    address DEFAULT_IRM = (); 
-    uint256 DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
+    address public morphoBlueOwner = ;
+    address public DEFAULT_IRM = ;
+    uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
+    address public FEE_RECIPIENT = address(9000);
 
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
@@ -74,6 +75,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     Id private usdcDaiMarketId;
 
     address internal SUPPLIER;
+    IrmMock internal irm;
 
     function setUp() public {
         // Setup forked environment.
@@ -736,10 +738,9 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     /// MorphoBlueDebtAdaptor AND MorphoBlueCollateralAdaptor tests
 
     // okay just seeing if we can handle multiple morpho blue positions
-    // TODO: EIN - May have to deal with similar error that was experienced with fraxlend adaptors: troubleshoot why wbtcUSDCToBorrow might have to be 1e18 right now
     function testMultipleMorphoBluePositions() external {
         uint256 assets = 1e18;
-        // assets = bound(assets, 0.1e18, 100e18); // TODO - investigate why transferFrom is failing on the supply when fuzz testing.
+        // assets = bound(assets, 0.1e18, 100e18); // TODO - CRISPY - investigate why transferFrom is failing on the supply when fuzz testing.
 
         // Add new assets positions to cellar
         cellar.addPositionToCatalogue(morphoBlueCollateralWBTCPosition);
