@@ -44,12 +44,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     //============================================ VIP ===========================================
 
-       // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
+    // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho();
     address public morphoBlueOwner = ;
     address public DEFAULT_IRM = ;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-    
+
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
     MockDataFeedForMorphoBlue private mockUsdcUsd;
@@ -101,13 +101,13 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         );
 
         creationCode = type(MorphoBlueDebtAdaptor).creationCode;
-        constructorArgs = abi.encode(ACCOUNT_FOR_INTEREST, address(morphoBlue), minHealthFactor);
+        constructorArgs = abi.encode( address(morphoBlue), minHealthFactor);
         morphoBlueDebtAdaptor = MorphoBlueDebtAdaptor(
             deployer.deployContract("Morpho Blue Debt Adaptor V 0.0", creationCode, constructorArgs, 0)
         );
 
         creationCode = type(MorphoBlueSupplyAdaptor).creationCode;
-        constructorArgs = abi.encode(ACCOUNT_FOR_INTEREST, address(morphoBlue));
+        constructorArgs = abi.encode(address(morphoBlue));
         morphoBlueSupplyAdaptor = MorphoBlueSupplyAdaptor(
             deployer.deployContract("Morpho Blue Supply Adaptor V 0.0", creationCode, constructorArgs, 0)
         );
@@ -738,7 +738,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     // okay just seeing if we can handle multiple morpho blue positions
     function testMultipleMorphoBluePositions(uint256 assets) external {
-        assets = bound(assets, 0.1e18, 100e18); 
+        assets = bound(assets, 0.1e18, 100e18);
 
         // Add new assets positions to cellar
         cellar.addPositionToCatalogue(morphoBlueCollateralWBTCPosition);

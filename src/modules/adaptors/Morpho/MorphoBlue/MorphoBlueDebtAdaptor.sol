@@ -46,25 +46,13 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     error MorphoBlueDebtAdaptor__CannotRepayNoDebt(Id id);
 
     /**
-     * @notice This bool determines how this adaptor accounts for interest.
-     *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     */
-    bool public immutable ACCOUNT_FOR_INTEREST;
-
-    /**
      * @notice Minimum Health Factor enforced after every borrow.
      * @notice Overwrites strategist set minimums if they are lower.
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(
-        bool _accountForInterest,
-        address _morphoBlue,
-        uint256 _healthFactor
-    ) MorphoBlueHealthFactorLogic(_morphoBlue) {
+    constructor(address _morphoBlue, uint256 _healthFactor) MorphoBlueHealthFactorLogic(_morphoBlue) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
-        ACCOUNT_FOR_INTEREST = _accountForInterest;
         morphoBlue = IMorpho(_morphoBlue);
         minimumHealthFactor = _healthFactor;
     }
@@ -180,8 +168,8 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         if (sharesAccToMorphoBlue < sharesToRepay) {
             sharesToRepay = sharesAccToMorphoBlue;
         }
-        
-        tokenToRepay.safeApprove(address(morphoBlue), type(uint256).max);
+
+        tokenToRepay.safeApprove(address(morphoBlue), debtAmountToRepay);
         _repayAsset(market, sharesToRepay, address(this));
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));
     }

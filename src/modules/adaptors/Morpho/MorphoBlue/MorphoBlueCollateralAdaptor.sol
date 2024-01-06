@@ -160,15 +160,12 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
 
-        _accrueInterest(market);
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(_id, address(this));
         }
 
         // remove collateral
         _removeCollateral(market, _collateralAmount);
-
-        // TODO - might want to check the market to see if it even has a LLTV. If it doesn't, I guess no liquidations can occur?
 
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_getHealthFactor(_id, market))) {

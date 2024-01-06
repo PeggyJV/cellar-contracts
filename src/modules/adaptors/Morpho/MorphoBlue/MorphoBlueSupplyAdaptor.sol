@@ -36,15 +36,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     error MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked(Id id);
 
-    /**
-     * @notice This bool determines how this adaptor accounts for interest.
-     *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     */
-    bool public immutable ACCOUNT_FOR_INTEREST;
-
-    constructor(bool _accountForInterest, address _morphoBlue) MorphoBlueHealthFactorLogic(_morphoBlue) {
-        ACCOUNT_FOR_INTEREST = _accountForInterest;
+    constructor(address _morphoBlue) MorphoBlueHealthFactorLogic(_morphoBlue) {
         morphoBlue = IMorpho(_morphoBlue);
     }
 
@@ -178,11 +170,9 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
         _externalReceiverCheck(address(this));
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        _accrueInterest(market); // TODO - if we end up using periphery library for _balanceOf() then we may not need to kick `accrueInterest()`. We sacrifice losing some dust / noise though I think. Need to test this.
         if (_assets == type(uint256).max) {
+            _accrueInterest(market);
             _assets = _userSupplyBalance(_id, address(this));
-            // // below is if we used periphery library code
-            // _assets = _balanceOf(market); // TODO get supply amount from morpho blue
         }
         // Withdraw assets from Morpho Blue.
         _withdraw(market, _assets, address(this));
