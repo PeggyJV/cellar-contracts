@@ -14,13 +14,10 @@ import { console } from "@forge-std/Test.sol";
  * @title Morpho Blue Health Factor Logic contract.
  * @notice Implements health factor logic used by both
  *         the MorphoBlueCollateralAdaptor && MorphoBlueDebtAdaptor.
- * @author crispymangoes, 0xEinCodes
+ * @author 0xEinCodes, crispymangoes
  * NOTE: helper functions made virtual in case future Morpho Blue Pair versions require different implementation logic.
- * NOTE: The library from Morpho provides exposed getters give cellar totalSupply and totalBorrow with interest accrued, although they are simulated values they have been tested compared to their actual Morpho Blue prod contract (within their test suite). This helper contract DOES NOT USE THE LIBRARIES FOR NOW and will try them during the testing phase of development. We will see if the libraries are more gas-efficient vs using getters. QUESTION FOR MORPHO TEAM - library for balances is usable and accurate to depend on. Do we want any failsafes just in case?
  */
 contract MorphoBlueHealthFactorLogic {
-    // using Math for uint256;
-
     // libraries from Morpho Blue codebase to ensure same mathematic methods for HF calcs
     using MathLib for uint128;
     using MathLib for uint256;
@@ -49,7 +46,7 @@ contract MorphoBlueHealthFactorLogic {
     function _getHealthFactor(Id _id, MarketParams memory _market) internal view virtual returns (uint256 currentHF) {
         uint256 borrowAmount = _userBorrowBalance(_id, address(this));
         console.log("borrowAmount: %s", borrowAmount);
-        if (borrowAmount == 0) return 1.05e18; // TODO - decide what to return in these scenarios.
+        if (borrowAmount == 0) return type(uint256).max;
 
         uint256 collateralPrice = IOracle(_market.oracle).price(); // recall from IOracle.sol that the units will be 10 ** (36 - collateralUnits + borrowUnits) BUT collateralPrice is in units of borrow.
 

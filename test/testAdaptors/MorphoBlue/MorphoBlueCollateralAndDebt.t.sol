@@ -101,7 +101,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         );
 
         creationCode = type(MorphoBlueDebtAdaptor).creationCode;
-        constructorArgs = abi.encode( address(morphoBlue), minHealthFactor);
+        constructorArgs = abi.encode(address(morphoBlue), minHealthFactor);
         morphoBlueDebtAdaptor = MorphoBlueDebtAdaptor(
             deployer.deployContract("Morpho Blue Debt Adaptor V 0.0", creationCode, constructorArgs, 0)
         );
@@ -285,19 +285,8 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         USDC.safeApprove(address(cellar), type(uint256).max);
         WBTC.safeApprove(address(cellar), type(uint256).max);
 
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        // stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
-
         SUPPLIER = makeAddr("Supplier");
     }
-
-    // function testSetup() external {
-    //     revert();
-    // }
-
-    // set up has a cellar w/ WETH erc20Position as holding position, and cellar positions (empty) for supply, and debt for morpho blue weth market.
-    // cellar current initial assets = initial deposit using the deployer.
-    // cellar balance for this test address is zero though.
 
     /// MorphoBlueCollateralAdaptor tests
 

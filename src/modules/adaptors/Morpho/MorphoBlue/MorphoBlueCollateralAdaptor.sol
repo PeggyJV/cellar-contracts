@@ -13,8 +13,7 @@ import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/Morpho
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue
- * @author crispymangoes, 0xEinCodes
- * TODO - The periphery libraries from MB may be used depending on how much gas they use. For now we will not use them but we will test to see which is more gas efficient.
+ * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
@@ -103,7 +102,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     /**
      * @notice Returns the cellar's balance of the collateralAsset position.
      * @param adaptorData the collateral asset deposited into Morpho Blue
-     * TODO - could use the periphery library `MorphoBalancesLib` to get the expected balance (w/ simulated interest) but for now we just query the getter. We may switch to using the periphery library.
      * @return Cellar's balance of provided collateral to specified MB market.
      * @dev normal static call, thus msg.sender for sommelier focus is calling cellar
      */

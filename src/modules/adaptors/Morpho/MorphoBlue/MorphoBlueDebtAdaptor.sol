@@ -14,7 +14,7 @@ import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/p
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue
- * @author crispymangoes, 0xEinCodes
+ * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
@@ -96,7 +96,6 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     /**
      * @notice Returns the cellar's balance of the respective MB market loanToken calculated from cellar borrow shares according to MB prod contracts
      * @param adaptorData encoded bytes32 MB id that represents the MB market for this position
-     * TODO: EIN should this account for interest? If yes, We could use the library to simulate the expected debt with interest, or we could kick morphoblue contract to get accrued interest. I lean towards the former, but since balanceOf() is not a mutative function. It depends how frequent the contract is kicked I guess (morpho blue that is).
      * @return Cellar's balance of the respective MB market loanToken
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
@@ -153,7 +152,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function repayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        _accrueInterest(market); // either call this or use periphery library.
+        _accrueInterest(market);
 
         ERC20 tokenToRepay = ERC20(market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);

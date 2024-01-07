@@ -568,8 +568,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         );
     }
 
-    // NOTE - this depends on having withdrawableFrom() use periphery, OR have accrueInterest() called before calling totalWithdrawableFrom() within a cellar to include accrued interest. For now it is written roughly but it needs to know if it goes with periiphery or accrueInterest() setup.
-    // Adaptor designs currently do not use periphery libraries for expected values accounting for interest.
     function testWithdrawableFrom() external {
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
 
@@ -740,7 +738,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     }
 
     /**
-     * @dev helper function that returns actual supply position amount for caller according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
      * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers
      */
     function _userSupplyBalance(Id _id, address _user) internal view returns (uint256) {

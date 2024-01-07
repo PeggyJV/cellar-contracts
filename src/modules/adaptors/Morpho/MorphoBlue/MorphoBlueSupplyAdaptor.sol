@@ -15,7 +15,7 @@ import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoB
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue
- * @author crispymangoes, 0xEinCodes
+ * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
@@ -26,7 +26,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(Id id)
     // Where:
-    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market    // More design notes: MorphoBalancesLib, MorphoLib, MorphoStorageLib are periphery contrats with getters for integration. There may be useful things from it.
+    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -99,7 +99,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
      * @param adaptorData encoded bytes32 MB id that represents the MB market for this position.
      * @return withdrawableSupply liquid amount of `loanToken` cellar has lent to specified MB market.
-     * TODO - this uses periphery libraries that sim expected interest, do we want to use the alternative method which means calling getters within Morpho.sol directly? This would depend on having `accrueInterest()` called by us prior to calling this or called by some other market participant.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
@@ -122,10 +121,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
         return _userSupplyBalance(id, msg.sender);
-
-        // below LoCs are if we use periphery library
-        // MarketParams memory market = morphoBlue.idToMarketParams(id);
-        // return _balanceOf(market); // TODO maybe reduce to just 1 param (lose the `user` param)
     }
 
     /**
@@ -231,14 +226,4 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     function _withdraw(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
         morphoBlue.withdraw(_market, _assets, 0, address(this), _onBehalf);
     }
-
-    // /**
-    //  * @dev Returns the amount of tokens owned by `account`.
-    //  * @param _market The specified MB Market
-    //  * @return The expected balance of `loanToken` according to MB Market accounting supplied by this Cellar position, including accrued interest.
-    //  * NOTE - this is only if we use the periphery library for this adaptor. It is not used right now as it is commented out
-    //  */
-    // function _balanceOf(MarketParams memory _market) internal view virtual returns (uint256) {
-    //     return morphoBlue.expectedSupplyAssets(_market, msg.sender); // TODO - alternatively we call accrueInterest before calling `balanceOf` - the main reason to do this is because `expectedSupplyAssets` is just a simulation, that is likely right, but it is not directly what is actually within the MorphoBlue contracts as state for cellar's position.
-    // }
 }
