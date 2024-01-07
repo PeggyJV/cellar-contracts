@@ -332,37 +332,49 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         assertEq(newSupplyBalance, assets + initialAssets, "Rebalance should have lent all USDC on Morpho Blue.");
     }
 
-    // function testBalanceCalculationMethods(uint256 assets) external {
-    //     cellar.setHoldingPosition(usdcPosition); // set holding position back to erc20Position
+    function testBalanceOfCalculationMethods(uint256 assets) external {
+        cellar.setHoldingPosition(usdcPosition); // set holding position back to erc20Position
 
-    //     assets = bound(assets, 0.01e6, 100_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assets = bound(assets, 0.01e6, 100_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Strategist rebalances to lend USDC.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     // Lend USDC on Morpho Blue.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
-    //     }
+        // Strategist rebalances to lend USDC.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Lend USDC on Morpho Blue.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     uint256 newSupplyBalanceAccToMBLib = _userSupplyBalance(usdcDaiMarketId, address(cellar));
-    //     uint256 supplyBalanceDirectFromMorphoBlue = uint256(
-    //         (morphoBlue.position(wethUsdcMarketId, address(cellar)).supplyShares).toAssetsDown(
-    //             market.totalSupplyAssets,
-    //             market.totalSupplyShares
-    //         )
-    //     );
-    //     bytes memory adaptorData = abi.encode(wethUsdcMarketId);
-    //             vm.prank(address(cellar));
+        uint256 newSupplyBalanceAccToMBLib = _userSupplyBalance(usdcDaiMarketId, address(cellar));
+        uint256 supplyBalanceDirectFromMorphoBlue = uint256(
+            (morphoBlue.position(usdcDaiMarketId, address(cellar)).supplyShares).toAssetsDown(
+                uint256(morphoBlue.market(usdcDaiMarketId).totalSupplyAssets),
+                uint256(morphoBlue.market(usdcDaiMarketId).totalSupplyShares)
+            )
+        );
+        vm.startPrank(address(cellar));
+        bytes memory adaptorData = abi.encode(usdcDaiMarketId);
 
-    //     uint256 balanceOfAccToSupplyAdaptor = morphoBlueSupplyAdaptor.balanceOf(adaptorData);
-    // }
+        uint256 balanceOfAccToSupplyAdaptor = morphoBlueSupplyAdaptor.balanceOf(adaptorData);
+
+        assertEq(
+            balanceOfAccToSupplyAdaptor,
+            supplyBalanceDirectFromMorphoBlue,
+            "balanceOf() should report same amount as morpho blue as long interest has been accrued beforehand."
+        );
+        assertEq(
+            newSupplyBalanceAccToMBLib,
+            supplyBalanceDirectFromMorphoBlue,
+            "Checking that helper _userSupplyBalance() reports proper supply balances as long as interest has been accrued beforehand."
+        );
+        vm.stopPrank();
+    }
 
     // w/ holdingPosition as morphoBlueSupplyUSDC, we make sure that strategists can lend to the holding position outright. ie.) some airdropped assets were swapped to USDC to use in morpho blue.
     function testStrategistLendWithHoldingPosition(uint256 assets) external {
@@ -682,8 +694,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         morphoBlue.borrow(market, assets / 5, 0, whaleBorrower, whaleBorrower);
         vm.stopPrank();
         Market memory marketStruct = morphoBlue.market(usdcDaiMarketId);
-
-        console.log("IRM borrow rate: %s MUST BE GREATER THAN 0", irm.borrowRateView(usdcDaiMarket, marketStruct));
 
         skip(1 days);
 

@@ -294,7 +294,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     function testDeposit(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
-        console.log("Cellar WETH balance: %s, initialAssets: %s", WETH.balanceOf(address(cellar)), initialAssets);
         deal(address(WETH), address(this), assets);
         cellar.setHoldingPosition(morphoBlueCollateralWETHPosition);
         cellar.deposit(assets, address(this));
@@ -477,7 +476,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     function testTakingOutLoans(uint256 assets) external {
         assets = bound(assets, 1e18, 100e18);
         initialAssets = cellar.totalAssets();
-        console.log("Cellar WETH balance: %s, initialAssets: %s", WETH.balanceOf(address(cellar)), initialAssets);
         deal(address(WETH), address(this), assets);
         cellar.deposit(assets, address(this));
 
@@ -943,7 +941,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     function testLTV(uint256 assets) external {
         assets = bound(assets, 1e18, 100e18);
         initialAssets = cellar.totalAssets();
-        console.log("Cellar WETH balance: %s, initialAssets: %s", WETH.balanceOf(address(cellar)), initialAssets);
         deal(address(WETH), address(this), assets);
         cellar.deposit(assets, address(this));
 
