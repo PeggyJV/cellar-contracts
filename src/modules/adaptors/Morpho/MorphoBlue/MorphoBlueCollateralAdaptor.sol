@@ -12,7 +12,7 @@ import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/Morpho
  *      To interact with a different version or custom market, a new
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
- *      Blue
+ *      Blue throughout code.
  * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
@@ -43,6 +43,10 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      */
     uint256 public immutable minimumHealthFactor;
 
+    /**
+     * @param _morphoBlue immutable Morpho Blue contract (called `Morpho.sol` within Morpho Blue repo).
+     * @param _healthFactor Minimum Health Factor that replaces minimumHealthFactor. If using new _healthFactor, it must be greater than minimumHealthFactor. See `BaseAdaptor.sol`.
+     */
     constructor(address _morphoBlue, uint256 _healthFactor) MorphoBlueHealthFactorLogic(_morphoBlue) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         morphoBlue = IMorpho(_morphoBlue);
@@ -62,10 +66,10 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice User deposits collateralToken to Morpho Blue market
-     * @param assets the amount of assets to provide as collateral on Morpho Blue
-     * @param adaptorData adaptor data containing the abi encoded Id for specific Morpho Blue Lending Market
-     * @dev configurationData is NOT used
+     * @notice User deposits collateralToken to Morpho Blue market.
+     * @param assets the amount of assets to provide as collateral on Morpho Blue.
+     * @param adaptorData adaptor data containing the abi encoded Id for specific Morpho Blue Lending Market.
+     * @dev configurationData is NOT used.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho Blue.
@@ -100,10 +104,10 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     }
 
     /**
-     * @notice Returns the cellar's balance of the collateralAsset position.
-     * @param adaptorData the collateral asset deposited into Morpho Blue
+     * @notice Returns the cellar's balance of the collateralAsset position in corresponding Morpho Blue market.
+     * @param adaptorData containing the abi encoded Morpho Blue market Id.
      * @return Cellar's balance of provided collateral to specified MB market.
-     * @dev normal static call, thus msg.sender for sommelier focus is calling cellar
+     * @dev normal static call, thus msg.sender for most-likely Sommelier usecase is the calling cellar.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Id id = abi.decode(adaptorData, (Id));
@@ -112,6 +116,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
     /**
      * @notice Returns collateral asset.
+     * @param adaptorData containing the abi encoded Morpho Blue market Id.
      * @return The collateral asset in ERC20 type.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
@@ -132,40 +137,32 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
 
     /**
      * @notice Allows strategists to add collateral to the respective cellar position on specified MB Market, enabling borrowing.
-     * @param _id encoded bytes32 MB id that represents the MB market for this position.
+     * @param _id identifier of a Morpho Blue market.
      * @param _collateralToDeposit The amount of `collateralToken` to add to specified MB market position.
      */
     function addCollateral(Id _id, uint256 _collateralToDeposit) public {
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
         ERC20 collateralToken = ERC20(market.collateralToken);
-
         uint256 amountToDeposit = _maxAvailable(collateralToken, _collateralToDeposit);
         collateralToken.safeApprove(address(morphoBlue), amountToDeposit);
-
         _addCollateral(market, amountToDeposit);
-
         // Zero out approvals if necessary.
         _revokeExternalApproval(collateralToken, address(morphoBlue));
     }
 
     /**
      * @notice Allows strategists to remove collateral from the respective cellar position on specified MB Market.
-     * @param _id encoded bytes32 MB id that represents the MB market for this position.
+     * @param _id identifier of a Morpho Blue market.
      * @param _collateralAmount The amount of collateral to remove from specified MB market position.
      */
     function removeCollateral(Id _id, uint256 _collateralAmount) public {
         _validateMBMarket(_id);
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
-
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(_id, address(this));
         }
-
-        // remove collateral
         _removeCollateral(market, _collateralAmount);
-
-        // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_getHealthFactor(_id, market))) {
             revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(_id);
         }
@@ -178,10 +175,11 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      *      rebalance.
      * @dev Calling this can increase the share price during the rebalance,
      *      so a strategist should consider moving some assets into reserves.
+     * @param _id identifier of a Morpho Blue market.
      */
-    function accrueInterest(Id id) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function accrueInterest(Id _id) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         _accrueInterest(market);
     }
 
@@ -190,6 +188,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
     /**
      * @notice Validates that a given Id is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
+     * @param _id identifier of a Morpho Blue market.
      */
     function _validateMBMarket(Id _id) internal view {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_id)));

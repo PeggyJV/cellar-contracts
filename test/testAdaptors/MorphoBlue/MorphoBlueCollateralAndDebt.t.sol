@@ -49,7 +49,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     address public morphoBlueOwner = ;
     address public DEFAULT_IRM = ;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-
+    
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
     MockDataFeedForMorphoBlue private mockUsdcUsd;
@@ -139,8 +139,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         mockWbtcUsd.setMockAnswer(42000e8, WBTC, USDC);
         mockDaiUsd.setMockAnswer(1e8, DAI, USDC);
 
-        // Setup Cellar:
-
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(morphoBlueCollateralAdaptor));
         registry.trustAdaptor(address(morphoBlueDebtAdaptor));
@@ -152,9 +150,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
 
         /// setup morphoBlue test markets; WETH:USDC, WBTC:USDC, USDC:DAI?
-
         // note - oracle param w/ MarketParams struct is for collateral price
-        // setup morphoBlue WETH:USDC market
 
         wethUsdcMarket = MarketParams({
             loanToken: address(USDC),
@@ -164,7 +160,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             lltv: DEFAULT_LLTV
         });
 
-        // setup morphoBlue WBTC: USDC market
         wbtcUsdcMarket = MarketParams({
             loanToken: address(USDC),
             collateralToken: address(WBTC),
@@ -173,7 +168,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             lltv: DEFAULT_LLTV
         });
 
-        // setup morphoBlue USDC:DAI market
         usdcDaiMarket = MarketParams({
             loanToken: address(DAI),
             collateralToken: address(USDC),
@@ -190,8 +184,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         morphoBlue.createMarket(usdcDaiMarket);
         usdcDaiMarketId = usdcDaiMarket.id();
-
-        // vm.stopPrank();
 
         registry.trustPosition(
             morphoBlueSupplyWETHPosition,
@@ -269,7 +261,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.addPositionToCatalogue(wbtcPosition);
         cellar.addPositionToCatalogue(daiPosition);
 
-        // only add weth positions for now.
+        // only add weth adaptor positions for now.
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
         cellar.addPositionToCatalogue(morphoBlueCollateralWETHPosition);
         cellar.addPositionToCatalogue(morphoBlueDebtWETHPosition);
@@ -620,7 +612,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        // Repay the loan.
+        // Repay the loan
         adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
 
@@ -660,7 +652,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         vm.prank(address(cellar));
         uint256 debtBefore = morphoBlueDebtAdaptor.balanceOf(adaptorData);
 
-        // Repay the loan.
+        // Repay the loan
         adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, borrowAmount / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -723,7 +715,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
     /// MorphoBlueDebtAdaptor AND MorphoBlueCollateralAdaptor tests
 
-    // okay just seeing if we can handle multiple morpho blue positions
+    // Check that multiple morpho blue positions are handled properly
     function testMultipleMorphoBluePositions(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100e18);
 
@@ -985,15 +977,15 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data); // should transact now
     }
 
-    // // /// MorphoBlue Collateral and Debt Specific Helpers
+    /// MorphoBlue Collateral and Debt Specific Helpers
 
-    // make sure to call `accrueInterest()` beforehand to ensure we get proper debt balance returned
+    // NOTE - make sure to call `accrueInterest()` beforehand to ensure we get proper debt balance returned
     function getMorphoBlueDebtBalance(Id _id, address _user) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
         return (((morphoBlue.borrowShares(_id, _user))).toAssetsUp(market.totalBorrowAssets, market.totalBorrowShares));
     }
 
-    // make sure to call `accrueInterest()` beforehand to ensure we get proper supply balance returned
+    // NOTE - make sure to call `accrueInterest()` beforehand to ensure we get proper supply balance returned
     function getMorphoBlueSupplyBalance(Id _id, address _user) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
         return (

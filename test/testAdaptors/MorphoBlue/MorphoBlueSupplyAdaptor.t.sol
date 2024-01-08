@@ -6,14 +6,11 @@ import { MockDataFeedForMorphoBlue } from "src/mocks/MockDataFeedForMorphoBlue.s
 import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
 import { IMorpho, MarketParams, Id, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
-
-// Import Everything from Starter file.
-import "test/resources/MainnetStarter.t.sol";
-
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { IrmMock } from "src/mocks/IrmMock.sol";
+import "test/resources/MainnetStarter.t.sol";
 
 contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -43,7 +40,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     uint32 public morphoBlueSupplyUSDCPosition = 1_000_002;
     uint32 public morphoBlueSupplyWBTCPosition = 1_000_003;
 
-    bool ACCOUNT_FOR_INTEREST = true;
     address private whaleBorrower = vm.addr(777);
 
     //============================================ VIP ===========================================
@@ -109,14 +105,12 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockDaiUsd));
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
-        // set mock prices for chainlink price feeds, but add in params to adjust the morphoBlue price format needed --> recall from IOracle.sol that the units will be 10 ** (36 - collateralUnits + borrowUnits)
+        // set mock prices for chainlink price feeds, but add in params to adjust the morphoBlue price format needed --> recall from IOracle.sol (from Morpho Blue repo) that the units will be 10 ** (36 - collateralUnits + borrowUnits).
 
         mockWethUsd.setMockAnswer(2200e8, WETH, USDC);
         mockUsdcUsd.setMockAnswer(1e8, USDC, USDC);
         mockWbtcUsd.setMockAnswer(42000e8, WBTC, USDC);
         mockDaiUsd.setMockAnswer(1e8, DAI, USDC);
-
-        // Setup Cellar:
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(morphoBlueSupplyAdaptor));
@@ -126,10 +120,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         registry.trustPosition(wbtcPosition, address(erc20Adaptor), abi.encode(WBTC));
         registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
 
-        /// setup morphoBlue test markets; WETH:USDC, WBTC:USDC, USDC:DAI?
-
-        // note - oracle param w/ MarketParams struct is for collateral price
-        // setup morphoBlue WETH:USDC market
+        // We will work with a mock IRM similar to tests within Morpho Blue repo.
 
         irm = new IrmMock();
 
@@ -219,7 +210,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(wbtcPosition);
 
-        // only add weth positions for now.
+        // only add USDC supply position for now.
         cellar.addPositionToCatalogue(morphoBlueSupplyUSDCPosition);
 
         cellar.addPosition(1, wethPosition, abi.encode(0), false);
@@ -234,6 +225,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         initialAssets = cellar.totalAssets();
 
+        // tests that adaptor call for lending works when holding position is a position with morphoBlueSupplyAdaptor
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         // Lend USDC on Morpho Blue. Use the initial deposit that is in the cellar to begin with.
         {
@@ -252,7 +244,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         );
     }
 
-    // Set up has supply usdc position fully trusted (cellar and registry), weth and wbtc supply positions trusted w/ registry. mbsupplyusdc position is holding position.
+    // Throughout all tests, setup() has supply usdc position fully trusted (cellar and registry), weth and wbtc supply positions trusted w/ registry. mbsupplyusdc position is holding position.
 
     function testDeposit(uint256 assets) external {
         assets = bound(assets, 0.01e6, 100_000_000e6);
@@ -287,6 +279,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             1,
             "testDeposit: half of assets from cellar should remain in MB market."
         );
+
+        /// console left within tests as there is some troubleshooting to do here still.
         console.log(
             "userSupplyBalance in morpho blue market: %s",
             _userSupplyBalance(usdcDaiMarketId, address(cellar))
@@ -323,7 +317,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         uint256 newSupplyBalance = _userSupplyBalance(usdcDaiMarketId, address(cellar));
@@ -348,7 +341,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         uint256 newSupplyBalanceAccToMBLib = _userSupplyBalance(usdcDaiMarketId, address(cellar));
@@ -390,11 +382,9 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         uint256 newSupplyBalance = _userSupplyBalance(usdcDaiMarketId, address(cellar));
-        // check supply share balance for cellar has increased.
         assertEq(newSupplyBalance, assets + initialAssets, "Rebalance should have lent all USDC on Morpho Blue.");
     }
 
@@ -412,22 +402,20 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
         assertEq(
             USDC.balanceOf(address(cellar)),
             assets + initialAssets,
-            "Cellar USDC should have been withdraw from Morpho Blue Market."
+            "Cellar USDC should have been withdrawn from Morpho Blue Market."
         );
     }
 
-    // lend assets into holdingPosition (morphoSupplyUSDCPosition, and then withdraw the USDC from it and lend it into a new market, wethUsdcMarketId (a different morpho blue usdc market)
+    // lend assets into holdingPosition (morphoSupplyUSDCPosition, and then withdraw the USDC from it and lend it into a new market, wethUsdcMarketId (a different morpho blue usdc market))
     function testRebalancingBetweenPairs(uint256 assets) external {
         // Add another Morpho Blue Market to cellar
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
         cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(0), false);
 
-        // Have user deposit into cellar.
         assets = bound(assets, 0.01e6, 100_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -445,8 +433,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarketId, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
-
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         uint256 newSupplyBalance = _userSupplyBalance(wethUsdcMarketId, address(cellar));
@@ -458,8 +444,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             "Rebalance should have lent all USDC on new Morpho Blue WETH:USDC market."
         );
 
-        ///
-
         // Withdraw half the assets
         data = new Cellar.AdaptorCall[](1);
         {
@@ -467,8 +451,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(wethUsdcMarketId, assets / 2);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
-
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         assertEq(
@@ -477,7 +459,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             "Should have withdrawn half the assets from MB Market wethUsdcMarketId."
         );
 
-        // check that withdrawn amount makes sense
         newSupplyBalance = _userSupplyBalance(wethUsdcMarketId, address(cellar));
         assertApproxEqAbs(
             newSupplyBalance,
@@ -598,7 +579,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarketId, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
         // Make cellar deposits lend USDC into WETH Pair by default
@@ -664,7 +644,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         uint256 balance1 = (_userSupplyBalance(usdcDaiMarketId, address(cellar)));
 
         skip(1 days);
-        // vm.warp(block.timestamp + (10 days));
         mockUsdcUsd.setMockUpdatedAt(block.timestamp);
         mockDaiUsd.setMockUpdatedAt(block.timestamp);
 
@@ -676,13 +655,12 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
         uint256 balance2 = (_userSupplyBalance(usdcDaiMarketId, address(cellar)));
 
         assertEq(balance2, balance1, "No interest accrued since no loans were taken out.");
 
-        // borrow
+        // provide collateral
         uint256 collateralToProvide = priceRouter.getValue(USDC, 2 * assets, DAI);
         deal(address(DAI), whaleBorrower, collateralToProvide);
         vm.startPrank(whaleBorrower);
@@ -693,7 +671,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // now borrow
         morphoBlue.borrow(market, assets / 5, 0, whaleBorrower, whaleBorrower);
         vm.stopPrank();
-        Market memory marketStruct = morphoBlue.market(usdcDaiMarketId);
 
         skip(1 days);
 
@@ -712,7 +689,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         assertGt(balance3, balance2, "Supplied loanAsset into MorphoBlue should have accrued interest.");
     }
 
-    // // ========================================= HELPER FUNCTIONS =========================================
+    // ========================================= HELPER FUNCTIONS =========================================
 
     // setup multiple lending positions
     function _setupMultiplePositions(uint256 dividedAssetPerMultiPair) internal {
@@ -743,7 +720,6 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[2] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
-        // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
     }
 

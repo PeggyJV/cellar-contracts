@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
-import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol"; // NOTE: not sure I need this yet
+import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
 
 /**
@@ -14,7 +14,7 @@ import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoB
  *      To interact with a different version or custom market, a new
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
- *      Blue
+ *      Blue throughout code.
  * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
@@ -36,6 +36,9 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
      */
     error MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked(Id id);
 
+    /**
+     * @param _morphoBlue immutable Morpho Blue contract (called `Morpho.sol` within Morpho Blue repo).
+     */
     constructor(address _morphoBlue) MorphoBlueHealthFactorLogic(_morphoBlue) {
         morphoBlue = IMorpho(_morphoBlue);
     }
@@ -53,11 +56,11 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Allows user, if Cellar has a MBSupplyAdaptorPosition as its holding position, to deposit into MB markets.
+     * @notice Allows user to deposit into MB markets, only if Cellar has a MBSupplyAdaptorPosition as its holding position.
      * @dev Cellar must approve Morpho Blue to spend its assets, then call deposit to lend its assets.
-     * @param assets the amount of assets to lend on Morpho Blue
-     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market Id
-     * @dev configurationData is NOT used
+     * @param assets the amount of assets to lend on Morpho Blue.
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market Id.
+     * @dev configurationData is NOT used.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho Blue.
@@ -115,7 +118,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     /**
      * @notice Returns the cellar's balance of the supplyToken position.
-     * @param adaptorData encoded bytes32 MB id that represents the MB market for this position.
+     * @param adaptorData encoded MB id that represents the MB market for this position. This uses MB defined value type for bytes32.
      * @return Cellar's balance of the supplyToken position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
@@ -135,7 +138,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     /**
      * @notice This adaptor returns collateral, and not debt.
-     * @return Whether or not this position is a debt position
+     * @return Whether or not this position is a debt position.
      */
     function isDebt() public pure override returns (bool) {
         return false;
@@ -144,7 +147,9 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     //============================================ Strategist Functions ===========================================
 
     /**
-     * @notice Allows strategists to lend specific asset on Morpho Blue market
+     * @notice Allows strategists to lend a specific amount for an asset on Morpho Blue market.
+     * @param _id identifier of a Morpho Blue market.
+     * @param _assets the amount of loanToken to lend on specified MB market.
      */
     function lendToMorphoBlue(Id _id, uint256 _assets) public {
         _validateMBMarket(_id);
@@ -159,6 +164,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
 
     /**
      * @notice Allows strategists to withdraw underlying asset plus interest.
+     * @param _id identifier of a Morpho Blue market.
+     * @param _assets the amount of loanToken to withdraw from MB market
      */
     function withdrawFromMorphoBlue(Id _id, uint256 _assets) public {
         // Run external receiver check.
@@ -174,22 +181,24 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     }
 
     /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
+     * @notice Allows a strategist to call `accrueInterest()` on a MB Market that the cellar is using.
      * @dev A strategist might want to do this if a MB market has not been interacted with
      *      in a while, and the strategist does not plan on interacting with it during a
      *      rebalance.
      * @dev Calling this can increase the share price during the rebalance,
      *      so a strategist should consider moving some assets into reserves.
+     * @param _id identifier of a Morpho Blue market.
      */
-    function accrueInterest(Id id) public {
-        _validateMBMarket(id);
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function accrueInterest(Id _id) public {
+        _validateMBMarket(_id);
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         _accrueInterest(market);
     }
 
     /**
      * @notice Validates that a given Id is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
+     * @param _id identifier of a Morpho Blue market.
      */
     function _validateMBMarket(Id _id) internal view {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_id)));
