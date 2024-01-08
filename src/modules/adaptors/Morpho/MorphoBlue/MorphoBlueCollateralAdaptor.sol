@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 
 /**
@@ -15,7 +15,7 @@ import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/Morpho
  *      Blue throughout code.
  * @author 0xEinCodes, crispymangoes
  */
-contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
+contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -47,7 +47,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic
      * @param _morphoBlue immutable Morpho Blue contract (called `Morpho.sol` within Morpho Blue repo).
      * @param _healthFactor Minimum Health Factor that replaces minimumHealthFactor. If using new _healthFactor, it must be greater than minimumHealthFactor. See `BaseAdaptor.sol`.
      */
-    constructor(address _morphoBlue, uint256 _healthFactor) MorphoBlueHealthFactorLogic(_morphoBlue) {
+    constructor(address _morphoBlue, uint256 _healthFactor) MorphoBlueHelperLogic(_morphoBlue) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         morphoBlue = IMorpho(_morphoBlue);
         minimumHealthFactor = _healthFactor;

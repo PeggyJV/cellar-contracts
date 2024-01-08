@@ -15,7 +15,7 @@ import { console } from "@forge-std/Test.sol";
  * @author 0xEinCodes, crispymangoes
  * NOTE: helper functions made virtual in case future Morpho Blue Pair versions require different implementation logic.
  */
-contract MorphoBlueHealthFactorLogic {
+contract MorphoBlueHelperLogic {
     // Using libraries from Morpho Blue codebase to ensure same mathematic methods
     using MathLib for uint128;
     using MathLib for uint256;

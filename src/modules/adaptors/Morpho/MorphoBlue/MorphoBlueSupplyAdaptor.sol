@@ -5,7 +5,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
-import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 
 /**
  * @title Morpho Blue Supply Adaptor
@@ -17,7 +17,7 @@ import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoB
  *      Blue throughout code.
  * @author 0xEinCodes, crispymangoes
  */
-contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
+contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using MorphoLib for IMorpho;
@@ -39,7 +39,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     /**
      * @param _morphoBlue immutable Morpho Blue contract (called `Morpho.sol` within Morpho Blue repo).
      */
-    constructor(address _morphoBlue) MorphoBlueHealthFactorLogic(_morphoBlue) {
+    constructor(address _morphoBlue) MorphoBlueHelperLogic(_morphoBlue) {
         morphoBlue = IMorpho(_morphoBlue);
     }
 

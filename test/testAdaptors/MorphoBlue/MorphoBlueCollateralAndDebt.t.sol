@@ -5,7 +5,7 @@ import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.so
 import { MockDataFeedForMorphoBlue } from "src/mocks/MockDataFeedForMorphoBlue.sol";
 import "test/resources/MainnetStarter.t.sol";
 import { MorphoBlueDebtAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueDebtAdaptor.sol";
-import { MorphoBlueHealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHealthFactorLogic.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueCollateralAdaptor.sol";
 import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
 import { IMorpho, MarketParams, Id, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
@@ -49,7 +49,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     address public morphoBlueOwner = ;
     address public DEFAULT_IRM = ;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
-    
+
     // Chainlink PriceFeeds
     MockDataFeedForMorphoBlue private mockWethUsd;
     MockDataFeedForMorphoBlue private mockUsdcUsd;
