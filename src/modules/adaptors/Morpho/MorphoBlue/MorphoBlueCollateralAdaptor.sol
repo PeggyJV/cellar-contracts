@@ -75,15 +75,9 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         // Deposit assets to Morpho Blue.
         Id id = abi.decode(adaptorData, (Id));
         _validateMBMarket(id);
-
         MarketParams memory market = morphoBlue.idToMarketParams(id);
         ERC20 collateralToken = ERC20(market.collateralToken);
-        collateralToken.safeApprove(address(morphoBlue), assets);
-
-        _addCollateral(market, assets);
-
-        // Zero out approvals if necessary.
-        _revokeExternalApproval(collateralToken, address(morphoBlue));
+        _addCollateral(market, assets, collateralToken);
     }
 
     /**
@@ -145,10 +139,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         MarketParams memory market = morphoBlue.idToMarketParams(_id);
         ERC20 collateralToken = ERC20(market.collateralToken);
         uint256 amountToDeposit = _maxAvailable(collateralToken, _collateralToDeposit);
-        collateralToken.safeApprove(address(morphoBlue), amountToDeposit);
-        _addCollateral(market, amountToDeposit);
-        // Zero out approvals if necessary.
-        _revokeExternalApproval(collateralToken, address(morphoBlue));
+        _addCollateral(market, amountToDeposit, collateralToken);
     }
 
     /**
@@ -209,8 +200,12 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _market The specified MB market.
      * @param _assets The amount of collateral to add to MB Market position.
      */
-    function _addCollateral(MarketParams memory _market, uint256 _assets) internal virtual {
+    function _addCollateral(MarketParams memory _market, uint256 _assets, ERC20 _collateralToken) internal virtual {
+        // pass in collateralToken because we check maxAvailable beforehand to get assets, then approve ERC20
+        _collateralToken.safeApprove(address(morphoBlue), _assets);
         morphoBlue.supplyCollateral(_market, _assets, address(this), hex"");
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(_collateralToken, address(morphoBlue));
     }
 
     /**

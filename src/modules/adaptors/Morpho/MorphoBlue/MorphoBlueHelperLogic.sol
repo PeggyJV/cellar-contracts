@@ -7,7 +7,6 @@ import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/librari
 import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
 import { UtilsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/UtilsLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Morpho Blue Helper contract.
@@ -48,19 +47,8 @@ contract MorphoBlueHelperLogic {
 
         // get collateralAmount in borrowAmount for LTV calculations
         uint256 collateralAmount = _userCollateralBalance(_id, address(this));
-        console.log(
-            "userCollateralBalance: %s, collateralPrice: %s, collateralAmount: %s",
-            _userCollateralBalance(_id, address(this)),
-            collateralPrice,
-            collateralAmount
-        );
         uint256 collateralAmountInBorrowUnits = collateralAmount.mulDivDown(collateralPrice, ORACLE_PRICE_SCALE);
-
-        if (collateralAmountInBorrowUnits == 0) return 0;
-        uint256 LTV_PRECISION = 1e18;
-        uint256 currentPositionLTV = borrowAmount.mulDivUp(LTV_PRECISION, collateralAmountInBorrowUnits);
-        // convert LTVs to HF
-        currentHF = (_market.lltv).mulDivDown(1e18, currentPositionLTV);
+        currentHF = _market.lltv.mulDivDown(collateralAmountInBorrowUnits, borrowAmount);
     }
 
     /**
@@ -76,10 +64,7 @@ contract MorphoBlueHelperLogic {
     }
 
     /**
-     * @dev helper function that returns actual collateral position amount for specified `_user` according to MB market accounting. This is alternative to using the MB periphery libraries that simulate accrued interest balances.
-     * @param _id identifier of a Morpho Blue market.
-     * @param _user address that this function will query Morpho Blue market for.
-     * NOTE: make sure to call `accrueInterest()` on respective market before calling these helpers.
+     * @dev helper function that returns actual collateral position amount for specified `_user` according to MB market accounting.
      */
     function _userCollateralBalance(Id _id, address _user) internal view virtual returns (uint256) {
         return morphoBlue.collateral(_id, _user);

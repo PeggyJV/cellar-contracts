@@ -110,7 +110,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         Id id = abi.decode(adaptorData, (Id));
         MarketParams memory market = morphoBlue.idToMarketParams(id);
         (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
-        if (totalBorrowAssets >= totalSupplyAssets) return 0;
+        if (totalBorrowAssets == totalSupplyAssets) return 0;
         uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
         uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
         withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;

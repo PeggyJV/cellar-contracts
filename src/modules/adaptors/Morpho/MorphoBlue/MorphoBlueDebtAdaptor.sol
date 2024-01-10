@@ -155,16 +155,20 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         _accrueInterest(market);
         ERC20 tokenToRepay = ERC20(market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
-        // using Morpho sharesLibrary we can calculate the sharesToRepay from the debtAmount
-        uint256 totalBorrowAssets = morphoBlue.market(_id).totalBorrowAssets;
-        uint256 totalBorrowShares = morphoBlue.market(_id).totalBorrowShares;
-        uint256 sharesToRepay = debtAmountToRepay.toSharesUp(totalBorrowAssets, totalBorrowShares);
-        uint256 sharesAccToMorphoBlue = morphoBlue.borrowShares(_id, address(this));
-        if (sharesAccToMorphoBlue < sharesToRepay) {
-            sharesToRepay = sharesAccToMorphoBlue;
-        }
         tokenToRepay.safeApprove(address(morphoBlue), debtAmountToRepay);
-        _repayAsset(market, sharesToRepay, address(this));
+
+        _accrueInterest(market);
+        uint256 totalBorrowAssets = morphoBlue.totalBorrowAssets(_id);
+        uint256 totalBorrowShares = morphoBlue.totalBorrowShares(_id);
+        uint256 sharesToRepay = morphoBlue.borrowShares(_id, address(this));
+        uint256 assetsMax = sharesToRepay.toAssetsUp(totalBorrowAssets, totalBorrowShares);
+
+        if (debtAmountToRepay >= assetsMax) {
+            _repayAsset(market, sharesToRepay, 0, address(this));
+        } else {
+            _repayAsset(market, 0, debtAmountToRepay, address(this));
+        }
+
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));
     }
 
@@ -219,9 +223,19 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _market The specified MB market.
      * @param _sharesToRepay The amount of borrowShares to repay.
      * @param _onBehalf The address of the debt-account reduced due to this repayment within MB market.
-     * NOTE - See IMorpho.sol for more detail, but within the external function call to the Morpho Blue contract, the 2nd param is 0 because we specify borrowShares, not borrowAsset amount. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares.
+     * @param _debtAmountToRepay The amount of debt asset to repay.
+     * NOTE - See IMorpho.sol for more detail, but within the external function call to the Morpho Blue contract, repayment amount param can only be either in borrowToken or borrowShares. Users need to choose btw repaying specifying amount of borrowAsset, or borrowShares, which is reflected in this helper.
      */
-    function _repayAsset(MarketParams memory _market, uint256 _sharesToRepay, address _onBehalf) internal virtual {
-        morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, hex"");
+    function _repayAsset(
+        MarketParams memory _market,
+        uint256 _sharesToRepay,
+        uint256 _debtAmountToRepay,
+        address _onBehalf
+    ) internal virtual {
+        if (_sharesToRepay != 0) {
+            morphoBlue.repay(_market, 0, _sharesToRepay, _onBehalf, hex"");
+        } else {
+            morphoBlue.repay(_market, _debtAmountToRepay, 0, _onBehalf, hex"");
+        }
     }
 }
