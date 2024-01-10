@@ -78,12 +78,7 @@ contract MorphoBlueHelperLogic {
      */
     function _userBorrowBalance(Id _id, address _user) internal view returns (uint256) {
         Market memory market = morphoBlue.market(_id);
-        return (
-            uint256((morphoBlue.position(_id, _user).borrowShares)).toAssetsUp(
-                market.totalBorrowAssets,
-                market.totalBorrowShares
-            )
-        );
+        return morphoBlue.borrowShares(_id, _user).toAssetsUp(market.totalBorrowAssets, market.totalBorrowShares);
     }
 
     /**
