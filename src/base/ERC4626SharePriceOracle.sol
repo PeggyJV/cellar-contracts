@@ -201,6 +201,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable allowedAnswerChangeUpper;
 
+    // TODO for a crosschain oracle, we could use chainlink functions to query the share price of the L2 Cellar, then write the data to the mainnet oracle, which removes the 300k gas overhead.
+
+    // TODO this can be made into a struct so the constructor only accepts 1 arg.
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
