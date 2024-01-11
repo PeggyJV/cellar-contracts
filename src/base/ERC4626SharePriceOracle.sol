@@ -9,6 +9,7 @@ import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IRegistrar } from "src/interfaces/external/Chainlink/IRegistrar.sol";
 import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
@@ -38,6 +39,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 _allowedAnswerChangeLower;
         uint256 _allowedAnswerChangeUpper;
         address _sequencerUptimeFeed;
+        uint64 _sequencerGracePeriod;
     }
 
     // ========================================= CONSTANTS =========================================
@@ -220,9 +222,14 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable allowedAnswerChangeUpper;
 
-    // TODO for a crosschain oracle, we could use chainlink functions to query the share price of the L2 Cellar, then write the data to the mainnet oracle, which removes the 300k gas overhead.
+    /**
+     * @notice Address for the networks sequencer uptime feed.
+     * @dev For oracles that do not rely on a sequencer being up, use address(0).
+     */
+    IChainlinkAggregator internal immutable sequencerUptimeFeed;
 
-    // TODO this can be made into a struct so the constructor only accepts 1 arg.
+    uint64 public immutable sequencerGracePeriod;
+
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
@@ -256,6 +263,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         automationRegistrar = args._automationRegistrar;
         automationAdmin = args._automationAdmin;
         link = ERC20(args._link);
+        sequencerUptimeFeed = IChainlinkAggregator(args._sequencerUptimeFeed);
+        sequencerGracePeriod = args._sequencerGracePeriod;
     }
 
     //============================== INITIALIZATION ===============================
@@ -468,6 +477,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool _killSwitch = killSwitch;
 
         if (_killSwitch) return (0, 0, true);
+        if (_checkSequencer()) return (0, 0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -490,6 +500,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool _killSwitch = killSwitch;
 
         if (_killSwitch) return (0, true);
+        if (_checkSequencer()) return (0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -589,6 +600,33 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             );
             return true;
         }
+        return false;
+    }
+
+    /**
+     * @notice Checks if the sequencer is down, or if the grace period is not met.
+     * @return bool indicating if the sequencer has a problem
+     */
+    function _checkSequencer() internal view returns (bool) {
+        if (address(sequencerUptimeFeed) != address(0)) {
+            (, int256 sequencerAnswer, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
+
+            // This check should make TXs from L1 to L2 revert if someone tried interacting with the cellar while the sequencer is down.
+            // Answer == 0: Sequencer is up
+            // Answer == 1: Sequencer is down
+            if (sequencerAnswer == 1) {
+                return true;
+            }
+
+            // Make sure the grace period has passed after the
+            // sequencer is back up.
+            uint256 timeSinceUp = block.timestamp - startedAt;
+            if (timeSinceUp <= sequencerGracePeriod) {
+                return true;
+            }
+        }
+
+        // If we made it this far, the sequencer is fine, and or it is not set.
         return false;
     }
 }

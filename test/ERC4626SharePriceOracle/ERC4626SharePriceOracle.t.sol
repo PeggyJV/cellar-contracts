@@ -112,7 +112,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             1e18,
             0.01e4,
             10e4,
-            address(0)
+            address(0),
+            0
         );
         sharePriceOracle = new ERC4626SharePriceOracle(args);
 
@@ -1040,7 +1041,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
                 1e18,
                 0,
                 1_000_000_000_000_000_000e4,
-                address(0)
+                address(0),
+                0
             );
             sharePriceOracle = new ERC4626SharePriceOracle(args);
         }
@@ -1119,7 +1121,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             1e18,
             0.01e4,
             10e4,
-            address(0)
+            address(0),
+            0
         );
         sharePriceOracle = new ERC4626SharePriceOracle(args);
 
@@ -1181,7 +1184,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             1e18,
             0.01e4,
             10e4,
-            address(0)
+            address(0),
+            0
         );
         sharePriceOracle = new ERC4626SharePriceOracle(args);
 
@@ -1240,7 +1244,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
                 1e18,
                 0.01e4,
                 10e4,
-                address(0)
+                address(0),
+                0
             );
             sharePriceOracle = new ERC4626SharePriceOracle(args);
         }

@@ -60,7 +60,8 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
             1.02e18,
             0.1e4,
             10e4,
-            address(0)
+            address(0),
+            0
         );
         sharePriceOracle = new ERC4626SharePriceOracle(args);
 
