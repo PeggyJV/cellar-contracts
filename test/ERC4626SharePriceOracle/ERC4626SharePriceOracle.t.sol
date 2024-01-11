@@ -99,7 +99,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -111,8 +111,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0)
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);
@@ -1025,7 +1027,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address _automationAdmin = address(this);
 
             // Setup share price oracle.
-            sharePriceOracle = new ERC4626SharePriceOracle(
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
                 _target,
                 _heartbeat,
                 _deviationTrigger,
@@ -1037,8 +1039,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
                 address(LINK),
                 1e18,
                 0,
-                1_000_000_000_000_000_000e4
+                1_000_000_000_000_000_000e4,
+                address(0)
             );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
         }
 
         uint96 initialUpkeepFunds = 10e18;
@@ -1102,7 +1106,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -1114,8 +1118,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0)
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         assertTrue(sharePriceOracle.automationForwarder() == address(0), "Automation Forwarder should not be set.");
 
@@ -1162,7 +1168,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -1174,8 +1180,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0)
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         // Try calling `handlePendingUpkeep` before calling `initialize`.
         vm.expectRevert(
@@ -1208,30 +1216,34 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         IRegistrar registrarV2 = IRegistrar(automationRegistrarV2);
         IRegistry registryV2 = IRegistry(automationRegistryV2);
 
-        ERC4626 _target = ERC4626(address(cellar));
-        uint64 _heartbeat = 1 days;
-        uint64 _deviationTrigger = 0.0005e4;
-        uint64 _gracePeriod = 60 * 60; // 1 hr
-        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = automationRegistryV2;
-        address _automationRegistrar = automationRegistrarV2;
-        address _automationAdmin = address(this);
+        {
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = automationRegistryV2;
+            address _automationRegistrar = automationRegistrarV2;
+            address _automationAdmin = address(this);
 
-        // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            _automationRegistrar,
-            _automationAdmin,
-            address(LINK),
-            1e18,
-            0.01e4,
-            10e4
-        );
+            // Setup share price oracle.
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
+                1e18,
+                0.01e4,
+                10e4,
+                address(0)
+            );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
+        }
 
         IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams({
             name: "Share Price Oracle",

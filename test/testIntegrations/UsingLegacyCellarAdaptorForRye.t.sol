@@ -47,7 +47,7 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -59,8 +59,10 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
             address(LINK),
             1.02e18,
             0.1e4,
-            10e4
+            10e4,
+            address(0)
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);

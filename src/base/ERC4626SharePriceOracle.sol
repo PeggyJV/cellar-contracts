@@ -21,6 +21,25 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint192 cumulative;
     }
 
+    /**
+     * @notice Use a struct for constructor args so we do not encounter stack too deep errors.
+     */
+    struct ConstructorArgs {
+        ERC4626 _target;
+        uint64 _heartbeat;
+        uint64 _deviationTrigger;
+        uint64 _gracePeriod;
+        uint16 _observationsToUse;
+        address _automationRegistry;
+        address _automationRegistrar;
+        address _automationAdmin;
+        address _link;
+        uint216 _startingAnswer;
+        uint256 _allowedAnswerChangeLower;
+        uint256 _allowedAnswerChangeUpper;
+        address _sequencerUptimeFeed;
+    }
+
     // ========================================= CONSTANTS =========================================
     /**
      * @notice Gas Limit to use for Upkeep created in `initialize`.
@@ -209,46 +228,34 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
      * @notice TWAA calculations will use the current pending observation, and then `_observationsToUse` observations.
      */
-    constructor(
-        ERC4626 _target,
-        uint64 _heartbeat,
-        uint64 _deviationTrigger,
-        uint64 _gracePeriod,
-        uint16 _observationsToUse,
-        address _automationRegistry,
-        address _automationRegistrar,
-        address _automationAdmin,
-        address _link,
-        uint216 _startingAnswer,
-        uint256 _allowedAnswerChangeLower,
-        uint256 _allowedAnswerChangeUpper
-    ) {
-        target = _target;
+    constructor(ConstructorArgs memory args) {
+        target = args._target;
         targetDecimals = target.decimals();
         ONE_SHARE = 10 ** targetDecimals;
-        heartbeat = _heartbeat;
-        deviationTrigger = _deviationTrigger;
-        gracePeriod = _gracePeriod;
+        heartbeat = args._heartbeat;
+        deviationTrigger = args._deviationTrigger;
+        gracePeriod = args._gracePeriod;
         // Add 1 to observations to use.
-        _observationsToUse = _observationsToUse + 1;
-        observationsLength = _observationsToUse;
+        args._observationsToUse = args._observationsToUse + 1;
+        observationsLength = args._observationsToUse;
 
         // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
         // That way the initial upkeeps won't need to change state from 0 which is more expensive.
-        for (uint256 i; i < _observationsToUse; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
+        for (uint256 i; i < args._observationsToUse; ++i)
+            observations.push(Observation({ timestamp: 1, cumulative: 1 }));
 
-        // Set to _startingAnswer so slot is dirty for first upkeep, and does not trigger kill switch.
-        answer = _startingAnswer;
+        // Set to args._startingAnswer so slot is dirty for first upkeep, and does not trigger kill switch.
+        answer = args._startingAnswer;
 
-        if (_allowedAnswerChangeLower > 1e4) revert("Illogical Lower");
-        allowedAnswerChangeLower = _allowedAnswerChangeLower;
-        if (_allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
-        allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
+        if (args._allowedAnswerChangeLower > 1e4) revert("Illogical Lower");
+        allowedAnswerChangeLower = args._allowedAnswerChangeLower;
+        if (args._allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
+        allowedAnswerChangeUpper = args._allowedAnswerChangeUpper;
 
-        automationRegistry = _automationRegistry;
-        automationRegistrar = _automationRegistrar;
-        automationAdmin = _automationAdmin;
-        link = ERC20(_link);
+        automationRegistry = args._automationRegistry;
+        automationRegistrar = args._automationRegistrar;
+        automationAdmin = args._automationAdmin;
+        link = ERC20(args._link);
     }
 
     //============================== INITIALIZATION ===============================
