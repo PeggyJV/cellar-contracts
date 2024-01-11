@@ -138,7 +138,14 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     event KillSwitchActivated(uint256 reportedAnswer, uint256 minAnswer, uint256 maxAnswer);
 
+    /**
+     * @notice Emitted when the upkeep is registered.
+     */
     event UpkeepRegistered(uint256 upkeepId, address forwarder);
+
+    /**
+     * @notice Emitted when a upkeep registration is left pending.
+     */
     event UpkeepPending(bytes32 upkeepParamHash);
 
     //============================== IMMUTABLES ===============================
@@ -228,6 +235,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     IChainlinkAggregator internal immutable sequencerUptimeFeed;
 
+    /**
+     * @notice The grace period to enforce after a sequencer comes back online.
+     * @dev Calls to `getLatest` and `getLatestAnswer` will return a true for
+     *      `isNotSafeToUse` if the sequencer is down, or if the time since the
+     *      sequencer went back online is less than `sequencerGracePeriod`.
+     */
     uint64 public immutable sequencerGracePeriod;
 
     /**
