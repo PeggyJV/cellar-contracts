@@ -114,7 +114,8 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -126,8 +127,12 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             address(LINK),
             1e18,
             0.1e4,
-            3e4
+            3e4,
+            address(0),
+            0
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
+
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);
         LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
@@ -574,7 +579,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             address _automationAdmin = address(this);
 
             // Deploy new share price oracle.
-            sharePriceOracle = new ERC4626SharePriceOracle(
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
                 _target,
                 _heartbeat,
                 _deviationTrigger,
@@ -586,8 +591,11 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
                 address(LINK),
                 4e18,
                 0.1e4,
-                3e4
+                3e4,
+                address(0),
+                0
             );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
         }
 
         uint96 initialUpkeepFunds = 10e18;
