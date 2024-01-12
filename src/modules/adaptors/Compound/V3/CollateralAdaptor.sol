@@ -48,6 +48,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     }
 
     //============================================ Implement Base Functions ===========================================
+    // TODO we could allow users to supply collateral.
     /**
      * @notice Not supported.
      */

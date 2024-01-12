@@ -96,6 +96,7 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
 
     error BorrowAdaptor___TryingToBorrowWhileSupplying();
 
+    // TODO add a note about how comp has a min borrow amount.
     function borrowBase(IComet comet, uint256 assets) external {
         // TODO verify comet.
         uint256 baseAssets = comet.balanceOf(address(this));

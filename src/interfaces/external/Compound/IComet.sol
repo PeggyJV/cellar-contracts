@@ -34,4 +34,6 @@ interface IComet {
     function numAssets() external view returns (uint8);
 
     function getPrice(address) external view returns (uint128);
+
+    function baseTokenPriceFeed() external view returns (address);
 }

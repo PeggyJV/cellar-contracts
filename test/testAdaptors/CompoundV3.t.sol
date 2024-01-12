@@ -5,6 +5,7 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { SupplyAdaptor } from "src/modules/adaptors/Compound/V3/SupplyAdaptor.sol";
 import { CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CollateralAdaptor.sol";
 import { BorrowAdaptor } from "src/modules/adaptors/Compound/V3/BorrowAdaptor.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -20,8 +21,10 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     SupplyAdaptor private supplyAdaptor;
     CollateralAdaptor private collateralAdaptor;
     BorrowAdaptor private borrowAdaptor;
+    WstEthExtension private wstethExtension;
 
-    IComet private comet = IComet(cUSDCV3);
+    IComet private usdcComet = IComet(cUSDCV3);
+    IComet private wethComet = IComet(cWETHV3);
 
     uint32 private usdcPosition = 1;
     uint32 private wethPosition = 2;
@@ -29,13 +32,25 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private compPosition = 4;
     uint32 private uniPosition = 5;
     uint32 private linkPosition = 6;
-    uint32 private wethCompoundV3CollateralPosition = 7;
-    uint32 private wbtcCompoundV3CollateralPosition = 8;
-    uint32 private compCompoundV3CollateralPosition = 9;
-    uint32 private uniCompoundV3CollateralPosition = 10;
-    uint32 private linkCompoundV3CollateralPosition = 11;
-    uint32 private usdcCompoundV3SupplyPosition = 12;
-    uint32 private usdcCompoundV3DebtPosition = 13;
+    uint32 private wstEthPosition = 7;
+    uint32 private cbEthPosition = 8;
+    uint32 private rEthPosition = 9;
+
+    // cUSDCV3 Comet
+    uint32 private wethCompoundV3CollateralPosition = 101;
+    uint32 private wbtcCompoundV3CollateralPosition = 102;
+    uint32 private compCompoundV3CollateralPosition = 103;
+    uint32 private uniCompoundV3CollateralPosition = 104;
+    uint32 private linkCompoundV3CollateralPosition = 105;
+    uint32 private usdcCompoundV3SupplyPosition = 106;
+    uint32 private usdcCompoundV3DebtPosition = 107;
+
+    // cWETHV3 Comet
+    uint32 private wstEthCompoundV3CollateralPosition = 201;
+    uint32 private cbEthCompoundV3CollateralPosition = 202;
+    uint32 private rEthCompoundV3CollateralPosition = 203;
+    uint32 private wethCompoundV3SupplyPosition = 204;
+    uint32 private wethCompoundV3DebtPosition = 205;
 
     uint256 initialAssets;
 
@@ -51,6 +66,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         supplyAdaptor = new SupplyAdaptor();
         collateralAdaptor = new CollateralAdaptor(1.05e18);
         borrowAdaptor = new BorrowAdaptor(1.05e18);
+        wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
@@ -79,12 +95,33 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, LINK_USD_FEED);
         priceRouter.addAsset(LINK, settings, abi.encode(stor), price);
 
+        price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, STETH_USD_FEED);
+        priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
+
+        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
+        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
+        priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
+
         stor.inETH = true;
         price = uint256(IChainlinkAggregator(UNI_ETH_FEED).latestAnswer());
         price = priceRouter.getValue(WETH, price, USDC);
         price = price.changeDecimals(6, 8);
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, UNI_ETH_FEED);
         priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(CBETH_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, CBETH_ETH_FEED);
+        priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
+        priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
 
         // Setup Cellar:
         // Add adaptors and positions to the registry.
@@ -99,9 +136,13 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(compPosition, address(erc20Adaptor), abi.encode(COMP));
         registry.trustPosition(uniPosition, address(erc20Adaptor), abi.encode(UNI));
         registry.trustPosition(linkPosition, address(erc20Adaptor), abi.encode(LINK));
+        registry.trustPosition(wstEthPosition, address(erc20Adaptor), abi.encode(WSTETH));
+        registry.trustPosition(cbEthPosition, address(erc20Adaptor), abi.encode(cbETH));
+        registry.trustPosition(rEthPosition, address(erc20Adaptor), abi.encode(rETH));
 
         // Add Compound V3 Supply position.
         registry.trustPosition(usdcCompoundV3SupplyPosition, address(supplyAdaptor), abi.encode(cUSDCV3));
+        registry.trustPosition(wethCompoundV3SupplyPosition, address(supplyAdaptor), abi.encode(cWETHV3));
 
         // Add Compounds V3 Collateral positions.
         registry.trustPosition(wethCompoundV3CollateralPosition, address(collateralAdaptor), abi.encode(cUSDCV3, WETH));
@@ -109,9 +150,21 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(compCompoundV3CollateralPosition, address(collateralAdaptor), abi.encode(cUSDCV3, COMP));
         registry.trustPosition(uniCompoundV3CollateralPosition, address(collateralAdaptor), abi.encode(cUSDCV3, UNI));
         registry.trustPosition(linkCompoundV3CollateralPosition, address(collateralAdaptor), abi.encode(cUSDCV3, LINK));
+        registry.trustPosition(
+            wstEthCompoundV3CollateralPosition,
+            address(collateralAdaptor),
+            abi.encode(cWETHV3, WSTETH)
+        );
+        registry.trustPosition(
+            cbEthCompoundV3CollateralPosition,
+            address(collateralAdaptor),
+            abi.encode(cWETHV3, cbETH)
+        );
+        registry.trustPosition(rEthCompoundV3CollateralPosition, address(collateralAdaptor), abi.encode(cWETHV3, rETH));
 
         // Add Compound V3 Debt position.
         registry.trustPosition(usdcCompoundV3DebtPosition, address(borrowAdaptor), abi.encode(cUSDCV3));
+        registry.trustPosition(wethCompoundV3DebtPosition, address(borrowAdaptor), abi.encode(cWETHV3));
 
         string memory cellarName = "Compound Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -128,13 +181,21 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addPositionToCatalogue(compPosition);
         cellar.addPositionToCatalogue(uniPosition);
         cellar.addPositionToCatalogue(linkPosition);
+        cellar.addPositionToCatalogue(wstEthPosition);
+        cellar.addPositionToCatalogue(cbEthPosition);
+        cellar.addPositionToCatalogue(rEthPosition);
         cellar.addPositionToCatalogue(wethCompoundV3CollateralPosition);
         cellar.addPositionToCatalogue(wbtcCompoundV3CollateralPosition);
         cellar.addPositionToCatalogue(compCompoundV3CollateralPosition);
         cellar.addPositionToCatalogue(uniCompoundV3CollateralPosition);
         cellar.addPositionToCatalogue(linkCompoundV3CollateralPosition);
+        cellar.addPositionToCatalogue(wstEthCompoundV3CollateralPosition);
+        cellar.addPositionToCatalogue(cbEthCompoundV3CollateralPosition);
+        cellar.addPositionToCatalogue(rEthCompoundV3CollateralPosition);
         cellar.addPositionToCatalogue(usdcCompoundV3SupplyPosition);
         cellar.addPositionToCatalogue(usdcCompoundV3DebtPosition);
+        cellar.addPositionToCatalogue(wethCompoundV3SupplyPosition);
+        cellar.addPositionToCatalogue(wethCompoundV3DebtPosition);
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -152,7 +213,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Deposit into Cellar.
         cellar.deposit(assets, address(this));
         assertApproxEqAbs(
-            comet.balanceOf(address(cellar)),
+            usdcComet.balanceOf(address(cellar)),
             assets,
             2,
             "Assets should have been deposited into Compound."
@@ -182,7 +243,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     // TODO test checking max available logic
     // TODO test where we have multiple assets as collateral, and we use a ton of fuzzing and check that the health factor logic is as expected.
 
-    function testHappyPath(uint256 assets) external {
+    function testHappyPathUSDCComet(uint256 assets) external {
         // Use 200 for min assets because the minimum borrow is 100 USDC.
         assets = bound(assets, 200e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
@@ -199,12 +260,12 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(comet, WETH, assetsInWeth);
+            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WETH, assetsInWeth);
             data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(comet, assets / 2);
+            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, assets / 2);
             data[1] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -217,21 +278,21 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             "USDC Balance of cellar should equal initialAssets + assets / 2."
         );
 
-        uint256 expectedHealthFactor = 1.8e18;
-        uint256 actualHealthFactor = borrowAdaptor.getAccountHealthFactor(comet, address(cellar));
-        assertApproxEqRel(actualHealthFactor, expectedHealthFactor, 0.01e18, "Health Factor should equal expected.");
-        // TODO I could make above calculation better if I used Compound V3s pricing when figuring out assetsInWeth.
+        IComet.AssetInfo memory info = usdcComet.getAssetInfo(2);
+        uint256 expectedHealthFactor = 2 * info.liquidateCollateralFactor; // HF = assets*LCF / (assets/2) -> HF = 2 * LCF
+        uint256 actualHealthFactor = borrowAdaptor.getAccountHealthFactor(usdcComet, address(cellar));
+        assertApproxEqRel(actualHealthFactor, expectedHealthFactor, 1e12, "Health Factor should equal expected.");
 
         // Repay debt, and withdraw collateral.
         data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRepayBaseToCompoundV3(comet, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToRepayBaseToCompoundV3(usdcComet, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawCollateralFromCompoundV3(comet, WETH, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToWithdrawCollateralFromCompoundV3(usdcComet, WETH, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -242,6 +303,79 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             expectedWethBalance,
             1,
             "WETH Balance of cellar should equal assetsInWeth."
+        );
+    }
+
+    function testHappyPathWETHComet(uint256 assets) external {
+        // Compute min assets.
+        uint256 minAssets = priceRouter.getValue(WETH, 3 * 0.1e18, USDC);
+        assets = bound(assets, minAssets, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+
+        // Deposit into Cellar.
+        cellar.deposit(assets, address(this));
+
+        // Simulate a swap by minting Cellar ERC20s.
+        uint256 assetsInWsteth = priceRouter.getValue(USDC, assets, WSTETH);
+        deal(address(USDC), address(cellar), initialAssets);
+        deal(address(WSTETH), address(cellar), assetsInWsteth);
+
+        uint256 assetsToBorrow = priceRouter.getValue(USDC, assets / 2, WETH);
+
+        // Add collateral and borrow assets.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(wethComet, WSTETH, assetsInWsteth);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(wethComet, assetsToBorrow);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedWethBalance = assetsToBorrow;
+        assertApproxEqAbs(
+            WETH.balanceOf(address(cellar)),
+            expectedWethBalance,
+            1,
+            "WETH Balance of cellar should equal assetsToBorrow."
+        );
+
+        IComet.AssetInfo memory info = wethComet.getAssetInfo(1);
+        uint256 expectedHealthFactor = 2 * info.liquidateCollateralFactor; // HF = assets*LCF / (assets/2) -> HF = 2 * LCF
+        uint256 actualHealthFactor = borrowAdaptor.getAccountHealthFactor(wethComet, address(cellar));
+        // We expect this HF check to need a larger range because we are using very different chainlink pricefeeds when calcualting the borrow amount.
+        assertApproxEqRel(actualHealthFactor, expectedHealthFactor, 0.005e18, "Health Factor should equal expected.");
+
+        // Give the cellar some extra WETH dust so it can repay all debt.
+        deal(address(WETH), address(cellar), WETH.balanceOf(address(cellar)) + 1);
+
+        // Repay debt, and withdraw collateral.
+        data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRepayBaseToCompoundV3(wethComet, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawCollateralFromCompoundV3(wethComet, WSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 borrowBalance = wethComet.borrowBalanceOf(address(cellar));
+        console.log("Borrow Balance", borrowBalance);
+
+        uint256 expectedWstethBalance = assetsInWsteth;
+        assertApproxEqAbs(
+            WSTETH.balanceOf(address(cellar)),
+            expectedWstethBalance,
+            1,
+            "WSTETH Balance of cellar should equal assetsInWsteth."
         );
     }
 }
