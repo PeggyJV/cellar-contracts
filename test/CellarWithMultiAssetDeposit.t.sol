@@ -49,10 +49,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         mockWbtcUsd = new MockDataFeed(WBTC_USD_FEED);
         mockUsdtUsd = new MockDataFeed(USDT_USD_FEED);
 
-        // Set mock stable coin feeds to $1.
-        // mockUsdcUsd.setMockAnswer(1e8);
-        // mockUsdtUsd.setMockAnswer(1e8);
-
         // Setup pricing
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
@@ -146,12 +142,8 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
 
         address(cellar).functionCall(depositCallData);
 
-        // Since share price is 1:1, and USDT is hardcoded to equal the same as USDC, below checks should pass.
+        // Since share price is 1:1, below checks should pass.
         assertEq(cellar.previewRedeem(1e6), 1e6, "Cellar share price should be 1.");
-
-        cellar.dropAlternativeAssetData(USDT);
-
-        // address(cellar).functionCall(depositCallData);
     }
 
     function testDepositWithAlternativeAssetSameAsBase(uint256 assets) external {
@@ -167,7 +159,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
 
         address(cellar).functionCall(depositCallData);
 
-        // Since share price is 1:1, and USDT is hardcoded to equal the same as USDC, below checks should pass.
+        // Since share price is 1:1, below checks should pass.
         assertEq(
             cellar.totalAssets(),
             initialAssets + assets,
