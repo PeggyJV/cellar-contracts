@@ -16,6 +16,8 @@ contract V3Helper {
         // 8 decimals is the standard decimals for compound V3 pricing.
         borrowBalance = borrowBalance.changeDecimals(baseDecimals, 8);
 
+        // TODO this for loop should have some reasonable upper bound, so that we are not gas griefed, and if exceeded, then we return a zero maybe?
+        // So fixing this would require repaying all debt so borrow balance is zero, then  we will return above, so strategist can pull collateral.
         uint8 numberOfAssets = comet.numAssets();
 
         uint256 riskAdjustedCollateralValueInBase;
