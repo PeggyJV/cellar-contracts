@@ -520,6 +520,7 @@ contract PriceRouter is Ownable {
      * @dev Returns price in USD with 8 decimals.
      */
     function _getPriceInUSD(ERC20 asset, AssetSettings memory settings) internal view returns (uint256) {
+        _runPreFlightCheck();
         // Call get price function using appropriate derivative.
         uint256 price;
         if (settings.derivative == 1) {
@@ -532,6 +533,11 @@ contract PriceRouter is Ownable {
 
         return price;
     }
+
+    /**
+     * @notice If any safety checks needs to be run before pricing operations, they should be added here.
+     */
+    function _runPreFlightCheck() internal view virtual {}
 
     /**
      * @notice math function that preserves precision by multiplying the amountBase before dividing.
