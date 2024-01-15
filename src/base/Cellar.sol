@@ -83,6 +83,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         locked = false;
     }
 
+    // ========================================= _onlyOwner ========================================
+
+    function _onlyOwner() internal onlyOwner {}
+
     // ========================================= PRICE ROUTER CACHE =========================================
 
     /**
@@ -104,11 +108,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      desired behavior.
      * @dev Callable by Sommelier Governance.
      */
-    function cachePriceRouter(
-        bool checkTotalAssets,
-        uint16 allowableRange,
-        address expectedPriceRouter
-    ) external onlyOwner {
+    function cachePriceRouter(bool checkTotalAssets, uint16 allowableRange, address expectedPriceRouter) external {
+        _onlyOwner();
         uint256 minAssets;
         uint256 maxAssets;
 
@@ -228,12 +229,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Array of uint32s made up of cellars credit positions Ids.
      */
-    uint32[] public creditPositions;
+    uint32[] internal creditPositions;
 
     /**
      * @notice Array of uint32s made up of cellars debt positions Ids.
      */
-    uint32[] public debtPositions;
+    uint32[] internal debtPositions;
 
     /**
      * @notice Tell whether a position is currently used.
@@ -243,7 +244,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Get position data given position id.
      */
-    mapping(uint32 => Registry.PositionData) public getPositionData;
+    mapping(uint32 => Registry.PositionData) internal getPositionData;
 
     /**
      * @notice Get the ids of the credit positions currently used by the cellar.
@@ -262,13 +263,14 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Maximum amount of positions a cellar can have in it's credit/debt arrays.
      */
-    uint256 public constant MAX_POSITIONS = 32;
+    uint256 internal constant MAX_POSITIONS = 32;
 
     /**
      * @notice Allows owner to change the holding position.
      * @dev Callable by Sommelier Strategist.
      */
-    function setHoldingPosition(uint32 positionId) public onlyOwner {
+    function setHoldingPosition(uint32 positionId) public {
+        _onlyOwner();
         if (!isPositionUsed[positionId]) revert Cellar__PositionNotUsed(positionId);
         if (_assetOf(positionId) != asset) revert Cellar__AssetMismatch(address(asset), address(_assetOf(positionId)));
         if (getPositionData[positionId].isDebt) revert Cellar__InvalidHoldingPosition(positionId);
@@ -278,18 +280,19 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Positions the strategist is approved to use without any governance intervention.
      */
-    mapping(uint32 => bool) public positionCatalogue;
+    mapping(uint32 => bool) internal positionCatalogue;
 
     /**
      * @notice Adaptors the strategist is approved to use without any governance intervention.
      */
-    mapping(address => bool) public adaptorCatalogue;
+    mapping(address => bool) internal adaptorCatalogue;
 
     /**
      * @notice Allows Governance to add positions to this cellar's catalogue.
      * @dev Callable by Sommelier Governance.
      */
-    function addPositionToCatalogue(uint32 positionId) public onlyOwner {
+    function addPositionToCatalogue(uint32 positionId) public {
+        _onlyOwner();
         // Make sure position is not paused and is trusted.
         registry.revertIfPositionIsNotTrusted(positionId);
         positionCatalogue[positionId] = true;
@@ -300,7 +303,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Allows Governance to remove positions from this cellar's catalogue.
      * @dev Callable by Sommelier Strategist.
      */
-    function removePositionFromCatalogue(uint32 positionId) external onlyOwner {
+    function removePositionFromCatalogue(uint32 positionId) external {
+        _onlyOwner();
         positionCatalogue[positionId] = false;
         emit PositionCatalogueAltered(positionId, false);
     }
@@ -309,7 +313,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Allows Governance to add adaptors to this cellar's catalogue.
      * @dev Callable by Sommelier Governance.
      */
-    function addAdaptorToCatalogue(address adaptor) external onlyOwner {
+    function addAdaptorToCatalogue(address adaptor) external {
+        _onlyOwner();
         // Make sure adaptor is not paused and is trusted.
         registry.revertIfAdaptorIsNotTrusted(adaptor);
         adaptorCatalogue[adaptor] = true;
@@ -320,7 +325,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Allows Governance to remove adaptors from this cellar's catalogue.
      * @dev Callable by Sommelier Strategist.
      */
-    function removeAdaptorFromCatalogue(address adaptor) external onlyOwner {
+    function removeAdaptorFromCatalogue(address adaptor) external {
+        _onlyOwner();
         adaptorCatalogue[adaptor] = false;
         emit AdaptorCatalogueAltered(adaptor, false);
     }
@@ -332,12 +338,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param configurationData data used to configure how the position behaves
      * @dev Callable by Sommelier Strategist.
      */
-    function addPosition(
-        uint32 index,
-        uint32 positionId,
-        bytes memory configurationData,
-        bool inDebtArray
-    ) public onlyOwner {
+    function addPosition(uint32 index, uint32 positionId, bytes memory configurationData, bool inDebtArray) public {
+        _onlyOwner();
         _whenNotShutdown();
 
         // Check if position is already being used.
@@ -381,7 +383,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param index index at which to remove the position
      * @dev Callable by Sommelier Strategist.
      */
-    function removePosition(uint32 index, bool inDebtArray) external onlyOwner {
+    function removePosition(uint32 index, bool inDebtArray) external {
+        _onlyOwner();
         // Get position being removed.
         uint32 positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
 
@@ -396,7 +399,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Allows Sommelier Governance to forceably remove a position from the Cellar without checking its balance is zero.
      * @dev Callable by Sommelier Governance.
      */
-    function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
+    function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external {
+        _onlyOwner();
         // Get position being removed.
         uint32 _positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
         // Make sure position id right, and is distrusted.
@@ -432,7 +436,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param inDebtArray bool indicating to switch positions in the debt array, or the credit array.
      * @dev Callable by Sommelier Strategist.
      */
-    function swapPositions(uint32 index1, uint32 index2, bool inDebtArray) external onlyOwner {
+    function swapPositions(uint32 index1, uint32 index2, bool inDebtArray) external {
+        _onlyOwner();
         // Get the new positions that will be at each index.
         uint32 newPosition1;
         uint32 newPosition2;
@@ -507,19 +512,20 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Sets the max possible performance fee for this cellar.
      */
-    uint64 public constant MAX_PLATFORM_FEE = 0.2e18;
+    uint64 internal constant MAX_PLATFORM_FEE = 0.2e18;
 
     /**
      * @notice Sets the max possible fee cut for this cellar.
      */
-    uint64 public constant MAX_FEE_CUT = 1e18;
+    uint64 internal constant MAX_FEE_CUT = 1e18;
 
     /**
      * @notice Sets the Strategists cut of platform fees
      * @param cut the platform cut for the strategist
      * @dev Callable by Sommelier Governance.
      */
-    function setStrategistPlatformCut(uint64 cut) external onlyOwner {
+    function setStrategistPlatformCut(uint64 cut) external {
+        _onlyOwner();
         if (cut > MAX_FEE_CUT) revert Cellar__InvalidFeeCut();
         emit StrategistPlatformCutChanged(feeData.strategistPlatformCut, cut);
 
@@ -531,7 +537,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param payout the new strategist payout address
      * @dev Callable by Sommelier Strategist.
      */
-    function setStrategistPayoutAddress(address payout) external onlyOwner {
+    function setStrategistPayoutAddress(address payout) external {
+        _onlyOwner();
         emit StrategistPayoutAddressChanged(feeData.strategistPayoutAddress, payout);
 
         feeData.strategistPayoutAddress = payout;
@@ -583,7 +590,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Allows governance to choose whether or not to respect a pause.
      * @dev Callable by Sommelier Governance.
      */
-    function toggleIgnorePause() external onlyOwner {
+    function toggleIgnorePause() external {
+        _onlyOwner();
         ignorePause = ignorePause ? false : true;
     }
 
@@ -598,7 +606,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev Callable by Sommelier Strategist.
      */
-    function initiateShutdown() external onlyOwner {
+    function initiateShutdown() external {
+        _onlyOwner();
         _whenNotShutdown();
         isShutdown = true;
 
@@ -609,7 +618,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Restart the cellar.
      * @dev Callable by Sommelier Strategist.
      */
-    function liftShutdown() external onlyOwner {
+    function liftShutdown() external {
+        _onlyOwner();
         if (!isShutdown) revert Cellar__ContractNotShutdown();
         isShutdown = false;
 
@@ -621,12 +631,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Id to get the gravity bridge from the registry.
      */
-    uint256 public constant GRAVITY_BRIDGE_REGISTRY_SLOT = 0;
+    uint256 internal constant GRAVITY_BRIDGE_REGISTRY_SLOT = 0;
 
     /**
      * @notice Id to get the price router from the registry.
      */
-    uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
+    uint256 internal constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
     /**
      * @notice The minimum amount of shares to be minted in the contructor.
@@ -698,6 +708,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // =========================================== CORE LOGIC ===========================================
 
     /**
+     * @notice Emitted during deposits.
+     */
+    event Deposit(address indexed caller, address indexed owner, address depositAsset, uint256 assets, uint256 shares);
+
+    /**
      * @notice Attempted an action with zero shares.
      */
     error Cellar__ZeroShares();
@@ -722,17 +737,18 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice called at the beginning of deposit.
      */
-    function beforeDeposit(uint256, uint256, address) internal view virtual {
+    function beforeDeposit(ERC20, uint256, uint256, address) internal view virtual {
         _whenNotShutdown();
         _checkIfPaused();
     }
 
     /**
      * @notice called at the end of deposit.
+     * @param position the position to deposit to.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(uint256 assets, uint256, address) internal virtual {
-        _depositTo(holdingPosition, assets);
+    function afterDeposit(uint32 position, uint256 assets, uint256, address) internal virtual {
+        _depositTo(position, assets);
     }
 
     /**
@@ -745,17 +761,23 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Called when users enter the cellar via deposit or mint.
      */
-    function _enter(uint256 assets, uint256 shares, address receiver) internal {
-        beforeDeposit(assets, shares, receiver);
+    function _enter(
+        ERC20 depositAsset,
+        uint32 position,
+        uint256 assets,
+        uint256 shares,
+        address receiver
+    ) internal virtual {
+        beforeDeposit(asset, assets, shares, receiver);
 
         // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
+        depositAsset.safeTransferFrom(msg.sender, address(this), assets);
 
         _mint(receiver, shares);
 
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, receiver, address(asset), assets, shares);
 
-        afterDeposit(assets, shares, receiver);
+        afterDeposit(position, assets, shares, receiver);
     }
 
     /**
@@ -764,7 +786,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
      */
-    function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual override nonReentrant returns (uint256 shares) {
         // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
         (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
@@ -773,7 +795,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
-        _enter(assets, shares, receiver);
+        _enter(asset, holdingPosition, assets, shares, receiver);
     }
 
     /**
@@ -790,7 +812,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
-        _enter(assets, shares, receiver);
+        _enter(asset, holdingPosition, assets, shares, receiver);
     }
 
     /**
@@ -1174,36 +1196,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         shares = assets.mulDivUp(_totalSupply, _totalAssets);
     }
 
-    // =========================================== AUTOMATION ACTIONS LOGIC ===========================================
-
-    /**
-     * Emitted when sender is not approved to call `callOnAdaptor`.
-     */
-    error Cellar__CallerNotApprovedToRebalance();
-
-    /**
-     * @notice Emitted when `setAutomationActions` is called.
-     */
-    event Cellar__AutomationActionsUpdated(address newAutomationActions);
-
-    /**
-     * @notice The Automation Actions contract that can rebalance this Cellar.
-     * @dev Set to zero address if not in use.
-     */
-    address public automationActions;
-
-    /**
-     * @notice Set the Automation Actions contract.
-     * @param _registryId Registry Id to get the automation action.
-     * @param _expectedAutomationActions The registry automation actions differed from the expected automation actions.
-     * @dev Callable by Sommelier Governance.
-     */
-    function setAutomationActions(uint256 _registryId, address _expectedAutomationActions) external onlyOwner {
-        _checkRegistryAddressAgainstExpected(_registryId, _expectedAutomationActions);
-        automationActions = _expectedAutomationActions;
-        emit Cellar__AutomationActionsUpdated(_expectedAutomationActions);
-    }
-
     // =========================================== ADAPTOR LOGIC ===========================================
 
     /**
@@ -1244,19 +1236,20 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Stores the max possible rebalance deviation for this cellar.
      */
-    uint64 public constant MAX_REBALANCE_DEVIATION = 0.1e18;
+    uint64 internal constant MAX_REBALANCE_DEVIATION = 0.1e18;
 
     /**
      * @notice The percent the total assets of a cellar may deviate during a `callOnAdaptor`(rebalance) call.
      */
-    uint256 public allowedRebalanceDeviation = 0.0003e18;
+    uint256 internal allowedRebalanceDeviation = 0.0003e18;
 
     /**
      * @notice Allows governance to change this cellars rebalance deviation.
      * @param newDeviation the new rebalance deviation value.
      * @dev Callable by Sommelier Governance.
      */
-    function setRebalanceDeviation(uint256 newDeviation) external onlyOwner {
+    function setRebalanceDeviation(uint256 newDeviation) external {
+        _onlyOwner();
         if (newDeviation > MAX_REBALANCE_DEVIATION)
             revert Cellar__InvalidRebalanceDeviation(newDeviation, MAX_REBALANCE_DEVIATION);
 
@@ -1309,7 +1302,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Callable by Sommelier Strategist, and Automation Actions contract.
      */
     function callOnAdaptor(AdaptorCall[] calldata data) external virtual nonReentrant {
-        if (msg.sender != owner && msg.sender != automationActions) revert Cellar__CallerNotApprovedToRebalance();
+        _onlyOwner();
         _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;
@@ -1354,7 +1347,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Increases the share supply cap.
      * @dev Callable by Sommelier Governance.
      */
-    function increaseShareSupplyCap(uint192 _newShareSupplyCap) public onlyOwner {
+    function increaseShareSupplyCap(uint192 _newShareSupplyCap) public {
+        _onlyOwner();
         if (_newShareSupplyCap < shareSupplyCap) revert Cellar__InvalidShareSupplyCap();
 
         shareSupplyCap = _newShareSupplyCap;
@@ -1364,7 +1358,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Decreases the share supply cap.
      * @dev Callable by Sommelier Strategist.
      */
-    function decreaseShareSupplyCap(uint192 _newShareSupplyCap) public onlyOwner {
+    function decreaseShareSupplyCap(uint192 _newShareSupplyCap) public {
+        _onlyOwner();
         if (_newShareSupplyCap > shareSupplyCap) revert Cellar__InvalidShareSupplyCap();
 
         shareSupplyCap = _newShareSupplyCap;
@@ -1491,31 +1486,5 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
         if (_registryId == 0) revert Cellar__SettingValueToRegistryIdZeroIsProhibited();
         if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
-    }
-
-    /**
-     * @notice View the amount of assets in each Cellar Position.
-     */
-    function viewPositionBalances()
-        external
-        view
-        returns (ERC20[] memory assets, uint256[] memory balances, bool[] memory isDebt)
-    {
-        uint256 creditLen = creditPositions.length;
-        uint256 debtLen = debtPositions.length;
-        assets = new ERC20[](creditLen + debtLen);
-        balances = new uint256[](creditLen + debtLen);
-        isDebt = new bool[](creditLen + debtLen);
-        for (uint256 i = 0; i < creditLen; ++i) {
-            assets[i] = _assetOf(creditPositions[i]);
-            balances[i] = _balanceOf(creditPositions[i]);
-            isDebt[i] = false;
-        }
-
-        for (uint256 i = 0; i < debtLen; ++i) {
-            assets[i + creditPositions.length] = _assetOf(debtPositions[i]);
-            balances[i + creditPositions.length] = _balanceOf(debtPositions[i]);
-            isDebt[i + creditPositions.length] = true;
-        }
     }
 }
