@@ -122,7 +122,6 @@ contract CellarWithMultiAssetDeposit is Cellar {
     function dropAlternativeAssetData(ERC20 _alternativeAsset) external {
         _onlyOwner();
         delete alternativeAssetData[_alternativeAsset];
-        // alternativeAssetData[_alternativeAsset] = AlternativeAssetData(false, 0, 0);
 
         emit AlternativeAssetDropped(address(_alternativeAsset));
     }

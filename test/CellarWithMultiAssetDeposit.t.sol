@@ -242,6 +242,20 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         assertEq(fee, 0, "Fee should be zero.");
     }
 
+    function testSettingAlternativeAssetDataAgain() external {
+        uint256 assets = 100e6;
+
+        cellar.setAlternativeAssetData(USDT, usdtPosition, 0);
+
+        // Owner decides they actually want to add a fee.
+        cellar.setAlternativeAssetData(USDT, usdtPosition, 0.0010e8);
+
+        (bool isSupported, uint32 holdingPosition, uint32 fee) = cellar.alternativeAssetData(USDT);
+        assertEq(isSupported, true, "USDT should be supported.");
+        assertEq(holdingPosition, usdtPosition, "Holding position should be usdt position.");
+        assertEq(fee, 0.0010e8, "Fee should be 10 bps.");
+    }
+
     // ======================== Test Reverts ==========================
     function testDepositReverts() external {
         uint256 assets = 100e6;
