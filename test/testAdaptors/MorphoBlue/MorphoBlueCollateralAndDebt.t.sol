@@ -193,7 +193,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(
             morphoBlueCollateralWETHPosition,
             address(morphoBlueCollateralAdaptor),
-            abi.encode(wethUsdcMarketId)
+            abi.encode(wethUsdcMarket)
         );
         registry.trustPosition(
             morphoBlueDebtWETHPosition,
@@ -208,7 +208,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(
             morphoBlueCollateralUSDCPosition,
             address(morphoBlueCollateralAdaptor),
-            abi.encode(usdcDaiMarketId)
+            abi.encode(usdcDaiMarket)
         );
         registry.trustPosition(morphoBlueDebtUSDCPosition, address(morphoBlueDebtAdaptor), abi.encode(usdcDaiMarketId));
         registry.trustPosition(
@@ -219,7 +219,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(
             morphoBlueCollateralWBTCPosition,
             address(morphoBlueCollateralAdaptor),
-            abi.encode(wbtcUsdcMarketId)
+            abi.encode(wbtcUsdcMarket)
         );
         registry.trustPosition(
             morphoBlueDebtWBTCPosition,
@@ -316,7 +316,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         assertApproxEqAbs(
@@ -334,7 +334,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         );
 
         // test balanceOf() of collateralAdaptor
-        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarket);
         vm.prank(address(cellar));
         uint256 newBalance = morphoBlueCollateralAdaptor.balanceOf(adaptorData);
 
@@ -358,7 +358,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -379,12 +379,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = uint256(morphoBlue.position(wethUsdcMarketId, address(cellar)).collateral);
@@ -402,12 +402,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, assets / 2);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = uint256(morphoBlue.position(wethUsdcMarketId, address(cellar)).collateral);
@@ -426,12 +426,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, type(uint256).max);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, type(uint256).max);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = uint256(morphoBlue.position(wethUsdcMarketId, address(cellar)).collateral);
@@ -454,7 +454,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             MorphoBlueCollateralAdaptor.withdraw.selector,
             100_000e18,
             maliciousStrategist,
-            abi.encode(wethUsdcMarketId),
+            abi.encode(wethUsdcMarket),
             abi.encode(0)
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
@@ -482,7 +482,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -519,7 +519,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -554,7 +554,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -601,7 +601,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         morphoBlue.supply(wethUsdcMarket, supplyAmount, 0, SUPPLIER, hex"");
         vm.stopPrank();
 
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -637,7 +637,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -681,7 +681,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
-        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarketId, assets);
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarket, assets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarketId, MBWbtcUsdcBorrowAmount);
         data[0] = Cellar.AdaptorCall({
             adaptor: address(morphoBlueCollateralAdaptor),
@@ -754,7 +754,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
-        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarketId, wbtcAssets);
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarket, wbtcAssets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, wethUSDCToBorrow);
         adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarketId, wbtcUSDCToBorrow);
         data[0] = Cellar.AdaptorCall({
@@ -807,7 +807,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         deal(address(WETH), address(cellar), 0);
 
-        adaptorCalls2[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls2[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, assets);
         newData2[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
@@ -829,7 +829,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -865,7 +865,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         assertEq(USDC.balanceOf(address(cellar)), 0, "Cellar should have zero debtAsset");
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, type(uint256).max);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, type(uint256).max);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = uint256(morphoBlue.position(wethUsdcMarketId, address(cellar)).collateral);
@@ -884,7 +884,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -903,27 +903,27 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data);
 
         // try to removeCollateral but more than should be allowed
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
                     MorphoBlueCollateralAdaptor.MorphoBlueCollateralAdaptor__HealthFactorTooLow.selector,
-                    wethUsdcMarketId
+                    wethUsdcMarket
                 )
             )
         );
         cellar.callOnAdaptor(data);
 
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarketId, type(uint256).max);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralToMorphoBlue(wethUsdcMarket, type(uint256).max);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
                     MorphoBlueCollateralAdaptor.MorphoBlueCollateralAdaptor__HealthFactorTooLow.selector,
-                    wethUsdcMarketId
+                    wethUsdcMarket
                 )
             )
         );
@@ -939,7 +939,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -961,7 +961,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // add collateral to be able to borrow amount desired
         deal(address(WETH), address(cellar), 3 * assets);
-        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarketId, assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralToMorphoBlue(wethUsdcMarket, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueCollateralAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
