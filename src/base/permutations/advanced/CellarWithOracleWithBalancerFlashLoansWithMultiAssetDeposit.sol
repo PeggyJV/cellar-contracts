@@ -137,15 +137,76 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
      * @return shares amount of shares given for deposit.
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
-        // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
-        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _deposit(asset, assets, assets, assets, holdingPosition, receiver);
+    }
 
+    function _getMultiAssetDepositData(
+        ERC20 depositAsset,
+        uint256 assets
+    )
+        internal
+        view
+        returns (uint256 assetsConvertedToAsset, uint256 assetsConvertedToAssetWithFeeRemoved, uint32 position)
+    {
+        AlternativeAssetData memory assetData = alternativeAssetData[depositAsset];
+        if (!assetData.isSupported) revert CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
+
+        // Convert assets from depositAsset to asset.
+        assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
+
+        // Collect alternative asset fee.
+        assetsConvertedToAssetWithFeeRemoved = assetsConvertedToAsset.mulDivDown(1e8 - assetData.depositFee, 1e8);
+
+        position = assetData.holdingPosition;
+    }
+
+    function previewMultiAssetDeposit(ERC20 depositAsset, uint256 assets) external view returns (uint256 shares) {
+        // Convert assets from depositAsset to asset.
+        (uint256 assetsConvertedToAsset, uint256 assetsConvertedToAssetWithFeeRemoved, ) = _getMultiAssetDepositData(
+            depositAsset,
+            assets
+        );
+
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _convertToShares(
+            assetsConvertedToAssetWithFeeRemoved,
+            _totalAssets + (assetsConvertedToAsset - assetsConvertedToAssetWithFeeRemoved),
+            _totalSupply
+        );
+    }
+
+    function multiAssetDeposit(
+        ERC20 depositAsset,
+        uint256 assets,
+        address receiver
+    ) public nonReentrant returns (uint256 shares) {
+        // Convert assets from depositAsset to asset.
         (
-            ERC20 depositAsset,
             uint256 assetsConvertedToAsset,
             uint256 assetsConvertedToAssetWithFeeRemoved,
             uint32 position
-        ) = _getDepositAssetAndAdjustedAssetsAndPosition(assets);
+        ) = _getMultiAssetDepositData(depositAsset, assets);
+
+        shares = _deposit(
+            depositAsset,
+            assets,
+            assetsConvertedToAsset,
+            assetsConvertedToAssetWithFeeRemoved,
+            position,
+            receiver
+        );
+    }
+
+    function _deposit(
+        ERC20 depositAsset,
+        uint256 assets,
+        uint256 assetsConvertedToAsset,
+        uint256 assetsConvertedToAssetWithFeeRemoved,
+        uint32 position,
+        address receiver
+    ) internal returns (uint256 shares) {
+        // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
         // Perform share calculation using assetsConvertedToAssetWithFeeRemoved.
         // Check for rounding error since we round down in previewDeposit.
@@ -163,48 +224,5 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
 
         // _enter into holding position but passing in actual assets.
         _enter(depositAsset, position, assets, shares, receiver);
-    }
-
-    //============================== HELPER FUNCTION ===============================
-
-    /**
-     * @notice Reads message data to determine if user is trying to deposit with an alternative asset or wants to do a normal deposit.
-     */
-    function _getDepositAssetAndAdjustedAssetsAndPosition(
-        uint256 assets
-    )
-        internal
-        view
-        returns (
-            ERC20 depositAsset,
-            uint256 assetsConvertedToAsset,
-            uint256 assetsConvertedToAssetWithFeeRemoved,
-            uint32 position
-        )
-    {
-        uint256 msgDataLength = msg.data.length;
-        if (msgDataLength == 68) {
-            // Caller has not encoded an alternative asset, so return address(0).
-            depositAsset = asset;
-            assetsConvertedToAssetWithFeeRemoved = assets;
-            assetsConvertedToAsset = assets;
-            position = holdingPosition;
-        } else if (msgDataLength == 100) {
-            // Caller has encoded an extra arguments, try to decode it as an address.
-            (, , depositAsset) = abi.decode(msg.data[4:], (uint256, address, ERC20));
-
-            AlternativeAssetData memory assetData = alternativeAssetData[depositAsset];
-            if (!assetData.isSupported) revert CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
-
-            // Convert assets from depositAsset to asset.
-            assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
-
-            // Collect alternative asset fee.
-            assetsConvertedToAssetWithFeeRemoved = assetsConvertedToAsset.mulDivDown(1e8 - assetData.depositFee, 1e8);
-
-            position = assetData.holdingPosition;
-        } else {
-            revert CellarWithMultiAssetDeposit__CallDataLengthNotSupported();
-        }
     }
 }

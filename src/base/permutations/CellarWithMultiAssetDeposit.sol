@@ -129,22 +129,77 @@ contract CellarWithMultiAssetDeposit is Cellar {
 
     /**
      * @notice Deposits assets into the cellar, and returns shares to receiver.
-     * @dev Compliant with ERC4626 standard, but additionally allows for multi-asset deposits
-     *      by encoding the asset to deposit at the end of the normal deposit params.
      * @param assets amount of assets deposited by user.
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
-        // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
-        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _deposit(asset, assets, assets, assets, holdingPosition, receiver);
+    }
 
+    /**
+     * @notice Allows users to deposit into cellar using alternative assets.
+     * @param depositAsset the asset to deposit
+     * @param assets amount of depositAsset to deposit
+     * @param receiver address to receive the shares
+     */
+    function multiAssetDeposit(
+        ERC20 depositAsset,
+        uint256 assets,
+        address receiver
+    ) public nonReentrant returns (uint256 shares) {
+        // Convert assets from depositAsset to asset.
         (
-            ERC20 depositAsset,
             uint256 assetsConvertedToAsset,
             uint256 assetsConvertedToAssetWithFeeRemoved,
             uint32 position
-        ) = _getDepositAssetAndAdjustedAssetsAndPosition(assets);
+        ) = _getMultiAssetDepositData(depositAsset, assets);
+
+        shares = _deposit(
+            depositAsset,
+            assets,
+            assetsConvertedToAsset,
+            assetsConvertedToAssetWithFeeRemoved,
+            position,
+            receiver
+        );
+    }
+
+    //============================== PREVIEW FUNCTIONS ===============================
+
+    /**
+     * @notice Preview function to see how many shares a multi asset deposit will give user.
+     */
+    function previewMultiAssetDeposit(ERC20 depositAsset, uint256 assets) external view returns (uint256 shares) {
+        // Convert assets from depositAsset to asset.
+        (uint256 assetsConvertedToAsset, uint256 assetsConvertedToAssetWithFeeRemoved, ) = _getMultiAssetDepositData(
+            depositAsset,
+            assets
+        );
+
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _convertToShares(
+            assetsConvertedToAssetWithFeeRemoved,
+            _totalAssets + (assetsConvertedToAsset - assetsConvertedToAssetWithFeeRemoved),
+            _totalSupply
+        );
+    }
+
+    //============================== HELPER FUNCTIONS ===============================
+
+    /**
+     * @notice Helper function to fulfill normal deposits and multi asset deposits.
+     */
+    function _deposit(
+        ERC20 depositAsset,
+        uint256 assets,
+        uint256 assetsConvertedToAsset,
+        uint256 assetsConvertedToAssetWithFeeRemoved,
+        uint32 position,
+        address receiver
+    ) internal returns (uint256 shares) {
+        // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
         // Perform share calculation using assetsConvertedToAssetWithFeeRemoved.
         // Check for rounding error since we round down in previewDeposit.
@@ -164,46 +219,27 @@ contract CellarWithMultiAssetDeposit is Cellar {
         _enter(depositAsset, position, assets, shares, receiver);
     }
 
-    //============================== HELPER FUNCTION ===============================
-
     /**
-     * @notice Reads message data to determine if user is trying to deposit with an alternative asset or wants to do a normal deposit.
+     * @notice Helper function to verify asset is supported for multi asset deposit,
+     *         convert assets from depositAsset to asset, and account for alternative asset fee.
      */
-    function _getDepositAssetAndAdjustedAssetsAndPosition(
+    function _getMultiAssetDepositData(
+        ERC20 depositAsset,
         uint256 assets
     )
         internal
         view
-        returns (
-            ERC20 depositAsset,
-            uint256 assetsConvertedToAsset,
-            uint256 assetsConvertedToAssetWithFeeRemoved,
-            uint32 position
-        )
+        returns (uint256 assetsConvertedToAsset, uint256 assetsConvertedToAssetWithFeeRemoved, uint32 position)
     {
-        uint256 msgDataLength = msg.data.length;
-        if (msgDataLength == 68) {
-            // Caller has not encoded an alternative asset, so return address(0).
-            depositAsset = asset;
-            assetsConvertedToAssetWithFeeRemoved = assets;
-            assetsConvertedToAsset = assets;
-            position = holdingPosition;
-        } else if (msgDataLength == 100) {
-            // Caller has encoded an extra arguments, try to decode it as an address.
-            (, , depositAsset) = abi.decode(msg.data[4:], (uint256, address, ERC20));
+        AlternativeAssetData memory assetData = alternativeAssetData[depositAsset];
+        if (!assetData.isSupported) revert CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
 
-            AlternativeAssetData memory assetData = alternativeAssetData[depositAsset];
-            if (!assetData.isSupported) revert CellarWithMultiAssetDeposit__AlternativeAssetNotSupported();
+        // Convert assets from depositAsset to asset.
+        assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
 
-            // Convert assets from depositAsset to asset.
-            assetsConvertedToAsset = priceRouter.getValue(depositAsset, assets, asset);
+        // Collect alternative asset fee.
+        assetsConvertedToAssetWithFeeRemoved = assetsConvertedToAsset.mulDivDown(1e8 - assetData.depositFee, 1e8);
 
-            // Collect alternative asset fee.
-            assetsConvertedToAssetWithFeeRemoved = assetsConvertedToAsset.mulDivDown(1e8 - assetData.depositFee, 1e8);
-
-            position = assetData.holdingPosition;
-        } else {
-            revert CellarWithMultiAssetDeposit__CallDataLengthNotSupported();
-        }
+        position = assetData.holdingPosition;
     }
 }

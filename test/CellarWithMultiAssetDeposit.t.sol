@@ -138,9 +138,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(USDT), address(this), assets);
         USDT.safeApprove(address(cellar), assets);
 
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT);
-
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(USDT, assets, address(this));
 
         // Since share price is 1:1, below checks should pass.
         assertEq(cellar.previewRedeem(1e6), 1e6, "Cellar share price should be 1.");
@@ -155,9 +153,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(USDC), address(this), assets);
         USDC.safeApprove(address(cellar), assets);
 
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDC);
-
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(USDC, assets, address(this));
 
         // Since share price is 1:1, below checks should pass.
         assertEq(
@@ -182,25 +178,19 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         // Setup Cellar to accept USDT deposits.
         cellar.setAlternativeAssetData(USDT, usdtPosition, fee);
 
+        uint256 expectedShares = cellar.previewMultiAssetDeposit(USDT, assets);
+
         vm.startPrank(user);
-
         USDT.safeApprove(address(cellar), assets);
-
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, user, USDT);
-
-        address(cellar).functionCall(depositCallData);
-
+        cellar.multiAssetDeposit(USDT, assets, user);
         vm.stopPrank();
+
+        // Check preview logic.
+        uint256 userShareBalance = cellar.balanceOf(user);
+        assertApproxEqAbs(userShareBalance, expectedShares, 1, "User shares should equal expected.");
 
         uint256 assetsIn = priceRouter.getValue(USDT, assets, USDC);
         uint256 assetsInWithFee = assetsIn.mulDivDown(1e8 - fee, 1e8);
-
-        uint256 expectedShares = cellar.previewDeposit(assetsInWithFee);
-
-        uint256 userShareBalance = cellar.balanceOf(user);
-
-        assertApproxEqAbs(userShareBalance, expectedShares, 1, "User shares should equal expected.");
-
         uint256 expectedSharePrice = (initialAssets + assetsIn).mulDivDown(1e6, cellar.totalSupply());
 
         assertApproxEqAbs(
@@ -232,10 +222,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(USDT), address(this), assets);
         USDT.safeApprove(address(cellar), assets);
 
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT);
-
-        // USDT deposits work.
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(USDT, assets, address(this));
 
         // But if USDT is dropped, deposits revert.
         cellar.dropAlternativeAssetData(USDT);
@@ -247,7 +234,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
                 )
             )
         );
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(USDT, assets, address(this));
 
         (bool isSupported, uint32 holdingPosition, uint32 fee) = cellar.alternativeAssetData(USDT);
         assertEq(isSupported, false, "USDT should not be supported.");
@@ -262,8 +249,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(USDT), address(this), assets);
         USDT.safeApprove(address(cellar), assets);
 
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT);
-
         // Try depositing with an asset that is not setup.
         vm.expectRevert(
             bytes(
@@ -272,18 +257,7 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
                 )
             )
         );
-        address(cellar).functionCall(depositCallData);
-
-        // User messes up the calldata.
-        depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), USDT, address(0));
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    CellarWithMultiAssetDeposit.CellarWithMultiAssetDeposit__CallDataLengthNotSupported.selector
-                )
-            )
-        );
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(USDT, assets, address(this));
     }
 
     function testOwnerReverts() external {
