@@ -45,18 +45,19 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     //============================================ VIP ===========================================
 
     // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
-    IMorpho public morphoBlue = IMorpho();
-    address public morphoBlueOwner = ;
-    address public DEFAULT_IRM = ;
+    IMorpho public morphoBlue = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+    address public morphoBlueOwner = 0x6ABfd6139c7C3CC270ee2Ce132E309F59cAaF6a2;
+    address public DEFAULT_IRM = 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
 
     MarketParams private wethUsdcMarket;
     MarketParams private wbtcUsdcMarket;
     MarketParams private usdcDaiMarket;
+    MarketParams private UNTRUSTED_mbFakeMarket;
     Id private wethUsdcMarketId;
     Id private wbtcUsdcMarketId;
     Id private usdcDaiMarketId;
-    Id private UNTRUSTED_mbMarketFakeId = Id.wrap(bytes32(abi.encode(1_000_009)));
+    // Id private UNTRUSTED_mbFakeMarket = Id.wrap(bytes32(abi.encode(1_000_009)));
 
     uint256 initialAssets;
     uint256 initialLend;
@@ -167,17 +168,17 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         registry.trustPosition(
             morphoBlueSupplyWETHPosition,
             address(morphoBlueSupplyAdaptor),
-            abi.encode(wethUsdcMarketId)
+            abi.encode(wethUsdcMarket)
         );
         registry.trustPosition(
             morphoBlueSupplyUSDCPosition,
             address(morphoBlueSupplyAdaptor),
-            abi.encode(usdcDaiMarketId)
+            abi.encode(usdcDaiMarket)
         );
         registry.trustPosition(
             morphoBlueSupplyWBTCPosition,
             address(morphoBlueSupplyAdaptor),
-            abi.encode(wbtcUsdcMarketId)
+            abi.encode(wbtcUsdcMarket)
         );
 
         string memory cellarName = "Morpho Blue Supply Cellar V0.0";
@@ -230,7 +231,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Lend USDC on Morpho Blue. Use the initial deposit that is in the cellar to begin with.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, initialDeposit);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarket, initialDeposit);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -313,7 +314,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Lend USDC on Morpho Blue.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarket, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -337,7 +338,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Lend USDC on Morpho Blue.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarket, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -351,7 +352,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             )
         );
         vm.startPrank(address(cellar));
-        bytes memory adaptorData = abi.encode(usdcDaiMarketId);
+        bytes memory adaptorData = abi.encode(usdcDaiMarket);
 
         uint256 balanceOfAccToSupplyAdaptor = morphoBlueSupplyAdaptor.balanceOf(adaptorData);
 
@@ -378,7 +379,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Lend USDC on Morpho Blue.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarketId, assets);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(usdcDaiMarket, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -398,7 +399,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarket, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -425,12 +426,12 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Withdraw USDC from MB market
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarket, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarket, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -448,7 +449,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(wethUsdcMarketId, assets / 2);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(wethUsdcMarket, assets / 2);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -480,7 +481,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(UNTRUSTED_mbMarketFakeId, assets);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(UNTRUSTED_mbFakeMarket, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -488,7 +489,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             bytes(
                 abi.encodeWithSelector(
                     MorphoBlueSupplyAdaptor.MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked.selector,
-                    (UNTRUSTED_mbMarketFakeId)
+                    (UNTRUSTED_mbFakeMarket)
                 )
             )
         );
@@ -571,12 +572,12 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Withdraw USDC from Morpho Blue.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarket, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarket, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -651,7 +652,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlue(usdcDaiMarketId);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -679,7 +680,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlue(usdcDaiMarketId);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
@@ -706,17 +707,17 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // Withdraw 2/3 of cellar USDC from one MB market, then redistribute to other MB markets.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarketId, dividedAssetPerMultiPair * 2);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarket, dividedAssetPerMultiPair * 2);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarketId, dividedAssetPerMultiPair);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarket, dividedAssetPerMultiPair);
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wbtcUsdcMarketId, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wbtcUsdcMarket, type(uint256).max);
             data[2] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 

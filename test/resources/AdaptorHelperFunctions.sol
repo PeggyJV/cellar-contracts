@@ -58,6 +58,7 @@ import { MorphoBlueDebtAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/Mo
 import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueCollateralAdaptor.sol";
 import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
+// import { MorphoBlueSupplyAdaptor2 } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor2.sol";
 import { Id, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 
 contract AdaptorHelperFunctions {
@@ -296,12 +297,24 @@ contract AdaptorHelperFunctions {
     // ========================================= Morpho Blue FUNCTIONS =========================================
 
     // MorphoBlueSupplyAdaptor Functions
-    function _createBytesDataToLendOnMorphoBlue(Id _id, uint256 _assets) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.lendToMorphoBlue.selector, _id, _assets);
+    function _createBytesDataToLendOnMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.lendToMorphoBlue.selector, _market, _assets);
     }
 
-    function _createBytesDataToWithdrawFromMorphoBlue(Id _id, uint256 _assets) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _id, _assets);
+    function _createBytesDataToWithdrawFromMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _market, _assets);
+    }
+
+    function _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.accrueInterest.selector, _market);
     }
 
     // MorphoBlueCollateralAdaptor Functions
