@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Math, Cellar, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 
 /**
@@ -22,6 +22,8 @@ contract SupplyAdaptor is BaseAdaptor {
     // Indicates whether the position is liquid or not.
     //====================================================================
 
+    error SupplyAdaptor___InvalidComet(address comet);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -40,6 +42,8 @@ contract SupplyAdaptor is BaseAdaptor {
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         IComet comet = abi.decode(adaptorData, (IComet));
+
+        _verifyComet(comet);
 
         ERC20 base = comet.baseToken();
         base.safeApprove(address(comet), assets);
@@ -69,11 +73,15 @@ contract SupplyAdaptor is BaseAdaptor {
         if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         IComet comet = abi.decode(adaptorData, (IComet));
+
+        _verifyComet(comet);
+
         ERC20 base = comet.baseToken();
 
         comet.withdrawTo(receiver, address(base), assets);
     }
 
+    // TODO this should account for USDC that is not liquid cuz it is borrowed.
     /**
      * @notice Identical to `balanceOf`, unless isLiquid configuration data is false, then returns 0.
      */
@@ -114,7 +122,8 @@ contract SupplyAdaptor is BaseAdaptor {
     //============================================ Strategist Functions ===========================================
 
     function supplyBase(IComet comet, uint256 assets) external {
-        // TODO verify comet.
+        _verifyComet(comet);
+
         ERC20 base = comet.baseToken();
         assets = _maxAvailable(base, assets);
         base.safeApprove(address(comet), assets);
@@ -125,7 +134,8 @@ contract SupplyAdaptor is BaseAdaptor {
     }
 
     function withdrawBase(IComet comet, uint256 assets) external {
-        // TODO verify comet.
+        _verifyComet(comet);
+
         uint256 baseAssets = comet.balanceOf(address(this));
 
         // Cap withdraw amount to be baseAssets so that a strategist can not accidentally open a borrow using this function.
@@ -133,5 +143,26 @@ contract SupplyAdaptor is BaseAdaptor {
         ERC20 base = comet.baseToken();
 
         comet.withdraw(address(base), assets);
+    }
+
+    /**
+     * @notice Reverts if a Cellar is not setup to interact with a given Comet.
+     * @dev This function is only used in a delegate call context, hence why address(this) is used
+     *      to get the calling Cellar.
+     */
+    function _verifyComet(IComet comet) internal view {
+        uint256 cellarCodeSize;
+        address cellarAddress = address(this);
+        assembly {
+            cellarCodeSize := extcodesize(cellarAddress)
+        }
+        if (cellarCodeSize > 0) {
+            bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(comet)));
+            Cellar cellar = Cellar(cellarAddress);
+            Registry registry = cellar.registry();
+            uint32 positionId = registry.getPositionHashToPositionId(positionHash);
+            if (!cellar.isPositionUsed(positionId)) revert SupplyAdaptor___InvalidComet(address(comet));
+        }
+        // else do nothing. The cellar is currently being deployed so it has no bytecode, and trying to call `cellar.registry()` will revert.
     }
 }

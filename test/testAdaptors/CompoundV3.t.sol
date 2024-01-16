@@ -5,6 +5,7 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { SupplyAdaptor } from "src/modules/adaptors/Compound/V3/SupplyAdaptor.sol";
 import { CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CollateralAdaptor.sol";
 import { BorrowAdaptor } from "src/modules/adaptors/Compound/V3/BorrowAdaptor.sol";
+import { RewardsAdaptor } from "src/modules/adaptors/Compound/V3/RewardsAdaptor.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 // Import Everything from Starter file.
@@ -21,6 +22,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     SupplyAdaptor private supplyAdaptor;
     CollateralAdaptor private collateralAdaptor;
     BorrowAdaptor private borrowAdaptor;
+    RewardsAdaptor private rewardsAdaptor;
     WstEthExtension private wstethExtension;
 
     IComet private usdcComet = IComet(cUSDCV3);
@@ -64,8 +66,9 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         _setUp();
 
         supplyAdaptor = new SupplyAdaptor();
-        collateralAdaptor = new CollateralAdaptor(1.05e18);
-        borrowAdaptor = new BorrowAdaptor(1.05e18);
+        collateralAdaptor = new CollateralAdaptor(1.05e18, 16);
+        borrowAdaptor = new BorrowAdaptor(1.05e18, 16);
+        rewardsAdaptor = new RewardsAdaptor(cometRewards);
         wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -128,6 +131,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustAdaptor(address(supplyAdaptor));
         registry.trustAdaptor(address(collateralAdaptor));
         registry.trustAdaptor(address(borrowAdaptor));
+        registry.trustAdaptor(address(rewardsAdaptor));
 
         // Add ERC20 positions.
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
@@ -175,6 +179,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addAdaptorToCatalogue(address(supplyAdaptor));
         cellar.addAdaptorToCatalogue(address(collateralAdaptor));
         cellar.addAdaptorToCatalogue(address(borrowAdaptor));
+        cellar.addAdaptorToCatalogue(address(rewardsAdaptor));
 
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(wbtcPosition);
@@ -238,11 +243,6 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertApproxEqAbs(USDC.balanceOf(address(this)), assets, 1, "Amount withdrawn should equal assets.");
     }
 
-    // TODO test checking total assets if in multiple compound positions
-    // TODO test checking a strategist trying to use untrusted input args.
-    // TODO test checking max available logic
-    // TODO test where we have multiple assets as collateral, and we use a ton of fuzzing and check that the health factor logic is as expected.
-
     function testHappyPathUSDCComet(uint256 assets) external {
         // Use 200 for min assets because the minimum borrow is 100 USDC.
         assets = bound(assets, 200e6, 1_000_000e6);
@@ -250,6 +250,11 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Deposit into Cellar.
         cellar.deposit(assets, address(this));
+
+        // Add required positions.
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
+        cellar.addPosition(0, wethCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, usdcCompoundV3DebtPosition, abi.encode(0), true);
 
         // Simulate a swap by minting Cellar ERC20s.
         uint256 assetsInWeth = priceRouter.getValue(USDC, assets, WETH);
@@ -315,6 +320,11 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Deposit into Cellar.
         cellar.deposit(assets, address(this));
 
+        // Add required positions.
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
+        cellar.addPosition(0, wstEthCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, wethCompoundV3DebtPosition, abi.encode(0), true);
+
         // Simulate a swap by minting Cellar ERC20s.
         uint256 assetsInWsteth = priceRouter.getValue(USDC, assets, WSTETH);
         deal(address(USDC), address(cellar), initialAssets);
@@ -326,7 +336,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(wethComet, WSTETH, assetsInWsteth);
+            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(wethComet, WSTETH, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
         }
         {
@@ -378,4 +388,160 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
             "WSTETH Balance of cellar should equal assetsInWsteth."
         );
     }
+
+    function testMultipleCollateralPositions(uint256 assets) external {
+        assets = bound(assets, 100e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+
+        // Deposit into Cellar.
+        cellar.deposit(assets, address(this));
+
+        uint256 startingTotalAssets = cellar.totalAssets();
+
+        // Add required positions.
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
+        cellar.addPosition(0, wbtcPosition, abi.encode(true), false);
+        cellar.addPosition(0, compPosition, abi.encode(true), false);
+        cellar.addPosition(0, uniPosition, abi.encode(true), false);
+        cellar.addPosition(0, linkPosition, abi.encode(true), false);
+        cellar.addPosition(0, wethCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, wbtcCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, compCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, uniCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, linkCompoundV3CollateralPosition, abi.encode(0), false);
+
+        // Simulate a swap by minting Cellar ERC20s.
+        deal(address(USDC), address(cellar), initialAssets);
+        deal(address(WETH), address(cellar), priceRouter.getValue(USDC, assets / 5, WETH));
+        deal(address(WBTC), address(cellar), priceRouter.getValue(USDC, assets / 5, WBTC));
+        deal(address(COMP), address(cellar), priceRouter.getValue(USDC, assets / 5, COMP));
+        deal(address(UNI), address(cellar), priceRouter.getValue(USDC, assets / 5, UNI));
+        deal(address(LINK), address(cellar), priceRouter.getValue(USDC, assets / 5, LINK));
+
+        assertApproxEqRel(cellar.totalAssets(), startingTotalAssets, 1e12, "Cellar Total Assets should be unchanged.");
+
+        // Rebalance Cellar so that is supplied collateral in all available positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WETH, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WBTC, type(uint256).max);
+            adaptorCalls[2] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, COMP, type(uint256).max);
+            adaptorCalls[3] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, UNI, type(uint256).max);
+            adaptorCalls[4] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, LINK, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), startingTotalAssets, 1e12, "Cellar Total Assets should be unchanged.");
+    }
+
+    function testHealthFactorWithMultipleCollateralPositions(uint256 assets, uint8 borrowDenominator) external {
+        borrowDenominator = uint8(bound(borrowDenominator, 2, 10));
+        assets = bound(assets, 10_00e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+
+        // Deposit into Cellar.
+        cellar.deposit(assets, address(this));
+
+        uint256 startingTotalAssets = cellar.totalAssets();
+
+        // Add required positions.
+        cellar.addPosition(0, wethPosition, abi.encode(true), false);
+        cellar.addPosition(0, wbtcPosition, abi.encode(true), false);
+        cellar.addPosition(0, compPosition, abi.encode(true), false);
+        cellar.addPosition(0, uniPosition, abi.encode(true), false);
+        cellar.addPosition(0, linkPosition, abi.encode(true), false);
+        cellar.addPosition(0, wethCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, wbtcCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, compCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, uniCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, linkCompoundV3CollateralPosition, abi.encode(0), false);
+        cellar.addPosition(0, usdcCompoundV3DebtPosition, abi.encode(0), true);
+
+        // Simulate a swap by minting Cellar ERC20s.
+        uint256 valueForEachCollateral = assets / 5;
+        deal(address(USDC), address(cellar), initialAssets);
+        deal(address(WETH), address(cellar), priceRouter.getValue(USDC, valueForEachCollateral, WETH));
+        deal(address(WBTC), address(cellar), priceRouter.getValue(USDC, valueForEachCollateral, WBTC));
+        deal(address(COMP), address(cellar), priceRouter.getValue(USDC, valueForEachCollateral, COMP));
+        deal(address(UNI), address(cellar), priceRouter.getValue(USDC, valueForEachCollateral, UNI));
+        deal(address(LINK), address(cellar), priceRouter.getValue(USDC, valueForEachCollateral, LINK));
+
+        assertApproxEqRel(cellar.totalAssets(), startingTotalAssets, 1e12, "Cellar Total Assets should be unchanged.");
+
+        uint256 assetsToBorrow = assets / borrowDenominator;
+
+        // Rebalance Cellar so that is supplied collateral in all available positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WETH, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WBTC, type(uint256).max);
+            adaptorCalls[2] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, COMP, type(uint256).max);
+            adaptorCalls[3] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, UNI, type(uint256).max);
+            adaptorCalls[4] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, LINK, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, assetsToBorrow);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedHealthFactor = 0;
+        for (uint8 i = 0; i < 5; ++i) {
+            IComet.AssetInfo memory info = usdcComet.getAssetInfo(i);
+            expectedHealthFactor += valueForEachCollateral.mulDivDown(info.liquidateCollateralFactor, 1e18);
+        }
+        expectedHealthFactor = expectedHealthFactor.mulDivDown(1e18, assetsToBorrow);
+        uint256 actualHealthFactor = borrowAdaptor.getAccountHealthFactor(usdcComet, address(cellar));
+
+        // Note we are within 10 bps of precision with our HF calcualtions, which is perfectly fine for 2 reasons
+        // 1) We are not using compounds pricing when determining how much collateral valueForEachCollateral is.
+        // 2) We enforce a minimum health factor of 1.05e18, so even if we were off by 1%, our worst case Health Factor would be 1.0395.
+        assertApproxEqRel(actualHealthFactor, expectedHealthFactor, 0.001e18, "Health Factor should equal expected.");
+        assertApproxEqRel(cellar.totalAssets(), startingTotalAssets, 1e12, "Cellar Total Assets should be unchanged.");
+    }
+
+    function testClaimingRewards() external {
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+
+        // Add cUSDCV3 Supply position, and set as holding position.
+        cellar.addPosition(0, usdcCompoundV3SupplyPosition, abi.encode(true), false);
+        cellar.setHoldingPosition(usdcCompoundV3SupplyPosition);
+
+        // Deposit into Cellar.
+        cellar.deposit(assets, address(this));
+
+        skip(1 days / 6);
+
+        // Claim rewards.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToClaimRewardsFromCompoundV3(usdcComet);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(rewardsAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        // Note we do not check that the cellar received COMP rewards bc at the time of this fork, no COMP rewards are flowing for suppling assets
+        // if you change the fork block number to a more recent block number, then you can check that COMP rewards accrue, but the multi collateral tests will fail
+        // because their supply caps are already filled.
+
+        // If strategist tries to pass in a malicious comet address, rebalance reverts.
+        address maliciousComet = vm.addr(5);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToClaimRewardsFromCompoundV3(IComet(maliciousComet));
+            data[0] = Cellar.AdaptorCall({ adaptor: address(rewardsAdaptor), callData: adaptorCalls });
+        }
+        vm.expectRevert();
+        cellar.callOnAdaptor(data);
+    }
+    // TODO test checking a strategist trying to use untrusted input args.
+    // TODO create a new adaptor, set max number of assets to be at current comets asset count, then add one mor, and make sure we can unwind from the position.
 }

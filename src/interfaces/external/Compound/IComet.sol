@@ -29,6 +29,8 @@ interface IComet {
 
     function userCollateral(address user, address asset) external view returns (uint128 collateral, uint128 reserves);
 
+    function collateralBalanceOf(address user, address asset) external view returns (uint128 balance);
+
     function borrowBalanceOf(address user) external view returns (uint256 borrowedBase);
 
     function numAssets() external view returns (uint8);

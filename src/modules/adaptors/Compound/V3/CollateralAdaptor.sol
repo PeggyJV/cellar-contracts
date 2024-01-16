@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Math, Cellar, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { V3Helper } from "src/modules/adaptors/Compound/V3/V3Helper.sol";
 
@@ -24,6 +24,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     //====================================================================
 
     error CollateralAdaptor__HealthFactorTooLow();
+    error CollateralAdaptor___InvalidCometOrCollateral(address comet, address collateral);
 
     /**
      * @notice Minimum Health Factor enforced after every borrow.
@@ -31,7 +32,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(uint256 minHealthFactor) {
+    constructor(uint256 minHealthFactor, uint8 _maxNumberOfAssets) V3Helper(_maxNumberOfAssets) {
         _verifyConstructorMinimumHealthFactor(minHealthFactor);
         minimumHealthFactor = minHealthFactor;
     }
@@ -75,7 +76,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (IComet comet, ERC20 collateralAsset) = abi.decode(adaptorData, (IComet, ERC20));
-        (uint128 collateral, ) = comet.userCollateral(msg.sender, address(collateralAsset));
+        uint128 collateral = comet.collateralBalanceOf(msg.sender, address(collateralAsset));
         return collateral;
     }
 
@@ -97,7 +98,8 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     //============================================ Strategist Functions ===========================================
 
     function supplyCollateral(IComet comet, ERC20 collateralAsset, uint256 assets) external {
-        // TODO verify comet, and collateralAsset
+        _verifyCometAndCollateral(comet, collateralAsset);
+
         assets = _maxAvailable(collateralAsset, assets);
         collateralAsset.safeApprove(address(comet), assets);
 
@@ -107,15 +109,30 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     }
 
     function withdrawCollateral(IComet comet, ERC20 collateralAsset, uint256 assets) external {
-        // TODO verify comet, and collateralAsset
+        _verifyCometAndCollateral(comet, collateralAsset);
 
-        // TODO what about reserves?
-        (uint256 collateralBalance, ) = comet.userCollateral(address(this), address(collateralAsset));
+        uint256 collateralBalance = comet.collateralBalanceOf(address(this), address(collateralAsset));
         if (assets > collateralBalance) assets = collateralBalance;
 
         comet.withdraw(address(collateralAsset), assets);
 
         uint256 healthFactor = getAccountHealthFactor(comet, address(this));
         if (healthFactor < minimumHealthFactor) revert CollateralAdaptor__HealthFactorTooLow();
+    }
+
+    /**
+     * @notice Reverts if a Cellar is not setup to interact with a given Comet.
+     * @dev This function is only used in a delegate call context, hence why address(this) is used
+     *      to get the calling Cellar.
+     * @dev This function is never triggered during a Cellar setup in constructor so we do not need to worry about
+     *      the cellar not existing when verifying a comet.
+     */
+    function _verifyCometAndCollateral(IComet comet, ERC20 collateralAsset) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(comet, collateralAsset)));
+        Cellar cellar = Cellar(address(this));
+        Registry registry = cellar.registry();
+        uint32 positionId = registry.getPositionHashToPositionId(positionHash);
+        if (!cellar.isPositionUsed(positionId))
+            revert CollateralAdaptor___InvalidCometOrCollateral(address(comet), address(collateralAsset));
     }
 }

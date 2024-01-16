@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Math, Cellar, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { V3Helper } from "src/modules/adaptors/Compound/V3/V3Helper.sol";
 
@@ -24,6 +24,8 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
     //====================================================================
 
     error BorrowAdaptor__HealthFactorTooLow();
+    error BorrowAdaptor___TryingToBorrowWhileSupplying();
+    error BorrowAdaptor___InvalidComet(address comet);
 
     /**
      * @notice Minimum Health Factor enforced after every borrow.
@@ -31,7 +33,7 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(uint256 minHealthFactor) {
+    constructor(uint256 minHealthFactor, uint8 _maxNumberOfAssets) V3Helper(_maxNumberOfAssets) {
         _verifyConstructorMinimumHealthFactor(minHealthFactor);
         minimumHealthFactor = minHealthFactor;
     }
@@ -94,11 +96,13 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
 
     //============================================ Strategist Functions ===========================================
 
-    error BorrowAdaptor___TryingToBorrowWhileSupplying();
-
-    // TODO add a note about how comp has a min borrow amount.
+    /**
+     * @notice Allows strategists to borrow the base token from a comet.
+     * @dev It is important that the strategist borrows atleast the min borrow amount.
+     */
     function borrowBase(IComet comet, uint256 assets) external {
-        // TODO verify comet.
+        _verifyComet(comet);
+
         uint256 baseAssets = comet.balanceOf(address(this));
 
         if (baseAssets != 0) revert BorrowAdaptor___TryingToBorrowWhileSupplying();
@@ -112,7 +116,8 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
     }
 
     function repayBase(IComet comet, uint256 assets) external {
-        // TODO verify comet.
+        _verifyComet(comet);
+
         ERC20 base = comet.baseToken();
 
         assets = _maxAvailable(base, assets);
@@ -126,5 +131,20 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
         comet.supply(address(base), assets);
 
         _revokeExternalApproval(base, address(comet));
+    }
+
+    /**
+     * @notice Reverts if a Cellar is not setup to interact with a given Comet.
+     * @dev This function is only used in a delegate call context, hence why address(this) is used
+     *      to get the calling Cellar.
+     * @dev This function is never triggered during a Cellar setup in constructor so we do not need to worry about
+     *      the cellar not existing when verifying a comet.
+     */
+    function _verifyComet(IComet comet) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(comet)));
+        Cellar cellar = Cellar(address(this));
+        Registry registry = cellar.registry();
+        uint32 positionId = registry.getPositionHashToPositionId(positionHash);
+        if (!cellar.isPositionUsed(positionId)) revert BorrowAdaptor___InvalidComet(address(comet));
     }
 }

@@ -3,14 +3,16 @@ pragma solidity 0.8.21;
 
 import { ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
-// TODO remove
-import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 
-// TODO claim comp rewards?
 contract V3Helper {
     using Math for uint256;
 
-    // TODO Technically saying these prices are in USD is wrong, it is really in terms of the comets like virtual base, IE USD or ETH.
+    uint8 public immutable maxNumberOfAssets;
+
+    constructor(uint8 _maxNumberOfAssets) {
+        maxNumberOfAssets = _maxNumberOfAssets;
+    }
+
     function getAccountHealthFactor(IComet comet, address account) public view returns (uint256) {
         // Get the amount of base debt owed adjsuted for price.
         uint256 borrowBalanceInVirtualBase;
@@ -23,9 +25,11 @@ contract V3Helper {
             borrowBalanceInVirtualBase = borrowBalanceInBase.mulDivDown(basePriceInVirtualBase, 10 ** baseDecimals);
         }
 
-        // TODO this for loop should have some reasonable upper bound, so that we are not gas griefed, and if exceeded, then we return a zero maybe?
-        // So fixing this would require repaying all debt so borrow balance is zero, then  we will return above, so strategist can pull collateral.
+        //TODO comet does have a getMaxAssets function, maybe I could just validate that in the constructor?
         uint8 numberOfAssets = comet.numAssets();
+        // If numberOfAssets exceeds maxNumberOfAssets then we can not safely calculate the health factor
+        // without expending a large amount of gas.
+        if (numberOfAssets > maxNumberOfAssets) return 0;
 
         uint256 riskAdjustedCollateralValueInVirtualBase;
         // Iterate through assets, and determine the risk adjusted collateral value.

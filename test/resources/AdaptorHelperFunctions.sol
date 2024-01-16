@@ -30,6 +30,7 @@ import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/IC
 import { SupplyAdaptor, IComet } from "src/modules/adaptors/Compound/V3/SupplyAdaptor.sol";
 import { CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CollateralAdaptor.sol";
 import { BorrowAdaptor } from "src/modules/adaptors/Compound/V3/BorrowAdaptor.sol";
+import { RewardsAdaptor } from "src/modules/adaptors/Compound/V3/RewardsAdaptor.sol";
 
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -764,5 +765,9 @@ contract AdaptorHelperFunctions {
         uint256 assets
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(BorrowAdaptor.repayBase.selector, comet, assets);
+    }
+
+    function _createBytesDataToClaimRewardsFromCompoundV3(IComet comet) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(RewardsAdaptor.claim.selector, comet);
     }
 }
