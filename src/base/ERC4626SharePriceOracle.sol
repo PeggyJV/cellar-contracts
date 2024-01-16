@@ -9,6 +9,7 @@ import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IRegistrar } from "src/interfaces/external/Chainlink/IRegistrar.sol";
 import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
@@ -19,6 +20,26 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     struct Observation {
         uint64 timestamp;
         uint192 cumulative;
+    }
+
+    /**
+     * @notice Use a struct for constructor args so we do not encounter stack too deep errors.
+     */
+    struct ConstructorArgs {
+        ERC4626 _target;
+        uint64 _heartbeat;
+        uint64 _deviationTrigger;
+        uint64 _gracePeriod;
+        uint16 _observationsToUse;
+        address _automationRegistry;
+        address _automationRegistrar;
+        address _automationAdmin;
+        address _link;
+        uint216 _startingAnswer;
+        uint256 _allowedAnswerChangeLower;
+        uint256 _allowedAnswerChangeUpper;
+        address _sequencerUptimeFeed;
+        uint64 _sequencerGracePeriod;
     }
 
     // ========================================= CONSTANTS =========================================
@@ -117,7 +138,14 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     event KillSwitchActivated(uint256 reportedAnswer, uint256 minAnswer, uint256 maxAnswer);
 
+    /**
+     * @notice Emitted when the upkeep is registered.
+     */
     event UpkeepRegistered(uint256 upkeepId, address forwarder);
+
+    /**
+     * @notice Emitted when a upkeep registration is left pending.
+     */
     event UpkeepPending(bytes32 upkeepParamHash);
 
     //============================== IMMUTABLES ===============================
@@ -202,50 +230,54 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint256 public immutable allowedAnswerChangeUpper;
 
     /**
+     * @notice Address for the networks sequencer uptime feed.
+     * @dev For oracles that do not rely on a sequencer being up, use address(0).
+     */
+    IChainlinkAggregator internal immutable sequencerUptimeFeed;
+
+    /**
+     * @notice The grace period to enforce after a sequencer comes back online.
+     * @dev Calls to `getLatest` and `getLatestAnswer` will return a true for
+     *      `isNotSafeToUse` if the sequencer is down, or if the time since the
+     *      sequencer went back online is less than `sequencerGracePeriod`.
+     */
+    uint64 public immutable sequencerGracePeriod;
+
+    /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
      * @notice TWAA calculations will use the current pending observation, and then `_observationsToUse` observations.
      */
-    constructor(
-        ERC4626 _target,
-        uint64 _heartbeat,
-        uint64 _deviationTrigger,
-        uint64 _gracePeriod,
-        uint16 _observationsToUse,
-        address _automationRegistry,
-        address _automationRegistrar,
-        address _automationAdmin,
-        address _link,
-        uint216 _startingAnswer,
-        uint256 _allowedAnswerChangeLower,
-        uint256 _allowedAnswerChangeUpper
-    ) {
-        target = _target;
+    constructor(ConstructorArgs memory args) {
+        target = args._target;
         targetDecimals = target.decimals();
         ONE_SHARE = 10 ** targetDecimals;
-        heartbeat = _heartbeat;
-        deviationTrigger = _deviationTrigger;
-        gracePeriod = _gracePeriod;
+        heartbeat = args._heartbeat;
+        deviationTrigger = args._deviationTrigger;
+        gracePeriod = args._gracePeriod;
         // Add 1 to observations to use.
-        _observationsToUse = _observationsToUse + 1;
-        observationsLength = _observationsToUse;
+        args._observationsToUse = args._observationsToUse + 1;
+        observationsLength = args._observationsToUse;
 
         // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
         // That way the initial upkeeps won't need to change state from 0 which is more expensive.
-        for (uint256 i; i < _observationsToUse; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
+        for (uint256 i; i < args._observationsToUse; ++i)
+            observations.push(Observation({ timestamp: 1, cumulative: 1 }));
 
-        // Set to _startingAnswer so slot is dirty for first upkeep, and does not trigger kill switch.
-        answer = _startingAnswer;
+        // Set to args._startingAnswer so slot is dirty for first upkeep, and does not trigger kill switch.
+        answer = args._startingAnswer;
 
-        if (_allowedAnswerChangeLower > 1e4) revert("Illogical Lower");
-        allowedAnswerChangeLower = _allowedAnswerChangeLower;
-        if (_allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
-        allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
+        if (args._allowedAnswerChangeLower > 1e4) revert("Illogical Lower");
+        allowedAnswerChangeLower = args._allowedAnswerChangeLower;
+        if (args._allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
+        allowedAnswerChangeUpper = args._allowedAnswerChangeUpper;
 
-        automationRegistry = _automationRegistry;
-        automationRegistrar = _automationRegistrar;
-        automationAdmin = _automationAdmin;
-        link = ERC20(_link);
+        automationRegistry = args._automationRegistry;
+        automationRegistrar = args._automationRegistrar;
+        automationAdmin = args._automationAdmin;
+        link = ERC20(args._link);
+        sequencerUptimeFeed = IChainlinkAggregator(args._sequencerUptimeFeed);
+        sequencerGracePeriod = args._sequencerGracePeriod;
     }
 
     //============================== INITIALIZATION ===============================
@@ -458,6 +490,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool _killSwitch = killSwitch;
 
         if (_killSwitch) return (0, 0, true);
+        if (_checkSequencer()) return (0, 0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -480,6 +513,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool _killSwitch = killSwitch;
 
         if (_killSwitch) return (0, true);
+        if (_checkSequencer()) return (0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -579,6 +613,33 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             );
             return true;
         }
+        return false;
+    }
+
+    /**
+     * @notice Checks if the sequencer is down, or if the grace period is not met.
+     * @return bool indicating if the sequencer has a problem
+     */
+    function _checkSequencer() internal view returns (bool) {
+        if (address(sequencerUptimeFeed) != address(0)) {
+            (, int256 sequencerAnswer, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
+
+            // This check should make TXs from L1 to L2 revert if someone tried interacting with the cellar while the sequencer is down.
+            // Answer == 0: Sequencer is up
+            // Answer == 1: Sequencer is down
+            if (sequencerAnswer == 1) {
+                return true;
+            }
+
+            // Make sure the grace period has passed after the
+            // sequencer is back up.
+            uint256 timeSinceUp = block.timestamp - startedAt;
+            if (timeSinceUp <= sequencerGracePeriod) {
+                return true;
+            }
+        }
+
+        // If we made it this far, the sequencer is fine, and or it is not set.
         return false;
     }
 }

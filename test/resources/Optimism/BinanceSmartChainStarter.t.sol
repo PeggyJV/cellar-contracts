@@ -21,8 +21,6 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
-import { CellarWithViewFunctions } from "src/mocks/CellarWithViewFunctions.sol";
-
 // Import Testing Resources
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 
@@ -120,37 +118,5 @@ contract MainnetStarterTest is Test, MainnetAddresses {
         );
 
         return Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
-    }
-
-    function _createCellarWithViewFunctions(
-        string memory cellarName,
-        ERC20 holdingAsset,
-        uint32 holdingPosition,
-        bytes memory holdingPositionConfig,
-        uint256 initialDeposit,
-        uint64 platformCut
-    ) internal returns (CellarWithViewFunctions) {
-        // Approve new cellar to spend assets.
-        address cellarAddress = deployer.getAddress(cellarName);
-        deal(address(holdingAsset), address(this), initialDeposit);
-        holdingAsset.approve(cellarAddress, initialDeposit);
-
-        bytes memory creationCode;
-        bytes memory constructorArgs;
-        creationCode = type(CellarWithViewFunctions).creationCode;
-        constructorArgs = abi.encode(
-            address(this),
-            registry,
-            holdingAsset,
-            cellarName,
-            cellarName,
-            holdingPosition,
-            holdingPositionConfig,
-            initialDeposit,
-            platformCut,
-            type(uint192).max
-        );
-
-        return CellarWithViewFunctions(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
     }
 }

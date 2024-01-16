@@ -99,7 +99,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -111,8 +111,11 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0),
+            0
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);
@@ -1025,7 +1028,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address _automationAdmin = address(this);
 
             // Setup share price oracle.
-            sharePriceOracle = new ERC4626SharePriceOracle(
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
                 _target,
                 _heartbeat,
                 _deviationTrigger,
@@ -1037,8 +1040,11 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
                 address(LINK),
                 1e18,
                 0,
-                1_000_000_000_000_000_000e4
+                1_000_000_000_000_000_000e4,
+                address(0),
+                0
             );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
         }
 
         uint96 initialUpkeepFunds = 10e18;
@@ -1091,6 +1097,95 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         cellar.withdraw(assets, address(this), address(this));
     }
 
+    int256 mockSequencerState;
+    uint256 mockStartedAt;
+
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
+        return (0, mockSequencerState, mockStartedAt, 0, 0);
+    }
+
+    function testSequencerDown() external {
+        // Deploy a new oracle with a sequencer uptime feed set as the test contract address.
+        {
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = automationRegistryV2;
+            address _automationRegistrar = automationRegistrarV2;
+            address _automationAdmin = address(this);
+
+            // Setup share price oracle.
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
+                1e18,
+                0.01e4,
+                10e4,
+                address(this),
+                3_600
+            );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
+        }
+
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
+        );
+
+        // Fill oracle with observations.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        // Set sequencer state so that it has been up for a year.
+        mockSequencerState = 0;
+        mockStartedAt = block.timestamp - (365 * 1 days);
+
+        bool isNotSafeToUse;
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertEq(isNotSafeToUse, false, "Oracle should be safe to use.");
+
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertEq(isNotSafeToUse, false, "Oracle should be safe to use.");
+
+        // But if sequencer goes down, isNotSafeToUse is true.
+        mockSequencerState = 1;
+
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertEq(isNotSafeToUse, true, "Oracle should not be safe to use.");
+
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertEq(isNotSafeToUse, true, "Oracle should not be safe to use.");
+
+        // And when sequencer comes back online, we still need to wait the grace period.
+        mockSequencerState = 0;
+        mockStartedAt = block.timestamp;
+
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertEq(isNotSafeToUse, true, "Oracle should not be safe to use.");
+
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertEq(isNotSafeToUse, true, "Oracle should not be safe to use.");
+
+        // Wait 1 hour + 1 second(the sequencer grace period set in oracle constructor).
+        skip(3_601);
+
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertEq(isNotSafeToUse, false, "Oracle should be safe to use.");
+
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertEq(isNotSafeToUse, false, "Oracle should be safe to use.");
+    }
+
     function testInitialization() external {
         ERC4626 _target = ERC4626(address(cellar));
         uint64 _heartbeat = 1 days;
@@ -1102,7 +1197,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -1114,8 +1209,11 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0),
+            0
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         assertTrue(sharePriceOracle.automationForwarder() == address(0), "Automation Forwarder should not be set.");
 
@@ -1162,7 +1260,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -1174,8 +1272,11 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             address(LINK),
             1e18,
             0.01e4,
-            10e4
+            10e4,
+            address(0),
+            0
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
 
         // Try calling `handlePendingUpkeep` before calling `initialize`.
         vm.expectRevert(
@@ -1208,30 +1309,35 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         IRegistrar registrarV2 = IRegistrar(automationRegistrarV2);
         IRegistry registryV2 = IRegistry(automationRegistryV2);
 
-        ERC4626 _target = ERC4626(address(cellar));
-        uint64 _heartbeat = 1 days;
-        uint64 _deviationTrigger = 0.0005e4;
-        uint64 _gracePeriod = 60 * 60; // 1 hr
-        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = automationRegistryV2;
-        address _automationRegistrar = automationRegistrarV2;
-        address _automationAdmin = address(this);
+        {
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = automationRegistryV2;
+            address _automationRegistrar = automationRegistrarV2;
+            address _automationAdmin = address(this);
 
-        // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            _automationRegistrar,
-            _automationAdmin,
-            address(LINK),
-            1e18,
-            0.01e4,
-            10e4
-        );
+            // Setup share price oracle.
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
+                1e18,
+                0.01e4,
+                10e4,
+                address(0),
+                0
+            );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
+        }
 
         IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams({
             name: "Share Price Oracle",
