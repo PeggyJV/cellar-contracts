@@ -198,7 +198,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(
             morphoBlueDebtWETHPosition,
             address(morphoBlueDebtAdaptor),
-            abi.encode(wethUsdcMarketId)
+            abi.encode(wethUsdcMarket)
         );
         registry.trustPosition(
             morphoBlueSupplyUSDCPosition,
@@ -210,7 +210,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             address(morphoBlueCollateralAdaptor),
             abi.encode(usdcDaiMarket)
         );
-        registry.trustPosition(morphoBlueDebtUSDCPosition, address(morphoBlueDebtAdaptor), abi.encode(usdcDaiMarketId));
+        registry.trustPosition(morphoBlueDebtUSDCPosition, address(morphoBlueDebtAdaptor), abi.encode(usdcDaiMarket));
         registry.trustPosition(
             morphoBlueSupplyWBTCPosition,
             address(morphoBlueSupplyAdaptor),
@@ -224,7 +224,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         registry.trustPosition(
             morphoBlueDebtWBTCPosition,
             address(morphoBlueDebtAdaptor),
-            abi.encode(wbtcUsdcMarketId)
+            abi.encode(wbtcUsdcMarket)
         );
 
         string memory cellarName = "Morpho Blue Collateral & Debt Cellar V0.0";
@@ -488,10 +488,10 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarket);
 
         vm.prank(address(cellar));
         uint256 newBalance = morphoBlueDebtAdaptor.balanceOf(adaptorData);
@@ -524,13 +524,13 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.callOnAdaptor(data);
 
         // try borrowing from the wrong market that is untracked by cellar
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(usdcDaiMarketId, assets / 2);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(usdcDaiMarket, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
                     MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked.selector,
-                    usdcDaiMarketId
+                    usdcDaiMarket
                 )
             )
         );
@@ -561,16 +561,16 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // Take out a loan
 
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarket);
 
         // start repayment sequence - NOTE that the repay function in Morpho Blue calls accrue interest within it.
         deal(address(USDC), address(cellar), borrowAmount);
 
         // Repay the loan.
-        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -608,12 +608,12 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // Take out a loan
 
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Repay the loan
-        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, 0);
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(bytes("inconsistent input"));
@@ -644,16 +644,16 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // Take out a loan
 
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarket);
         vm.prank(address(cellar));
         uint256 debtBefore = morphoBlueDebtAdaptor.balanceOf(adaptorData);
 
         // Repay the loan
-        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, borrowAmount / 2);
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, borrowAmount / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -682,7 +682,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
         adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarket, assets);
-        adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarketId, MBWbtcUsdcBorrowAmount);
+        adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarket, MBWbtcUsdcBorrowAmount);
         data[0] = Cellar.AdaptorCall({
             adaptor: address(morphoBlueCollateralAdaptor),
             callData: adaptorCallsFirstAdaptor
@@ -692,7 +692,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             bytes(
                 abi.encodeWithSelector(
                     MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked.selector,
-                    wbtcUsdcMarketId
+                    wbtcUsdcMarket
                 )
             )
         );
@@ -707,7 +707,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
 
-        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, assets / 2);
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         vm.expectRevert(bytes("inconsistent input"));
         cellar.callOnAdaptor(data);
@@ -755,8 +755,8 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
         adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralToMorphoBlue(wbtcUsdcMarket, wbtcAssets);
-        adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, wethUSDCToBorrow);
-        adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarketId, wbtcUSDCToBorrow);
+        adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, wethUSDCToBorrow);
+        adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowFromMorphoBlue(wbtcUsdcMarket, wbtcUSDCToBorrow);
         data[0] = Cellar.AdaptorCall({
             adaptor: address(morphoBlueCollateralAdaptor),
             callData: adaptorCallsFirstAdaptor
@@ -780,7 +780,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // Repay the loan in one of the morpho blue markets
         Cellar.AdaptorCall[] memory newData2 = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls2 = new bytes[](1);
-        adaptorCalls2[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, maxAmountToRepay);
+        adaptorCalls2[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, maxAmountToRepay);
         newData2[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
@@ -843,10 +843,10 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        bytes memory adaptorData = abi.encode(wethUsdcMarketId);
+        bytes memory adaptorData = abi.encode(wethUsdcMarket);
 
         vm.prank(address(cellar));
 
@@ -855,7 +855,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         deal(address(USDC), address(cellar), borrowAmount);
 
         // Repay the loan.
-        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarketId, maxAmountToRepay);
+        adaptorCalls[0] = _createBytesDataToRepayDebtToMorphoBlue(wethUsdcMarket, maxAmountToRepay);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -898,7 +898,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -954,7 +954,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         // Take out a loan
         uint256 borrowAmount = priceRouter.getValue(WETH, assets.mulDivDown(1e4, 1.05e4), USDC); // calculate a borrow amount that would make the position unhealthy (health factor wise)
 
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, borrowAmount);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, borrowAmount);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         vm.expectRevert(bytes("insufficient collateral"));
         cellar.callOnAdaptor(data);
@@ -972,7 +972,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         // Try taking out more USDC now
         uint256 moreUSDCToBorrow = priceRouter.getValue(WETH, assets / 2, USDC);
-        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarketId, moreUSDCToBorrow);
+        adaptorCalls[0] = _createBytesDataToBorrowFromMorphoBlue(wethUsdcMarket, moreUSDCToBorrow);
         data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueDebtAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // should transact now
     }

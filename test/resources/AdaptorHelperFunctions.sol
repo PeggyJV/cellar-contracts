@@ -340,17 +340,17 @@ contract AdaptorHelperFunctions {
     // MorphoBlueDebtAdaptor Functions
 
     function _createBytesDataToBorrowFromMorphoBlue(
-        Id _id,
+        MarketParams memory _market,
         uint256 _amountToBorrow
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.borrowFromMorphoBlue.selector, _id, _amountToBorrow);
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.borrowFromMorphoBlue.selector, _market, _amountToBorrow);
     }
 
     function _createBytesDataToRepayDebtToMorphoBlue(
-        Id _id,
+        MarketParams memory _market,
         uint256 _debtTokenRepayAmount
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _id, _debtTokenRepayAmount);
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _market, _debtTokenRepayAmount);
     }
 
     // ========================================= Balancer FUNCTIONS =========================================

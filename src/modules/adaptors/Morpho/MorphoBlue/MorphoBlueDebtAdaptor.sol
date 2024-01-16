@@ -6,6 +6,7 @@ import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/Mo
 import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
+import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
 
 /**
  * @title Morpho Blue Debt Token Adaptor
@@ -21,11 +22,12 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     using Math for uint256;
     using SharesMathLib for uint256;
     using MorphoLib for IMorpho;
+    using MarketParamsLib for MarketParams;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(Id id)
+    // adaptorData = abi.encode(MarketParams market)
     // Where:
-    // `id` is the var defined by Morpho Blue for the bytes identifier of a Morpho Blue market
+    // `market` is the respective market used within Morpho Blue
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -33,17 +35,12 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     /**
      * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
      */
-    error MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(Id id);
+    error MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(MarketParams market);
 
     /**
      * @notice Attempted tx that results in unhealthy cellar.
      */
-    error MorphoBlueDebtAdaptor__HealthFactorTooLow(Id id);
-
-    /**
-     * @notice Attempted repayment when no debt position in Morpho Blue Lending Market for cellar
-     */
-    error MorphoBlueDebtAdaptor__CannotRepayNoDebt(Id id);
+    error MorphoBlueDebtAdaptor__HealthFactorTooLow(MarketParams market);
 
     /**
      * @notice Minimum Health Factor enforced after every borrow.
@@ -99,22 +96,22 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Returns the cellar's balance of the respective MB market loanToken calculated from cellar borrow shares according to MB prod contracts
-     * @param adaptorData encoded bytes32 MB id that represents the MB market for this position
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
      * @return Cellar's balance of the respective MB market loanToken
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        Id id = abi.decode(adaptorData, (Id));
+        MarketParams memory market = abi.decode(adaptorData, (MarketParams));
+        Id id = MarketParamsLib.id(market);
         return _userBorrowBalance(id, msg.sender);
     }
 
     /**
      * @notice Returns `loanToken` from respective MB market.
-     * @param adaptorData containing the abi encoded Morpho Blue market Id.
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
      * @return `loanToken` from respective MB market.
      */
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        Id id = abi.decode(adaptorData, (Id));
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
+        MarketParams memory market = abi.decode(adaptorData, (MarketParams));
         return ERC20(market.loanToken);
     }
 
@@ -130,37 +127,36 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Allows strategists to borrow assets from Morpho Blue.
-     * @param _id identifier of a Morpho Blue market.
+     * @param market identifier of a Morpho Blue market.
      * @param _amountToBorrow the amount of `loanToken` to borrow on the specified MB market.
      */
-    function borrowFromMorphoBlue(Id _id, uint256 _amountToBorrow) public {
-        _validateMBMarket(_id);
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+    function borrowFromMorphoBlue(MarketParams memory market, uint256 _amountToBorrow) public {
+        _validateMBMarket(market);
+        Id id = MarketParamsLib.id(market);
         _borrowAsset(market, _amountToBorrow, address(this));
-        if (minimumHealthFactor > (_getHealthFactor(_id, market))) {
-            revert MorphoBlueDebtAdaptor__HealthFactorTooLow(_id);
+        if (minimumHealthFactor > (_getHealthFactor(id, market))) {
+            revert MorphoBlueDebtAdaptor__HealthFactorTooLow(market);
         }
     }
 
     /**
      * @notice Allows strategists to repay loan debt on Morph Blue Lending Market. Make sure to call addInterest() beforehand to ensure we are repaying what is required.
      * @dev Uses `_maxAvailable` helper function, see `BaseAdaptor.sol`.
-     * @param _id identifier of a Morpho Blue market.
+     * @param market identifier of a Morpho Blue market.
      * @param _debtTokenRepayAmount The amount of `loanToken` to repay.
      * NOTE - MorphoBlue reverts w/ underflow/overflow error if trying to repay with more than what cellar has. That said, we will accomodate for times that strategists tries to pass in type(uint256).max
      */
-    function repayMorphoBlueDebt(Id _id, uint256 _debtTokenRepayAmount) public {
-        _validateMBMarket(_id);
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
+    function repayMorphoBlueDebt(MarketParams memory market, uint256 _debtTokenRepayAmount) public {
+        _validateMBMarket(market);
+        Id id = MarketParamsLib.id(market);
         _accrueInterest(market);
         ERC20 tokenToRepay = ERC20(market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         tokenToRepay.safeApprove(address(morphoBlue), debtAmountToRepay);
 
-        _accrueInterest(market);
-        uint256 totalBorrowAssets = morphoBlue.totalBorrowAssets(_id);
-        uint256 totalBorrowShares = morphoBlue.totalBorrowShares(_id);
-        uint256 sharesToRepay = morphoBlue.borrowShares(_id, address(this));
+        uint256 totalBorrowAssets = morphoBlue.totalBorrowAssets(id);
+        uint256 totalBorrowShares = morphoBlue.totalBorrowShares(id);
+        uint256 sharesToRepay = morphoBlue.borrowShares(id, address(this));
         uint256 assetsMax = sharesToRepay.toAssetsUp(totalBorrowAssets, totalBorrowShares);
 
         if (debtAmountToRepay >= assetsMax) {
@@ -179,26 +175,25 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      *      rebalance.
      * @dev Calling this can increase the share price during the rebalance,
      *      so a strategist should consider moving some assets into reserves.
-     * @param _id identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      */
-    function accrueInterest(Id _id) public {
-        _validateMBMarket(_id);
-        MarketParams memory market = morphoBlue.idToMarketParams(_id);
-        _accrueInterest(market);
+    function accrueInterest(MarketParams memory _market) public {
+        _validateMBMarket(_market);
+        _accrueInterest(_market);
     }
 
     //============================================ Helper Functions ===========================================
 
     /**
-     * @notice Validates that a given Id is set up as a position in the Cellar.
+     * @notice Validates that a given market is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
-     * @param _id encoded bytes32 MB id that represents the MB market for this position.
+     * @param _market MarketParams struct for a specific Morpho Blue market.
      */
-    function _validateMBMarket(Id _id) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(_id)));
+    function _validateMBMarket(MarketParams memory _market) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(_market)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(_id);
+            revert MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(_market);
     }
 
     //============================== Interface Details ==============================

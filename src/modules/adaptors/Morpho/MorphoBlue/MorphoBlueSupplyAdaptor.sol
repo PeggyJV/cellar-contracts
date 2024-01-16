@@ -17,7 +17,6 @@ import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libra
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue throughout code.
- * TODO: Reformatting codebase for adaptorData to be MarketParams: 1) Change implementation code, 2) Change helpers 3) Change tests so their inputs makes sense.
  *
  * @author 0xEinCodes, crispymangoes
  */
@@ -60,6 +59,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     }
 
     //============================================ Implement Base Functions ===========================================
+
     /**
      * @notice Allows user to deposit into MB markets, only if Cellar has a MBSupplyAdaptorPosition as its holding position.
      * @dev Cellar must approve Morpho Blue to spend its assets, then call deposit to lend its assets.
@@ -98,7 +98,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @notice Returns the amount of loanToken that can be withdrawn.
      * @dev Compares loanToken supplied to loanToken borrowed to check for liquidity.
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
-     * @param adaptorData encoded bytes32 MB id that represents the MB market for this position.
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
      * @return withdrawableSupply liquid amount of `loanToken` cellar has lent to specified MB market.
      */
     function withdrawableFrom(
@@ -115,7 +115,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Returns the cellar's balance of the supplyToken position.
-     * @param adaptorData encoded MB id that represents the MB market for this position. This uses MB defined value type for bytes32.
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
      * @return Cellar's balance of the supplyToken position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
@@ -125,17 +125,11 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     }
 
     /**
-     * 
-     * wethUsdcMarket
-     * usdcDaiMarket
-     * wbtcUsdcMarket
-     */
-
-    /**
      * @notice Returns loanToken.
+     * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
      * @return ERC20 loanToken.
      */
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
         return ERC20(market.loanToken);
     }
@@ -157,7 +151,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      */
     function lendToMorphoBlue(MarketParams memory market, uint256 _assets) public {
         _validateMBMarket(market);
-
         ERC20 loanToken = ERC20(market.loanToken);
         _assets = _maxAvailable(loanToken, _assets);
         loanToken.safeApprove(address(morphoBlue), _assets);
@@ -197,7 +190,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         _validateMBMarket(market);
         _accrueInterest(market);
     }
-
 
     /**
      * @notice Validates that a given market is set up as a position in the Cellar.

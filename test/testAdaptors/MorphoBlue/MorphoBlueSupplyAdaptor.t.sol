@@ -281,13 +281,13 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             "testDeposit: half of assets from cellar should remain in MB market."
         );
 
-        /// console left within tests as there is some troubleshooting to do here still.
-        console.log(
-            "userSupplyBalance in morpho blue market: %s",
-            _userSupplyBalance(usdcDaiMarketId, address(cellar))
-        );
-        vm.expectRevert(); // TODO - below should not revert until we try withdrawing (assets/2) + initialAssets. Is this some underflow/overflow error within MorphoBlue when a certain amount of supplied assets is left in the market?
-        cellar.withdraw((assets / 2) + 2, address(this), address(this));
+        cellar.withdraw((assets / 2), address(this), address(this)); // NOTE - initialAssets is actually originally from the deployer.
+
+        // console.log("deployer address: %s", address(deployer));
+        // vm.startPrank(address(deployer));
+        // USDC.safeApprove(address(cellar), type(uint256).max);
+        // cellar.withdraw((initialAssets / 2), address(deployer), address(deployer));
+        // vm.stopPrank();
     }
 
     function testTotalAssets(uint256 assets) external {
