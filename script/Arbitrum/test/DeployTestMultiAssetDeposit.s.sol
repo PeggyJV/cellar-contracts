@@ -47,28 +47,28 @@ contract DeployTestMultiAssetDepositScript is Script, ArbitrumAddresses {
     function run() external {
         vm.startBroadcast();
 
-        // // Deploy Cellar
-        // CellarWithMultiAssetDeposit cellar = _createCellar(
-        //     "Test Multi Asset Deposit Cellar",
-        //     "TEST_MULTI_ASSET_DEPOSIT_CELLAR",
-        //     USDC,
-        //     aV3UsdcPosition,
-        //     abi.encode(1.05e18),
-        //     0.01e6,
-        //     0.9e18
-        // );
+        // Deploy Cellar
+        CellarWithMultiAssetDeposit cellar = _createCellar(
+            "Test Multi Asset Deposit Cellar",
+            "TEST_MULTI_ASSET_DEPOSIT_CELLAR",
+            USDC,
+            aV3UsdcPosition,
+            abi.encode(1.05e18),
+            0.01e6,
+            0.9e18
+        );
 
-        // cellar.addAdaptorToCatalogue(aaveV3ATokenAdaptor);
+        cellar.addAdaptorToCatalogue(aaveV3ATokenAdaptor);
 
-        // cellar.addPositionToCatalogue(usdcPosition);
-        // cellar.addPositionToCatalogue(usdcePosition);
-        // cellar.addPositionToCatalogue(daiPosition);
-        // cellar.addPositionToCatalogue(usdtPosition);
+        cellar.addPositionToCatalogue(usdcPosition);
+        cellar.addPositionToCatalogue(usdcePosition);
+        cellar.addPositionToCatalogue(daiPosition);
+        cellar.addPositionToCatalogue(usdtPosition);
 
-        // cellar.addPosition(1, usdtPosition, abi.encode(true), false);
-        // cellar.addPosition(1, daiPosition, abi.encode(true), false);
-        // cellar.addPosition(1, usdcePosition, abi.encode(true), false);
-        // cellar.addPosition(1, usdcPosition, abi.encode(true), false);
+        cellar.addPosition(1, usdtPosition, abi.encode(true), false);
+        cellar.addPosition(1, daiPosition, abi.encode(true), false);
+        cellar.addPosition(1, usdcePosition, abi.encode(true), false);
+        cellar.addPosition(1, usdcPosition, abi.encode(true), false);
 
         cellar.setAlternativeAssetData(USDC, usdcPosition, 0.0005e8);
         cellar.setAlternativeAssetData(USDCe, usdcePosition, 0.0010e8);
@@ -77,14 +77,14 @@ contract DeployTestMultiAssetDepositScript is Script, ArbitrumAddresses {
 
         // cellar.transferOwnership(devStrategist);
 
-        CellarWithMultiAssetDeposit cellar = CellarWithMultiAssetDeposit(0x02b0Ad08BFc8D0cC3E0e5907D95898C4Ef464F9C);
-        USDCe.approve(address(cellar), 1e6);
+        // CellarWithMultiAssetDeposit cellar = CellarWithMultiAssetDeposit(0x02b0Ad08BFc8D0cC3E0e5907D95898C4Ef464F9C);
+        // USDCe.approve(address(cellar), 1e6);
 
-        // cellar.deposit(1e6, dev0Address);
+        // // cellar.deposit(1e6, dev0Address);
 
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, 1e6, dev0Address, USDCe);
+        // bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, 1e6, dev0Address, USDCe);
 
-        address(cellar).functionCall(depositCallData);
+        // address(cellar).functionCall(depositCallData);
 
         vm.stopBroadcast();
     }
