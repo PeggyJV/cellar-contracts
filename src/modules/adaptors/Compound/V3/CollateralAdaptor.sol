@@ -131,8 +131,10 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     function withdrawCollateral(IComet comet, ERC20 collateralAsset, uint256 assets) external {
         _verifyCometAndCollateral(comet, collateralAsset);
 
-        uint256 collateralBalance = comet.collateralBalanceOf(address(this), address(collateralAsset));
-        if (assets > collateralBalance) assets = collateralBalance;
+        if (assets == type(uint256).max) {
+            uint256 collateralBalance = comet.collateralBalanceOf(address(this), address(collateralAsset));
+            assets = collateralBalance;
+        }
 
         comet.withdraw(address(collateralAsset), assets);
 
