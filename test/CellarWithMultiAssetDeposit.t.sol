@@ -243,8 +243,6 @@ contract CellarWithMultiAssetDepositTest is MainnetStarterTest, AdaptorHelperFun
     }
 
     function testSettingAlternativeAssetDataAgain() external {
-        uint256 assets = 100e6;
-
         cellar.setAlternativeAssetData(USDT, usdtPosition, 0);
 
         // Owner decides they actually want to add a fee.
