@@ -57,7 +57,9 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
 
     /**
      * @notice Emitted during multi asset deposits.
-     * @dev This does not comply with ERC4626 standard as it emits the deposit asset as well.
+     * @dev Multi asset deposits will emit 2 events, the ERC4626 compliant Deposit event
+     *      and this event. These events were intentionally separated out so we can
+     *      keep the compliant event, but also have an event that emits the depositAsset.
      */
     event MultiAssetDeposit(
         address indexed caller,
