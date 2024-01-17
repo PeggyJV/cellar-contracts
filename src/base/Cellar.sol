@@ -709,6 +709,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     /**
      * @notice Emitted during deposits.
+     * @dev This does not comply with ERC4626 standard as it emits the deposit asset as well.
      */
     event Deposit(address indexed caller, address indexed owner, address depositAsset, uint256 assets, uint256 shares);
 
