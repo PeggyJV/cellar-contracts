@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Cellar, Registry, ERC20, Math, SafeTransferLib, Address } from "src/base/Cellar.sol";
+import { Registry, ERC20, Math, SafeTransferLib, Address } from "src/base/Cellar.sol";
+import { CellarWithOracleWithAaveFlashLoans } from "src/base/permutations/CellarWithOracleWithAaveFlashLoans.sol";
 
-contract CellarWithMultiAssetDeposit is Cellar {
+contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOracleWithAaveFlashLoans {
     using Math for uint256;
     using SafeTransferLib for ERC20;
     using Address for address;
@@ -66,9 +67,10 @@ contract CellarWithMultiAssetDeposit is Cellar {
         bytes memory _holdingPositionConfig,
         uint256 _initialDeposit,
         uint64 _strategistPlatformCut,
-        uint192 _shareSupplyCap
+        uint192 _shareSupplyCap,
+        address _aavePool
     )
-        Cellar(
+        CellarWithOracleWithAaveFlashLoans(
             _owner,
             _registry,
             _asset,
@@ -78,7 +80,8 @@ contract CellarWithMultiAssetDeposit is Cellar {
             _holdingPositionConfig,
             _initialDeposit,
             _strategistPlatformCut,
-            _shareSupplyCap
+            _shareSupplyCap,
+            _aavePool
         )
     {}
 
