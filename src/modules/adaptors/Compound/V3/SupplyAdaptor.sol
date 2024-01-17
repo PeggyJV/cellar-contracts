@@ -135,18 +135,21 @@ contract SupplyAdaptor is BaseAdaptor {
         _revokeExternalApproval(base, address(comet));
     }
 
-    // TODO if there is not enough liquid USDC to cover a withdraw, should this function check that, and withdraw as much as possible?
     /**
      * @notice Allows strategist to withdraw base token from Compound V3.
      */
     function withdrawBase(IComet comet, uint256 assets) external {
         _verifyComet(comet);
 
-        uint256 baseAssets = comet.balanceOf(address(this));
-
-        // Cap withdraw amount to be baseAssets so that a strategist can not accidentally open a borrow using this function.
-        if (assets > baseAssets) assets = baseAssets;
         ERC20 base = comet.baseToken();
+        uint256 baseSupplied = comet.balanceOf(address(this));
+        uint256 baseLiquid = base.balanceOf(address(comet));
+
+        // Cap withdraw amount to be baseSupplied so that a strategist can not accidentally open a borrow using this function.
+        if (assets > baseSupplied) assets = baseSupplied;
+
+        // Cap withdraw amount to what is liquid in comet.
+        if (assets > baseLiquid) assets = baseLiquid;
 
         comet.withdraw(address(base), assets);
     }

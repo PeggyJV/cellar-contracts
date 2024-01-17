@@ -690,7 +690,6 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             "All assets should be withdrawable."
         );
 
-        console.log("USDC Balance of Comet: %s", USDC.balanceOf(address(usdcComet)));
         uint256 usdcInComet = USDC.balanceOf(address(usdcComet));
 
         // Large whale deposits WETH to borrow remaining USDC.
@@ -708,6 +707,31 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             2,
             "Only initial assets should be withdrawable."
         );
+
+        // Whale repays 10% of assets.
+        USDC.approve(address(usdcComet), assets / 10);
+        usdcComet.supply(address(USDC), assets / 10);
+
+        uint256 expectedAssets = initialAssets + assets / 10;
+
+        assertApproxEqAbs(
+            cellar.totalAssetsWithdrawable(),
+            expectedAssets,
+            2,
+            "Initial assets and 10% of assets should be withdrawable."
+        );
+
+        // Strategist withdraws as much as possible.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawBaseFromCompoundV3(usdcComet, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(supplyAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 usdcInCellar = USDC.balanceOf(address(cellar));
+        assertApproxEqAbs(usdcInCellar, expectedAssets, 1, "Cellar should hold expected assets of USDC.");
     }
 
     function testIsLiquid(uint256 assets) external {
@@ -729,7 +753,6 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         vm.startPrank(address(cellar));
-        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         bytes memory callData = abi.encodeWithSelector(
             SupplyAdaptor.withdraw.selector,
             0,
@@ -737,6 +760,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(0),
             abi.encode(isLiquid)
         );
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         address(supplyAdaptor).functionDelegateCall(callData);
         vm.stopPrank();
     }
