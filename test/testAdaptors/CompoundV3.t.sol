@@ -59,6 +59,8 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
 
     uint256 initialAssets;
 
+    bool public blockExternalReceiver = false;
+
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
@@ -725,6 +727,18 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             1,
             "Assets withdrawable should equal initialAssets."
         );
+
+        vm.startPrank(address(cellar));
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+        bytes memory callData = abi.encodeWithSelector(
+            SupplyAdaptor.withdraw.selector,
+            0,
+            address(1),
+            abi.encode(0),
+            abi.encode(isLiquid)
+        );
+        address(supplyAdaptor).functionDelegateCall(callData);
+        vm.stopPrank();
     }
 
     function testRecoveringFromTooManyCollateralsAddedToComet(uint256 assets) external {
