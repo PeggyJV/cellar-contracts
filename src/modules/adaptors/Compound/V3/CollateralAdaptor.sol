@@ -44,7 +44,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("Collateral Adaptor V 1.0"));
     }
 
@@ -53,8 +53,15 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     /**
      * @notice Not supported.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+        (IComet comet, ERC20 collateralAsset) = abi.decode(adaptorData, (IComet, ERC20));
+        _verifyCometAndCollateral(comet, collateralAsset);
+
+        collateralAsset.safeApprove(address(comet), assets);
+
+        comet.supply(address(collateralAsset), assets);
+
+        _revokeExternalApproval(collateralAsset, address(comet));
     }
 
     /**

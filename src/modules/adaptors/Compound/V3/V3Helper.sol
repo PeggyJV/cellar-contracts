@@ -25,7 +25,6 @@ contract V3Helper {
             borrowBalanceInVirtualBase = borrowBalanceInBase.mulDivDown(basePriceInVirtualBase, 10 ** baseDecimals);
         }
 
-        //TODO comet does have a getMaxAssets function, maybe I could just validate that in the constructor?
         uint8 numberOfAssets = comet.numAssets();
         // If numberOfAssets exceeds maxNumberOfAssets then we can not safely calculate the health factor
         // without expending a large amount of gas.
