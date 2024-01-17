@@ -48,9 +48,10 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         vm.startBroadcast();
 
         // Create CRVUSD Cellar.
+        // TODO change to account in CRVUSD.
         crvUsdCellar = _createCellarNoNativeSupport(
-            "CRV USD Cellar",
-            "CRVUSD CELLAR",
+            "Turbo CRVUSD",
+            "TurboCRVUSD",
             USDC,
             usdcPositionId,
             abi.encode(0),
@@ -73,14 +74,14 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._allowedAnswerChangeUpper = 1.2e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("CRV USD Cellar Share Price Oracle V0.0", args);
+        _createSharePriceOracle("TurboCRVUSD Share Price Oracle V0.0", args);
 
         crvUsdCellar.transferOwnership(devStrategist);
 
         // Create Morpho Blue Cellar.
         morphoBlueCellar = _createCellarWithNativeSupport(
-            "Morpho Blue Cellar",
-            "MB CELLAR",
+            "Morpho ETH Maximizer",
+            "MaxMorphoETH",
             WETH,
             wethPositionId,
             abi.encode(0),
@@ -102,14 +103,14 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._allowedAnswerChangeUpper = 3e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("MORPHO BLUE Cellar Share Price Oracle V0.0", args);
+        _createSharePriceOracle("Morpho ETH Maximizer Share Price Oracle V0.0", args);
 
         morphoBlueCellar.transferOwnership(devStrategist);
 
         // Create Stake Wise Cellar.
         stakewiseCellar = _createCellarWithNativeSupport(
-            "Stakewise Cellar",
-            "SW CELLAR",
+            "Turbo OSETH",
+            "TurboOSETH",
             WETH,
             wethPositionId,
             abi.encode(0),
@@ -131,14 +132,14 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._allowedAnswerChangeUpper = 3e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("Stakewise Cellar Share Price Oracle V0.0", args);
+        _createSharePriceOracle("TurboOSETH Share Price Oracle V0.0", args);
 
         stakewiseCellar.transferOwnership(devStrategist);
 
         // Create Stader Cellar.
         staderCellar = _createCellarWithNativeSupport(
-            "Stader Cellar",
-            "ST CELLAR",
+            "Turbo ETHX",
+            "TurboETHX",
             WETH,
             wethPositionId,
             abi.encode(0),
@@ -160,7 +161,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._allowedAnswerChangeUpper = 3e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("Stader Cellar Share Price Oracle V0.0", args);
+        _createSharePriceOracle("TurboETHX Share Price Oracle V0.0", args);
 
         staderCellar.transferOwnership(devStrategist);
 
