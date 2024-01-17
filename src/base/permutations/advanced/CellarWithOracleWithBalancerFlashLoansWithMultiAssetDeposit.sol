@@ -89,6 +89,7 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
 
     /**
      * @notice Allows the owner to add, or update an existing alternative asset deposit.
+     * @dev Callable by Sommelier Strategists.
      * @param _alternativeAsset the ERC20 alternative asset that can be deposited
      * @param _alternativeHoldingPosition the holding position to direct alternative asset deposits to
      * @param _alternativeAssetFee the fee to charge for depositing this alternative asset
@@ -118,6 +119,7 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
 
     /**
      * @notice Allows the owner to stop an alternative asset from being deposited.
+     * @dev Callable by Sommelier Strategists.
      * @param _alternativeAsset the asset to not allow for alternative asset deposits anymore
      */
     function dropAlternativeAssetData(ERC20 _alternativeAsset) external {
