@@ -4,15 +4,34 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 
+/**
+ * @title Compound V3 Helper Logic
+ * @notice Contains shared logic multiple Compound V3 Adaptors use.
+ * @author crispymangoes
+ */
 contract V3Helper {
     using Math for uint256;
 
+    /**
+     * @notice The maximum number of collateral assets a comet can have.
+     * @dev If a cellar has an open position with a comet, and more collateral assets are added
+     *      to the comet, and the maxNumberOfAssets is exceeded, `getAccountHealthFactor`
+     *      will always return zero, so the Cellar must pay back all debt before being able to
+     *      remove collateral, or borrow again.
+     * @dev The purpose of this logic is to constrain an unbounded for loop, and so that
+     *      rebalance gas costs can not be significantly increased by Compound governance.
+     */
     uint8 public immutable maxNumberOfAssets;
 
     constructor(uint8 _maxNumberOfAssets) {
         maxNumberOfAssets = _maxNumberOfAssets;
     }
 
+    /**
+     * @notice Returns an accounts health factor for a given comet.
+     * @dev Returns type(uint256).max if no debt is owed.
+     * @dev Returns 0 if `maxNumberOfAssets` is exceeded. See `maxNumberOfAssets` above.
+     */
     function getAccountHealthFactor(IComet comet, address account) public view returns (uint256) {
         // Get the amount of base debt owed adjsuted for price.
         uint256 borrowBalanceInVirtualBase;

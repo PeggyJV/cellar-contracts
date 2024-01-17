@@ -6,8 +6,8 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { V3Helper } from "src/modules/adaptors/Compound/V3/V3Helper.sol";
 
 /**
- * @title Compound CToken Adaptor
- * @notice Allows Cellars to interact with Compound CToken positions.
+ * @title Compound V3 Collateral Adaptor
+ * @notice Allows Cellars to interact with collateral on Compound V3.
  * @author crispymangoes
  */
 contract CollateralAdaptor is BaseAdaptor, V3Helper {
@@ -23,12 +23,18 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     // NA
     //====================================================================
 
+    /**
+     * @notice Attempted action would lower health factor below adaptor minimum.
+     */
     error CollateralAdaptor__HealthFactorTooLow();
+
+    /**
+     * @notice Attempted to use an invalid comet and/or collateral asset.
+     */
     error CollateralAdaptor___InvalidCometOrCollateral(address comet, address collateral);
 
     /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
+     * @notice Minimum Health Factor enforced after every collateral withdraw.
      */
     uint256 public immutable minimumHealthFactor;
 
@@ -45,13 +51,13 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Collateral Adaptor V 1.0"));
+        return keccak256(abi.encode("Collateral Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
-    // TODO we could allow users to supply collateral.
+
     /**
-     * @notice Not supported.
+     * @notice Deposit collateral asset to Compound V3.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         (IComet comet, ERC20 collateralAsset) = abi.decode(adaptorData, (IComet, ERC20));
@@ -72,14 +78,14 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     }
 
     /**
-     * @notice Identical to `balanceOf`, unless isLiquid configuration data is false, then returns 0.
+     * @notice Reports 0, as collateral withdraws lower the health factor of the cellar.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the balance of comet base token.
+     * @notice Returns the balance of collateral in Compound V3.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (IComet comet, ERC20 collateralAsset) = abi.decode(adaptorData, (IComet, ERC20));
@@ -88,7 +94,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     }
 
     /**
-     * @notice Returns `comet.baseToken()`
+     * @notice Returns the collateral asset used in Compound V3.
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         (, ERC20 collateralAsset) = abi.decode(adaptorData, (IComet, ERC20));
@@ -104,6 +110,9 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
 
     //============================================ Strategist Functions ===========================================
 
+    /**
+     * @notice Allows strategists to add collateral to Compound V3.
+     */
     function supplyCollateral(IComet comet, ERC20 collateralAsset, uint256 assets) external {
         _verifyCometAndCollateral(comet, collateralAsset);
 
@@ -115,6 +124,10 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
         _revokeExternalApproval(collateralAsset, address(comet));
     }
 
+    /**
+     * @notice Allows strategists to remove collateral from Compound V3.
+     * @dev Enforces a minimum health factor check after withdrawal.
+     */
     function withdrawCollateral(IComet comet, ERC20 collateralAsset, uint256 assets) external {
         _verifyCometAndCollateral(comet, collateralAsset);
 
@@ -128,7 +141,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
     }
 
     /**
-     * @notice Reverts if a Cellar is not setup to interact with a given Comet.
+     * @notice Reverts if a Cellar is not setup to interact with a given Comet, and collateral.
      * @dev This function is only used in a delegate call context, hence why address(this) is used
      *      to get the calling Cellar.
      * @dev This function is never triggered during a Cellar setup in constructor so we do not need to worry about

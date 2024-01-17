@@ -6,8 +6,8 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 import { V3Helper } from "src/modules/adaptors/Compound/V3/V3Helper.sol";
 
 /**
- * @title Compound CToken Adaptor
- * @notice Allows Cellars to interact with Compound CToken positions.
+ * @title Compound V3 Borrow Adaptor
+ * @notice Allows Cellars to borrow the base token from Compound V3.
  * @author crispymangoes
  */
 contract BorrowAdaptor is BaseAdaptor, V3Helper {
@@ -23,13 +23,23 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
     // NA
     //====================================================================
 
+    /**
+     * @notice Attempted action would lower health factor below adaptor minimum.
+     */
     error BorrowAdaptor__HealthFactorTooLow();
+
+    /**
+     * @notice Attempted to borrow while supplying assets.
+     */
     error BorrowAdaptor___TryingToBorrowWhileSupplying();
+
+    /**
+     * @notice Strategist attempted to use an invalid Comet address.
+     */
     error BorrowAdaptor___InvalidComet(address comet);
 
     /**
      * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
      */
     uint256 public immutable minimumHealthFactor;
 
@@ -46,7 +56,7 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Borrow Adaptor V 1.0"));
+        return keccak256(abi.encode("Borrow Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -65,14 +75,14 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
     }
 
     /**
-     * @notice Identical to `balanceOf`, unless isLiquid configuration data is false, then returns 0.
+     * @notice Reports 0, as borrowing from Compound V3 would lower the health factor of the cellar.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the balance of comet base token.
+     * @notice Returns the balance of comet base token borrowed.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IComet comet = abi.decode(adaptorData, (IComet));
@@ -88,7 +98,7 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
     }
 
     /**
-     * @notice This adaptor returns collateral, and not debt.
+     * @notice This adaptor returns debt.
      */
     function isDebt() public pure override returns (bool) {
         return true;
@@ -98,7 +108,7 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
 
     /**
      * @notice Allows strategists to borrow the base token from a comet.
-     * @dev It is important that the strategist borrows atleast the min borrow amount.
+     * @dev It is important that the strategist borrows at least the min borrow amount.
      */
     function borrowBase(IComet comet, uint256 assets) external {
         _verifyComet(comet);
@@ -115,6 +125,9 @@ contract BorrowAdaptor is BaseAdaptor, V3Helper {
         if (healthFactor < minimumHealthFactor) revert BorrowAdaptor__HealthFactorTooLow();
     }
 
+    /**
+     * @notice Allows strategists to repay the base token to a comet.
+     */
     function repayBase(IComet comet, uint256 assets) external {
         _verifyComet(comet);
 

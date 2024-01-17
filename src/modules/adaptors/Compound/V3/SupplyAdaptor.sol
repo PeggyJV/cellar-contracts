@@ -5,8 +5,8 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Math, Cellar, Registry } from "src
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
 
 /**
- * @title Compound CToken Adaptor
- * @notice Allows Cellars to interact with Compound CToken positions.
+ * @title Compound V3 Supply Adaptor
+ * @notice Allows Cellars to supply base token to Compound V3.
  * @author crispymangoes
  */
 contract SupplyAdaptor is BaseAdaptor {
@@ -22,6 +22,9 @@ contract SupplyAdaptor is BaseAdaptor {
     // Indicates whether the position is liquid or not.
     //====================================================================
 
+    /**
+     * @notice Strategist attempted to use an invalid Comet address.
+     */
     error SupplyAdaptor___InvalidComet(address comet);
 
     //============================================ Global Functions ===========================================
@@ -32,13 +35,12 @@ contract SupplyAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Supply Adaptor V 1.0"));
+        return keccak256(abi.encode("Supply Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar already has possession of users ERC20 assets by the time this function is called,
-     *         so there is nothing to do.
+     * @notice Deposit base token into Compound V3.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         IComet comet = abi.decode(adaptorData, (IComet));
@@ -54,12 +56,7 @@ contract SupplyAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Cellar just needs to transfer ERC20 token to `receiver`.
-     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets amount of `token` to send to receiver
-     * @param receiver address to send assets to
-     * @param adaptorData data needed to withdraw from this position
-     * @param configurationData data needed to determine if this position is liquid or not
+     * @notice Withdraw base token from Compound V3 and send to receiver.
      */
     function withdraw(
         uint256 assets,
@@ -82,7 +79,8 @@ contract SupplyAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Identical to `balanceOf`, unless isLiquid configuration data is false, then returns 0.
+     * @notice If isLiquid is true, reports the minimum between baseSupplied and baseLiquid.
+     *         else reports 0.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
@@ -122,6 +120,9 @@ contract SupplyAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
+    /**
+     * @notice Allows strategist to supply base token to Compound V3.
+     */
     function supplyBase(IComet comet, uint256 assets) external {
         _verifyComet(comet);
 
@@ -134,6 +135,10 @@ contract SupplyAdaptor is BaseAdaptor {
         _revokeExternalApproval(base, address(comet));
     }
 
+    // TODO if there is not enough liquid USDC to cover a withdraw, should this function check that, and withdraw as much as possible?
+    /**
+     * @notice Allows strategist to withdraw base token from Compound V3.
+     */
     function withdrawBase(IComet comet, uint256 assets) external {
         _verifyComet(comet);
 
