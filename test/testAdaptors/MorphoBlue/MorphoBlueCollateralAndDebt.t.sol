@@ -16,7 +16,7 @@ import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/p
 import { IrmMock } from "src/mocks/IrmMock.sol";
 
 /**
- * @notice Test provision of collateral and borrowing on MorphoBlue Markets
+ * @notice Test provision of collateral and borrowing on MorphoBlue Markets.
  * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFunctions {
@@ -42,9 +42,6 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     uint32 public morphoBlueCollateralWBTCPosition = 1_000_008;
     uint32 public morphoBlueDebtWBTCPosition = 1_000_009;
 
-    //============================================ VIP ===========================================
-
-    // TODO - INPUT PRODUCTION SMART CONTRACT ADDRESSES FOR MORPHOBLUE AND DEFAULT_IRM WHEN THEY ARE READY.
     IMorpho public morphoBlue = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
     address public morphoBlueOwner = 0x6ABfd6139c7C3CC270ee2Ce132E309F59cAaF6a2;
     address public DEFAULT_IRM = 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC;

@@ -64,6 +64,16 @@ contract MorphoBlueHelperLogic {
     }
 
     /**
+     * @dev helper function that returns actual supply position shares amount for specified `_user` according to MB market accounting.
+     * @param _id identifier of a Morpho Blue market.
+     * @param _user address that this function will query Morpho Blue market for.
+     * @return Actual supply share amount for the `_user`
+     */
+    function _userSupplyShareBalance(Id _id, address _user) internal view returns (uint256) {
+        return (morphoBlue.supplyShares(_id, _user));
+    }
+
+    /**
      * @dev helper function that returns actual collateral position amount for specified `_user` according to MB market accounting.
      */
     function _userCollateralBalance(Id _id, address _user) internal view virtual returns (uint256) {
@@ -82,8 +92,8 @@ contract MorphoBlueHelperLogic {
     }
 
     /**
-     * @notice Caller calls `accrueInterest` on specified MB market
-     * @param _market The specified MB market
+     * @notice Caller calls `accrueInterest` on specified MB market.
+     * @param _market The specified MB market.
      */
     function _accrueInterest(MarketParams memory _market) internal virtual {
         morphoBlue.accrueInterest(_market);

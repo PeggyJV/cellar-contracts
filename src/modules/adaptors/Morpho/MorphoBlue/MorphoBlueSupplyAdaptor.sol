@@ -17,7 +17,6 @@ import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libra
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
  *      Blue throughout code.
- *
  * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
@@ -87,10 +86,10 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     /**
      * @notice Cellars must withdraw from Morpho Blue lending market, then transfer assets to receiver.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from Morpho Blue lending market
-     * @param receiver the address to send withdrawn assets to
+     * @param assets the amount of assets to withdraw from Morpho Blue lending market.
+     * @param receiver the address to send withdrawn assets to.
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
-     * @param configurationData abi encoded bool indicating whether the position is liquid or not
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not.
      */
     function withdraw(
         uint256 assets,
@@ -114,7 +113,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @dev Compares loanToken supplied to loanToken borrowed to check for liquidity.
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
-     * @param configurationData abi encoded bool indicating whether the position is liquid or not
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not.
      * @return withdrawableSupply liquid amount of `loanToken` cellar has lent to specified MB market.
      */
     function withdrawableFrom(
@@ -166,35 +165,36 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Allows strategists to lend a specific amount for an asset on Morpho Blue market.
-     * @param market identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      * @param _assets the amount of loanToken to lend on specified MB market.
      */
-    function lendToMorphoBlue(MarketParams memory market, uint256 _assets) public {
-        _validateMBMarket(market);
-        ERC20 loanToken = ERC20(market.loanToken);
+    function lendToMorphoBlue(MarketParams memory _market, uint256 _assets) public {
+        _validateMBMarket(_market);
+        ERC20 loanToken = ERC20(_market.loanToken);
         _assets = _maxAvailable(loanToken, _assets);
         loanToken.safeApprove(address(morphoBlue), _assets);
-        _deposit(market, _assets, address(this));
+        _deposit(_market, _assets, address(this));
         // Zero out approvals if necessary.
         _revokeExternalApproval(loanToken, address(morphoBlue));
     }
 
     /**
      * @notice Allows strategists to withdraw underlying asset plus interest.
-     * @param market identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      * @param _assets the amount of loanToken to withdraw from MB market
      */
-    function withdrawFromMorphoBlue(MarketParams memory market, uint256 _assets) public {
+    function withdrawFromMorphoBlue(MarketParams memory _market, uint256 _assets) public {
         // Run external receiver check.
         _externalReceiverCheck(address(this));
-        _validateMBMarket(market);
-        Id _id = MarketParamsLib.id(market);
+        _validateMBMarket(_market);
+        Id _id = MarketParamsLib.id(_market);
         if (_assets == type(uint256).max) {
-            _accrueInterest(market);
-            _assets = _userSupplyBalance(_id, address(this));
+            uint256 _shares = _userSupplyShareBalance(_id, address(this));
+            _withdrawShares(_market, _shares, address(this));
+        } else {
+            // Withdraw assets from Morpho Blue.
+            _withdraw(_market, _assets, address(this));
         }
-        // Withdraw assets from Morpho Blue.
-        _withdraw(market, _assets, address(this));
     }
 
     /**
@@ -204,11 +204,11 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      *      rebalance.
      * @dev Calling this can increase the share price during the rebalance,
      *      so a strategist should consider moving some assets into reserves.
-     * @param market identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      */
-    function accrueInterest(MarketParams memory market) public {
-        _validateMBMarket(market);
-        _accrueInterest(market);
+    function accrueInterest(MarketParams memory _market) public {
+        _validateMBMarket(_market);
+        _accrueInterest(_market);
     }
 
     /**
@@ -237,18 +237,30 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _market The specified MB market.
      * @param _assets The amount of `loanToken` to transfer to MB market.
      * @param _onBehalf The address that MB market records as having supplied this amount of `loanToken` as a lender.
+     * @dev The mutative functions for supplying and withdrawing have params for share amounts of asset amounts, where one of these respective params must be zero.
      */
     function _deposit(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
         morphoBlue.supply(_market, _assets, 0, _onBehalf, hex"");
     }
 
     /**
-     * @notice Withdraw loanToken into specified MB lending market.
-     * @param _market The specified MB Market
-     * @param _assets The amount to withdraw
-     * @param _onBehalf The address to which the Asset Tokens will be transferred
+     * @notice Withdraw loanToken from specified MB lending market by specifying amount of assets to withdraw.
+     * @param _market The specified MB Market.
+     * @param _assets The amount to withdraw.
+     * @param _onBehalf The address to which the Asset Tokens will be transferred.
+     * @dev The mutative functions for supplying and withdrawing have params for share amounts of asset amounts, where one of these respective params must be zero.
      */
     function _withdraw(MarketParams memory _market, uint256 _assets, address _onBehalf) internal virtual {
         morphoBlue.withdraw(_market, _assets, 0, address(this), _onBehalf);
+    }
+
+    /**
+     * @notice Withdraw loanToken from specified MB lending market by specifying amount of shares to redeem.
+     * @param _market The specified MB Market.
+     * @param _shares The shares to redeem.
+     * @param _onBehalf The address to which the Asset Tokens will be transferred.
+     * @dev The mutative functions for supplying and withdrawing have params for share amounts of asset amounts, where one of these respective params must be zero.
+     */ function _withdrawShares(MarketParams memory _market, uint256 _shares, address _onBehalf) internal virtual {
+        morphoBlue.withdraw(_market, 0, _shares, address(this), _onBehalf);
     }
 }

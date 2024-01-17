@@ -14,7 +14,7 @@ import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libra
  * @dev  *      To interact with a different version or custom market, a new
  *      adaptor will inherit from this adaptor
  *      and override the interface helper functions. MB refers to Morpho
- *      Blue
+ *      Blue.
  * @author 0xEinCodes, crispymangoes
  */
 contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
@@ -95,9 +95,9 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     }
 
     /**
-     * @notice Returns the cellar's balance of the respective MB market loanToken calculated from cellar borrow shares according to MB prod contracts
+     * @notice Returns the cellar's balance of the respective MB market loanToken calculated from cellar borrow shares according to MB prod contracts.
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
-     * @return Cellar's balance of the respective MB market loanToken
+     * @return Cellar's balance of the respective MB market loanToken.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
@@ -127,30 +127,30 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Allows strategists to borrow assets from Morpho Blue.
-     * @param market identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      * @param _amountToBorrow the amount of `loanToken` to borrow on the specified MB market.
      */
-    function borrowFromMorphoBlue(MarketParams memory market, uint256 _amountToBorrow) public {
-        _validateMBMarket(market);
-        Id id = MarketParamsLib.id(market);
-        _borrowAsset(market, _amountToBorrow, address(this));
-        if (minimumHealthFactor > (_getHealthFactor(id, market))) {
-            revert MorphoBlueDebtAdaptor__HealthFactorTooLow(market);
+    function borrowFromMorphoBlue(MarketParams memory _market, uint256 _amountToBorrow) public {
+        _validateMBMarket(_market);
+        Id id = MarketParamsLib.id(_market);
+        _borrowAsset(_market, _amountToBorrow, address(this));
+        if (minimumHealthFactor > (_getHealthFactor(id, _market))) {
+            revert MorphoBlueDebtAdaptor__HealthFactorTooLow(_market);
         }
     }
 
     /**
      * @notice Allows strategists to repay loan debt on Morph Blue Lending Market. Make sure to call addInterest() beforehand to ensure we are repaying what is required.
      * @dev Uses `_maxAvailable` helper function, see `BaseAdaptor.sol`.
-     * @param market identifier of a Morpho Blue market.
+     * @param _market identifier of a Morpho Blue market.
      * @param _debtTokenRepayAmount The amount of `loanToken` to repay.
-     * NOTE - MorphoBlue reverts w/ underflow/overflow error if trying to repay with more than what cellar has. That said, we will accomodate for times that strategists tries to pass in type(uint256).max
+     * NOTE - MorphoBlue reverts w/ underflow/overflow error if trying to repay with more than what cellar has. That said, we will accomodate for times that strategists tries to pass in type(uint256).max.
      */
-    function repayMorphoBlueDebt(MarketParams memory market, uint256 _debtTokenRepayAmount) public {
-        _validateMBMarket(market);
-        Id id = MarketParamsLib.id(market);
-        _accrueInterest(market);
-        ERC20 tokenToRepay = ERC20(market.loanToken);
+    function repayMorphoBlueDebt(MarketParams memory _market, uint256 _debtTokenRepayAmount) public {
+        _validateMBMarket(_market);
+        Id id = MarketParamsLib.id(_market);
+        _accrueInterest(_market);
+        ERC20 tokenToRepay = ERC20(_market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         tokenToRepay.safeApprove(address(morphoBlue), debtAmountToRepay);
 
@@ -160,9 +160,9 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         uint256 assetsMax = sharesToRepay.toAssetsUp(totalBorrowAssets, totalBorrowShares);
 
         if (debtAmountToRepay >= assetsMax) {
-            _repayAsset(market, sharesToRepay, 0, address(this));
+            _repayAsset(_market, sharesToRepay, 0, address(this));
         } else {
-            _repayAsset(market, 0, debtAmountToRepay, address(this));
+            _repayAsset(_market, 0, debtAmountToRepay, address(this));
         }
 
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));

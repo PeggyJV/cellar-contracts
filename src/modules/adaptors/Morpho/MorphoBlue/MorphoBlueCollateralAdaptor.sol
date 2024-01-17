@@ -29,11 +29,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     // NA
     //====================================================================
 
-    // /**
-    //  * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
-    //  */
-    // error MorphoBlueCollateralAdaptor__MarketPositionsMustBeTracked(Id id);
-
     /**
      * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
      */
@@ -46,7 +41,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice Minimum Health Factor enforced after every removeCollateral() strategist function call.
-     * @notice Overwrites strategist set minimums if they are lower.
+     * @dev Overwrites strategist set minimums if they are lower.
      */
     uint256 public immutable minimumHealthFactor;
 
@@ -127,7 +122,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
 
     /**
      * @notice This adaptor returns collateral, and not debt.
-     * @return Whether or not this position is a debt position
+     * @return Whether or not this position is a debt position.
      */
     function isDebt() public pure override returns (bool) {
         return false;
