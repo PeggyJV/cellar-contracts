@@ -195,7 +195,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(USDC),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -211,8 +211,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         // only add USDC supply position for now.
         cellar.addPositionToCatalogue(morphoBlueSupplyUSDCPosition);
 
-        cellar.addPosition(1, wethPosition, abi.encode(0), false);
-        cellar.addPosition(2, wbtcPosition, abi.encode(0), false);
+        cellar.addPosition(1, wethPosition, abi.encode(true), false);
+        cellar.addPosition(2, wbtcPosition, abi.encode(true), false);
         cellar.addPosition(3, morphoBlueSupplyUSDCPosition, abi.encode(true), false);
 
         cellar.setHoldingPosition(morphoBlueSupplyUSDCPosition);
@@ -554,9 +554,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     function testWithdrawableFrom() external {
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
-
         cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(true), false);
-
         // Strategist rebalances to withdraw USDC, and lend in a different pair.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         // Withdraw USDC from Morpho Blue.
@@ -571,56 +569,40 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-
         // Make cellar deposits lend USDC into WETH Pair by default
         cellar.setHoldingPosition(morphoBlueSupplyWETHPosition);
-
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-
         // Figure out how much the whale must borrow to borrow all the loanToken.
         uint256 totalLoanTokenSupplied = uint256(morphoBlue.market(wethUsdcMarketId).totalSupplyAssets);
         uint256 totalLoanTokenBorrowed = uint256(morphoBlue.market(wethUsdcMarketId).totalBorrowAssets);
-
         uint256 assetsToBorrow = totalLoanTokenSupplied > totalLoanTokenBorrowed
             ? totalLoanTokenSupplied - totalLoanTokenBorrowed
             : 0;
         // Supply 2x the value we are trying to borrow in weth market collateral (WETH)
         uint256 collateralToProvide = priceRouter.getValue(USDC, 2 * assetsToBorrow, WETH);
-
         deal(address(WETH), whaleBorrower, collateralToProvide);
-
         vm.startPrank(whaleBorrower);
         WETH.approve(address(morphoBlue), collateralToProvide);
-
         MarketParams memory market = morphoBlue.idToMarketParams(wethUsdcMarketId);
-
         morphoBlue.supplyCollateral(market, collateralToProvide, whaleBorrower, hex"");
-
         // now borrow
         morphoBlue.borrow(market, assetsToBorrow, 0, whaleBorrower, whaleBorrower);
         vm.stopPrank();
-
         uint256 assetsWithdrawable = cellar.totalAssetsWithdrawable();
-
         assertEq(assetsWithdrawable, 0, "There should be no assets withdrawable.");
-
         // Whale repays half of their debt.
         uint256 sharesToRepay = (morphoBlue.position(wethUsdcMarketId, whaleBorrower).borrowShares) / 2;
-
         vm.startPrank(whaleBorrower);
         USDC.approve(address(morphoBlue), assetsToBorrow);
         morphoBlue.repay(market, 0, sharesToRepay, whaleBorrower, hex"");
         vm.stopPrank();
-
         uint256 totalLoanTokenSupplied2 = uint256(morphoBlue.market(wethUsdcMarketId).totalSupplyAssets);
         uint256 totalLoanTokenBorrowed2 = uint256(morphoBlue.market(wethUsdcMarketId).totalBorrowAssets);
         uint256 liquidLoanToken2 = totalLoanTokenSupplied2 - totalLoanTokenBorrowed2;
         assetsWithdrawable = cellar.totalAssetsWithdrawable();
-
         assertEq(assetsWithdrawable, liquidLoanToken2, "Should be able to withdraw liquid loanToken.");
-
         // Have user withdraw the loanToken.
         deal(address(USDC), address(this), 0);
         cellar.withdraw(liquidLoanToken2, address(this), address(this));

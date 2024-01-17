@@ -192,11 +192,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             address(morphoBlueCollateralAdaptor),
             abi.encode(wethUsdcMarket)
         );
-        registry.trustPosition(
-            morphoBlueDebtWETHPosition,
-            address(morphoBlueDebtAdaptor),
-            abi.encode(wethUsdcMarket)
-        );
+        registry.trustPosition(morphoBlueDebtWETHPosition, address(morphoBlueDebtAdaptor), abi.encode(wethUsdcMarket));
         registry.trustPosition(
             morphoBlueSupplyUSDCPosition,
             address(morphoBlueSupplyAdaptor),
@@ -218,11 +214,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             address(morphoBlueCollateralAdaptor),
             abi.encode(wbtcUsdcMarket)
         );
-        registry.trustPosition(
-            morphoBlueDebtWBTCPosition,
-            address(morphoBlueDebtAdaptor),
-            abi.encode(wbtcUsdcMarket)
-        );
+        registry.trustPosition(morphoBlueDebtWBTCPosition, address(morphoBlueDebtAdaptor), abi.encode(wbtcUsdcMarket));
 
         string memory cellarName = "Morpho Blue Collateral & Debt Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -241,7 +233,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
             cellarName,
             cellarName,
             wethPosition,
-            abi.encode(WETH),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -263,8 +255,8 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         cellar.addPositionToCatalogue(morphoBlueCollateralWETHPosition);
         cellar.addPositionToCatalogue(morphoBlueDebtWETHPosition);
 
-        cellar.addPosition(1, usdcPosition, abi.encode(0), false);
-        cellar.addPosition(2, wbtcPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcPosition, abi.encode(true), false);
+        cellar.addPosition(2, wbtcPosition, abi.encode(true), false);
         cellar.addPosition(3, morphoBlueSupplyWETHPosition, abi.encode(true), false);
         cellar.addPosition(4, morphoBlueCollateralWETHPosition, abi.encode(0), false);
 
