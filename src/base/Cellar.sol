@@ -708,12 +708,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // =========================================== CORE LOGIC ===========================================
 
     /**
-     * @notice Emitted during deposits.
-     * @dev This does not comply with ERC4626 standard as it emits the deposit asset as well.
-     */
-    event Deposit(address indexed caller, address indexed owner, address depositAsset, uint256 assets, uint256 shares);
-
-    /**
      * @notice Attempted an action with zero shares.
      */
     error Cellar__ZeroShares();
@@ -776,7 +770,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         _mint(receiver, shares);
 
-        emit Deposit(msg.sender, receiver, address(asset), assets, shares);
+        emit Deposit(msg.sender, receiver, assets, shares);
 
         afterDeposit(position, assets, shares, receiver);
     }

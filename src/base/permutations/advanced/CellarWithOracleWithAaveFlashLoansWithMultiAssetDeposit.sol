@@ -55,6 +55,18 @@ contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOr
      */
     event AlternativeAssetDropped(address asset);
 
+    /**
+     * @notice Emitted during multi asset deposits.
+     * @dev This does not comply with ERC4626 standard as it emits the deposit asset as well.
+     */
+    event MultiAssetDeposit(
+        address indexed caller,
+        address indexed owner,
+        address depositAsset,
+        uint256 assets,
+        uint256 shares
+    );
+
     //============================== IMMUTABLES ===============================
 
     constructor(
@@ -165,6 +177,8 @@ contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOr
             position,
             receiver
         );
+
+        emit MultiAssetDeposit(msg.sender, receiver, address(depositAsset), assets, shares);
     }
 
     //============================== PREVIEW FUNCTIONS ===============================
