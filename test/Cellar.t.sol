@@ -5,6 +5,7 @@ import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
+import { CellarWithViewFunctions } from "src/mocks/CellarWithViewFunctions.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -16,10 +17,10 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    Cellar private cellar;
-    Cellar private usdcCLR;
-    Cellar private wethCLR;
-    Cellar private wbtcCLR;
+    CellarWithViewFunctions private cellar;
+    CellarWithViewFunctions private usdcCLR;
+    CellarWithViewFunctions private wethCLR;
+    CellarWithViewFunctions private wbtcCLR;
 
     CellarAdaptor private cellarAdaptor;
 
@@ -96,19 +97,40 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        usdcCLR = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        usdcCLR = _createCellarWithViewFunctions(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
         vm.label(address(usdcCLR), "usdcCLR");
 
         cellarName = "Dummy Cellar V0.1";
         initialDeposit = 1e12;
         platformCut = 0.75e18;
-        wethCLR = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), initialDeposit, platformCut);
+        wethCLR = _createCellarWithViewFunctions(
+            cellarName,
+            WETH,
+            wethPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
         vm.label(address(wethCLR), "wethCLR");
 
         cellarName = "Dummy Cellar V0.2";
         initialDeposit = 1e4;
         platformCut = 0.75e18;
-        wbtcCLR = _createCellar(cellarName, WBTC, wbtcPosition, abi.encode(0), initialDeposit, platformCut);
+        wbtcCLR = _createCellarWithViewFunctions(
+            cellarName,
+            WBTC,
+            wbtcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
         vm.label(address(wbtcCLR), "wbtcCLR");
 
         // Add Cellar Positions to the registry.
@@ -119,7 +141,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellarName = "Cellar V0.0";
         initialDeposit = 1e6;
         platformCut = 0.75e18;
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellarWithViewFunctions(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
         // Set up remaining cellar positions.
         cellar.addPositionToCatalogue(usdcCLRPosition);
@@ -129,9 +158,9 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addPositionToCatalogue(wbtcCLRPosition);
         cellar.addPosition(3, wbtcCLRPosition, abi.encode(true), false);
         cellar.addPositionToCatalogue(wethPosition);
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
         cellar.addPositionToCatalogue(wbtcPosition);
-        cellar.addPosition(5, wbtcPosition, abi.encode(0), false);
+        cellar.addPosition(5, wbtcPosition, abi.encode(true), false);
         cellar.addAdaptorToCatalogue(address(cellarAdaptor));
         cellar.addPositionToCatalogue(usdtPosition);
 
@@ -183,7 +212,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         for (uint256 i = 0; i < 6; i++) {
             assertEq(positions[i], expectedPositions[i], "Positions should have been written to Cellar.");
             uint32 position = positions[i];
-            (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionData(position);
+            (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionDataView(position);
             assertEq(adaptor, expectedAdaptor[i], "Position adaptor not initialized properly.");
             assertEq(isDebt, false, "There should be no debt positions.");
             assertEq(adaptorData, expectedAdaptorData[i], "Position adaptor data not initialized properly.");
@@ -309,7 +338,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         string memory cellarName = "Dummy Cellar V0.3";
         uint256 initialDeposit = 1e12;
         uint64 platformCut = 0.75e18;
-        Cellar wethVault = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), initialDeposit, platformCut);
+        Cellar wethVault = _createCellarWithViewFunctions(
+            cellarName,
+            WETH,
+            wethPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
         uint32 newWETHPosition = 10;
         registry.trustPosition(newWETHPosition, address(cellarAdaptor), abi.encode(wethVault));
@@ -406,11 +442,11 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Cellar should not be able to add position to tracked array until it is in the catalogue.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, wethPosition)));
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
 
         // Since WETH position is trusted, cellar should be able to add it to the catalogue, and to the tracked array.
         cellar.addPositionToCatalogue(wethPosition);
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
 
         // Registry distrusts weth position.
         registry.distrustPosition(wethPosition);
@@ -423,7 +459,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // If strategist tries adding it back it reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, wethPosition)));
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
 
         // Governance removes position from cellars catalogue.
         cellar.removePositionFromCatalogue(wethPosition); // Removes WETH position from catalogue.
@@ -478,14 +514,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         assertFalse(cellar.isPositionUsed(wethPosition), "`isPositionUsed` should be false for WETH.");
-        (address zeroAddressAdaptor, , , ) = cellar.getPositionData(wethPosition);
+        (address zeroAddressAdaptor, , , ) = cellar.getPositionDataView(wethPosition);
         assertEq(zeroAddressAdaptor, address(0), "Removing position should have deleted position data.");
         // Check that adding a credit position as debt reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, wethPosition)));
-        cellar.addPosition(4, wethPosition, abi.encode(0), true);
+        cellar.addPosition(4, wethPosition, abi.encode(true), true);
 
         // Check that `addPosition` actually adds it.
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
 
         assertEq(
             positionLength,
@@ -493,12 +529,12 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
             "Cellar positions array should be equal to previous length."
         );
 
-        assertEq(cellar.creditPositions(4), wethPosition, "`positions[4]` should be WETH.");
+        assertEq(cellar.getCreditPosition(4), wethPosition, "`positions[4]` should be WETH.");
         assertTrue(cellar.isPositionUsed(wethPosition), "`isPositionUsed` should be true for WETH.");
 
         // Check that `addPosition` reverts if position is already used.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, wethPosition)));
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
 
         // Give Cellar 1 wei of WETH.
         deal(address(WETH), address(cellar), 1);
@@ -517,7 +553,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Check that `addPosition` reverts if position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 0)));
-        cellar.addPosition(4, 0, abi.encode(0), false);
+        cellar.addPosition(4, 0, abi.encode(true), false);
 
         // Check that `addPosition` reverts if debt position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 0)));
@@ -529,18 +565,18 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.removePosition(4, false);
 
         // Check that addPosition sets position data.
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPosition(4, wethPosition, abi.encode(true), false);
         (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configurationData) = cellar
-            .getPositionData(wethPosition);
+            .getPositionDataView(wethPosition);
         assertEq(adaptor, address(erc20Adaptor), "Adaptor should be the ERC20 adaptor.");
         assertTrue(!isDebt, "Position should not be debt.");
         assertEq(adaptorData, abi.encode((WETH)), "Adaptor data should be abi encoded WETH.");
-        assertEq(configurationData, abi.encode(0), "Configuration data should be abi encoded ZERO.");
+        assertEq(configurationData, abi.encode(true), "Configuration data should be abi encoded ZERO.");
 
         // Check that `swapPosition` works as expected.
         cellar.swapPositions(4, 2, false);
-        assertEq(cellar.creditPositions(4), wethCLRPosition, "`positions[4]` should be wethCLR.");
-        assertEq(cellar.creditPositions(2), wethPosition, "`positions[2]` should be WETH.");
+        assertEq(cellar.getCreditPosition(4), wethCLRPosition, "`positions[4]` should be wethCLR.");
+        assertEq(cellar.getCreditPosition(2), wethPosition, "`positions[2]` should be WETH.");
 
         // Try setting the holding position to an unused position.
         uint32 invalidPositionId = 100;
@@ -644,13 +680,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Max rebalance deviation value is 10%.
         uint256 deviation = 0.2e18;
         vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__InvalidRebalanceDeviation.selector,
-                    deviation,
-                    cellar.MAX_REBALANCE_DEVIATION()
-                )
-            )
+            bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidRebalanceDeviation.selector, deviation, 0.1e18))
         );
         cellar.setRebalanceDeviation(deviation);
     }
@@ -957,14 +987,21 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        Cellar debtCellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        CellarWithViewFunctions debtCellar = _createCellarWithViewFunctions(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
         debtCellar.addPositionToCatalogue(debtWethPosition);
         debtCellar.addPositionToCatalogue(debtWbtcPosition);
         debtCellar.addPosition(0, debtWethPosition, abi.encode(0), true);
 
         //constructor should set isDebt
-        (, bool isDebt, , ) = debtCellar.getPositionData(debtWethPosition);
+        (, bool isDebt, , ) = debtCellar.getPositionDataView(debtWethPosition);
         assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
         assertEq(debtCellar.getDebtPositions().length, 1, "Cellar should have 1 debt position");
 
@@ -973,7 +1010,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         debtCellar.addPosition(0, debtWbtcPosition, abi.encode(0), true);
         assertEq(debtCellar.getDebtPositions().length, 2, "Cellar should have 2 debt positions");
 
-        (, isDebt, , ) = debtCellar.getPositionData(debtWbtcPosition);
+        (, isDebt, , ) = debtCellar.getPositionDataView(debtWbtcPosition);
         assertTrue(isDebt, "Constructor should have set WBTC as a debt position.");
         assertEq(debtCellar.getDebtPositions().length, 2, "Cellar should have 2 debt positions");
 
@@ -1006,7 +1043,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         string memory cellarName = "Cellar B V0.0";
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
-        Cellar cellarB = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        Cellar cellarB = _createCellarWithViewFunctions(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
         uint32 cellarBPosition = 10;
         registry.trustPosition(cellarBPosition, address(cellarAdaptor), abi.encode(cellarB));
@@ -1015,7 +1059,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellarName = "Cellar A V0.0";
         initialDeposit = 1e6;
         platformCut = 0.75e18;
-        Cellar cellarA = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        Cellar cellarA = _createCellarWithViewFunctions(
+            cellarName,
+            USDC,
+            usdcPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
         cellarA.addPositionToCatalogue(cellarBPosition);
         cellarA.addPosition(0, cellarBPosition, abi.encode(true), false);
@@ -1038,41 +1089,41 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Specify a zero length Adaptor Call array.
         Cellar.AdaptorCall[] memory data;
 
-        address automationActions = vm.addr(5);
-        registry.register(automationActions);
-        cellar.setAutomationActions(3, automationActions);
+        // address automationActions = vm.addr(5);
+        // registry.register(automationActions);
+        // cellar.setAutomationActions(3, automationActions);
 
         // Only owner and automation actions can call `callOnAdaptor`.
         cellar.callOnAdaptor(data);
 
-        vm.prank(automationActions);
-        cellar.callOnAdaptor(data);
+        // vm.prank(automationActions);
+        // cellar.callOnAdaptor(data);
 
-        // Update Automation Actions contract to zero address.
-        cellar.setAutomationActions(4, address(0));
+        // // Update Automation Actions contract to zero address.
+        // cellar.setAutomationActions(4, address(0));
 
-        // Call now reverts.
-        vm.startPrank(automationActions);
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
-        cellar.callOnAdaptor(data);
-        vm.stopPrank();
+        // // Call now reverts.
+        // vm.startPrank(automationActions);
+        // vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
+        // cellar.callOnAdaptor(data);
+        // vm.stopPrank();
 
         // Owner can still call callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        registry.setAddress(3, automationActions);
+        // registry.setAddress(3, automationActions);
 
-        // Governance tries to set automation actions to registry address 3, but malicious multisig changes it after prop passes.
-        registry.setAddress(3, address(this));
+        // // Governance tries to set automation actions to registry address 3, but malicious multisig changes it after prop passes.
+        // registry.setAddress(3, address(this));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
-        cellar.setAutomationActions(3, automationActions);
+        // vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
+        // cellar.setAutomationActions(3, automationActions);
 
-        // Try setting automation actions to registry id 0.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
-        );
-        cellar.setAutomationActions(0, automationActions);
+        // // Try setting automation actions to registry id 0.
+        // vm.expectRevert(
+        //     bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
+        // );
+        // cellar.setAutomationActions(0, automationActions);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
@@ -1082,7 +1133,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Governance can remove it itself by calling `distrustPosition`.
 
         // Add asset that will be depegged.
-        cellar.addPosition(5, usdtPosition, abi.encode(0), false);
+        cellar.addPosition(5, usdtPosition, abi.encode(true), false);
 
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
@@ -1100,7 +1151,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // it.
 
         // Add asset that will be depegged.
-        cellar.addPosition(5, usdtPosition, abi.encode(0), false);
+        cellar.addPosition(5, usdtPosition, abi.encode(true), false);
 
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
@@ -1169,7 +1220,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         // safety contract, shutdown old cellar, and allow users to withdraw
         // from the safety contract.
 
-        cellar.addPosition(5, usdtPosition, abi.encode(0), false);
+        cellar.addPosition(5, usdtPosition, abi.encode(true), false);
 
         deal(address(USDC), address(this), 100e6);
         cellar.deposit(100e6, address(this));

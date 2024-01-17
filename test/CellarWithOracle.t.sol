@@ -86,7 +86,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             cellarName,
             cellarName,
             usdcPosition,
-            abi.encode(0),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -114,7 +114,8 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
+
+        ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
             _target,
             _heartbeat,
             _deviationTrigger,
@@ -126,8 +127,12 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             address(LINK),
             1e18,
             0.1e4,
-            3e4
+            3e4,
+            address(0),
+            0
         );
+        sharePriceOracle = new ERC4626SharePriceOracle(args);
+
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);
         LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
@@ -393,9 +398,9 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         depositGas1Asset -= gasleft();
 
         // Rebalance Cellar so it has assets in 4 positions.
-        cellar.addPosition(1, usdtPosition, abi.encode(0), false);
-        cellar.addPosition(2, daiPosition, abi.encode(0), false);
-        cellar.addPosition(3, fraxPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdtPosition, abi.encode(true), false);
+        cellar.addPosition(2, daiPosition, abi.encode(true), false);
+        cellar.addPosition(3, fraxPosition, abi.encode(true), false);
 
         uint256 usdcAmount = (2 * assets) / 4;
         uint256 usdtAmount = priceRouter.getValue(USDC, usdcAmount, USDT);
@@ -553,7 +558,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Strategist can still manage the cellar.
         cellar.setRebalanceDeviation(0.01e18);
-        cellar.addPosition(1, usdtPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdtPosition, abi.encode(true), false);
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
@@ -574,7 +579,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             address _automationAdmin = address(this);
 
             // Deploy new share price oracle.
-            sharePriceOracle = new ERC4626SharePriceOracle(
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
                 _target,
                 _heartbeat,
                 _deviationTrigger,
@@ -586,8 +591,11 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
                 address(LINK),
                 4e18,
                 0.1e4,
-                3e4
+                3e4,
+                address(0),
+                0
             );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
         }
 
         uint96 initialUpkeepFunds = 10e18;

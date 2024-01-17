@@ -145,7 +145,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
             cellarName,
             cellarName,
             mkrPosition,
-            abi.encode(MKR),
+            abi.encode(true),
             initialDeposit,
             platformCut,
             type(uint192).max
@@ -162,10 +162,10 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         cellar.addPositionToCatalogue(fraxPosition);
         cellar.addPositionToCatalogue(apePosition);
 
-        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+        cellar.addPosition(1, wethPosition, abi.encode(true), false);
         cellar.addPosition(2, fraxlendCollateralMKRPosition, abi.encode(0), false);
-        cellar.addPosition(3, fraxPosition, abi.encode(0), false);
-        cellar.addPosition(4, apePosition, abi.encode(0), false);
+        cellar.addPosition(3, fraxPosition, abi.encode(true), false);
+        cellar.addPosition(4, apePosition, abi.encode(true), false);
 
         cellar.addPosition(0, fraxlendDebtMKRPosition, abi.encode(0), true);
 
@@ -351,7 +351,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
         cellar.addPositionToCatalogue(fraxlendDebtUNIPosition);
         cellar.addPosition(5, fraxlendCollateralUNIPosition, abi.encode(0), false);
-        cellar.addPosition(6, uniPosition, abi.encode(0), false);
+        cellar.addPosition(6, uniPosition, abi.encode(true), false);
         cellar.addPosition(1, fraxlendDebtUNIPosition, abi.encode(0), true);
 
         // multiple adaptor calls

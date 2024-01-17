@@ -41,6 +41,9 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 // Maker
 import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
+// Curve
+import { CurveAdaptor, CurvePool } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
@@ -60,6 +63,9 @@ import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoB
 import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
 // import { MorphoBlueSupplyAdaptor2 } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor2.sol";
 import { Id, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
+import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
+
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
@@ -323,17 +329,21 @@ contract AdaptorHelperFunctions {
         MarketParams memory _market,
         uint256 _collateralToDeposit
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.addCollateral.selector, _market, _collateralToDeposit);
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.addCollateral.selector, _market, _collateralToDeposit);
     }
 
     function _createBytesDataToRemoveCollateralToMorphoBlue(
         MarketParams memory _market,
         uint256 _collateralAmount
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _market, _collateralAmount);
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _market, _collateralAmount);
     }
 
-    function _createBytesDataToAccrueInterestToMorphoBlue(MarketParams memory _market) internal pure returns (bytes memory) {
+    function _createBytesDataToAccrueInterestToMorphoBlue(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.accrueInterest.selector, _market);
     }
 
@@ -350,7 +360,8 @@ contract AdaptorHelperFunctions {
         MarketParams memory _market,
         uint256 _debtTokenRepayAmount
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _market, _debtTokenRepayAmount);
+        return
+            abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _market, _debtTokenRepayAmount);
     }
 
     // ========================================= Balancer FUNCTIONS =========================================
@@ -627,5 +638,152 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToDrip() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(DSRAdaptor.drip.selector);
+    }
+
+    // ========================================= Curve FUNCTIONS =========================================
+
+    function _createBytesDataToAddLiquidityToCurve(
+        address pool,
+        ERC20 token,
+        uint256[] memory orderedTokenAmounts,
+        uint256 minLPAmount,
+        address gauge,
+        bytes4 selector
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.addLiquidity.selector,
+                pool,
+                token,
+                orderedTokenAmounts,
+                minLPAmount,
+                gauge,
+                selector
+            );
+    }
+
+    function _createBytesDataToAddETHLiquidityToCurve(
+        address pool,
+        ERC20 token,
+        uint256[] memory orderedTokenAmounts,
+        uint256 minLPAmount,
+        bool useUnderlying,
+        address gauge,
+        bytes4 selector
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.addLiquidityETH.selector,
+                pool,
+                token,
+                orderedTokenAmounts,
+                minLPAmount,
+                useUnderlying,
+                gauge,
+                selector
+            );
+    }
+
+    function _createBytesDataToRemoveLiquidityFromCurve(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        uint256[] memory orderedTokenAmountsOut,
+        address gauge,
+        bytes4 selector
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.removeLiquidity.selector,
+                pool,
+                token,
+                lpTokenAmount,
+                orderedTokenAmountsOut,
+                gauge,
+                selector
+            );
+    }
+
+    function _createBytesDataToRemoveETHLiquidityFromCurve(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        uint256[] memory orderedTokenAmountsOut,
+        bool useUnderlying,
+        address gauge,
+        bytes4 selector
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.removeLiquidityETH.selector,
+                pool,
+                token,
+                lpTokenAmount,
+                orderedTokenAmountsOut,
+                useUnderlying,
+                gauge,
+                selector
+            );
+    }
+
+    function _createBytesDataToStakeCurveLP(
+        address token,
+        address gauge,
+        uint256 amount,
+        address pool,
+        bytes4 selector
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.stakeInGauge.selector, token, gauge, amount, pool, selector);
+    }
+
+    function _createBytesDataToUnStakeCurveLP(address gauge, uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.unStakeFromGauge.selector, gauge, amount);
+    }
+
+    function _createBytesDataToClaimRewardsForCurveLP(address gauge) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.claimRewards.selector, gauge);
+    }
+
+    // ========================================= Convex-Curve Platform FUNCTIONS =========================================
+
+    function _createBytesDataToDepositToConvexCurvePlatform(
+        uint256 _pid,
+        address _baseRewardPool,
+        ERC20 _lpt,
+        CurvePool _pool,
+        bytes4 _selector,
+        uint256 _amount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.depositLPTInConvexAndStake.selector,
+                _pid,
+                _baseRewardPool,
+                _lpt,
+                _pool,
+                _selector,
+                _amount
+            );
+    }
+
+    function _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
+        address _baseRewardPool,
+        uint256 _amount,
+        bool _claim
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.withdrawFromBaseRewardPoolAsLPT.selector,
+                _baseRewardPool,
+                _amount,
+                _claim
+            );
+    }
+
+    function _createBytesDataToGetRewardsConvexCurvePlatform(
+        address _baseRewardPool,
+        bool _claimExtras
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _baseRewardPool, _claimExtras);
     }
 }

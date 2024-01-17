@@ -57,7 +57,7 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
 
         // Setup Share Price Oracle.
         ERC4626 _target = ERC4626(address(cellar));
@@ -70,20 +70,25 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         address _automationAdmin = address(this);
 
         // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            _automationRegistrar,
-            _automationAdmin,
-            address(LINK),
-            1e18,
-            0.1e4,
-            10e4
-        );
+        {
+            ERC4626SharePriceOracle.ConstructorArgs memory args = ERC4626SharePriceOracle.ConstructorArgs(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
+                1e18,
+                0.1e4,
+                10e4,
+                address(0),
+                0
+            );
+            sharePriceOracle = new ERC4626SharePriceOracle(args);
+        }
 
         uint96 initialUpkeepFunds = 10e18;
         deal(address(LINK), address(this), initialUpkeepFunds);
@@ -102,7 +107,7 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         initialDeposit = 1e6;
         platformCut = 0.75e18;
 
-        metaCellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        metaCellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(true), initialDeposit, platformCut);
 
         metaCellar.addAdaptorToCatalogue(address(cellarAdaptor));
         metaCellar.addPositionToCatalogue(cellarPosition);

@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.21;
+
+contract PositionIds {
+    // ERC20
+    uint32 public WETHErc20Position = 1; // adaptor_name='ERC20Adaptor', underlying_asset='WETH', adaptor_data=['WETH'])
+    uint32 public WBTCErc20Position = 2; // adaptor_name='ERC20Adaptor', underlying_asset='WBTC', adaptor_data=['WBTC'])
+    uint32 public USDCErc20Position = 3; // adaptor_name='ERC20Adaptor', underlying_asset='USDC', adaptor_data=['USDC'])
+    uint32 public DAIErc20Position = 4; // adaptor_name='ERC20Adaptor', underlying_asset='DAI', adaptor_data=['DAI'])
+    uint32 public USDTErc20Position = 5; // adaptor_name='ERC20Adaptor', underlying_asset='USDT', adaptor_data=['USDT'])
+    uint32 public GHOErc20Position = 6; // adaptor_name='ERC20Adaptor', underlying_asset='GHO', adaptor_data=['GHO'])
+    uint32 public SWETHErc20Position = 7; // adaptor_name='ERC20Adaptor', underlying_asset='SWETH', adaptor_data=['SWETH'])
+    uint32 public LUSDErc20Position = 8; // adaptor_name='ERC20Adaptor', underlying_asset='LUSD', adaptor_data=['LUSD'])
+    uint32 public WSTETHErc20Position = 9; // adaptor_name='ERC20Adaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
+    uint32 public STETHErc20Position = 10; // adaptor_name='ERC20Adaptor', underlying_asset='STETH', adaptor_data=['STETH'])
+    uint32 public SOMMErc20Position = 11; // adaptor_name='ERC20Adaptor', underlying_asset='SOMM', adaptor_data=['SOMM'])
+
+    // Uniswap V3
+    uint32 public WETH_SWETHuniswapV3Position = 1000001; // adaptor_name='UniswapV3Adaptor', underlying_asset='WETH', adaptor_data=['WETH', 'SWETH'])
+    uint32 public GHO_USDCuniswapV3Position = 1000002; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'USDC'])
+    uint32 public GHO_USDTuniswapV3Position = 1000003; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'USDT'])
+    uint32 public GHO_DAIuniswapV3Position = 1000004; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'DAI'])
+    uint32 public GHO_FRAXuniswapV3Position = 1000005; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'FRAX'])
+    uint32 public GHO_LUSDuniswapV3Position = 1000006; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'LUSD'])
+    uint32 public WSTETH_WETHuniswapV3Position = 1000007; // adaptor_name='UniswapV3Adaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH', 'WETH'])
+    uint32 public SOMM_WETHuniswapV3Position = 1000008; // adaptor_name='UniswapV3Adaptor', underlying_asset='SOMM', adaptor_data=['SOMM', 'WETH'])
+
+    // aave
+    uint32 public aV3USDCPosition = 2000001; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='USDC', adaptor_data=['aEthUSDC', 'USDC'])
+    uint32 public aV3USDTPosition = 2000002; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='USDT', adaptor_data=['aEthUSDT', 'USDT'])
+    uint32 public aV3DAIPosition = 2000003; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='DAI', adaptor_data=['aEthDAI', 'DAI'])
+    uint32 public aV3LUSDPosition = 2000004; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='LUSD', adaptor_data=['aEthLUSD', 'LUSD'])
+    uint32 public aV3WETHPosition = 2000005; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='WETH', adaptor_data=['aEthWETH', 'WETH'])
+    uint32 public aV3WSTETHPosition = 2000006; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='WSTETH', adaptor_data=['aEthWSTETH', 'WSTETH'])
+    uint32 public aV2WETHPosition = 2000007; // adaptor_name='AaveATokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
+    uint32 public aV2STETHPosition = 2000008; // adaptor_name='AaveATokenAdaptor', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH', 'WETH'])
+    uint32 public aV2STETHPositionLHF = 2000009; // adaptor_name='AaveATokenAdaptor 1.02HF', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH', 'WETH'])
+    uint32 public aV3WSTETHPositionLHF = 2000010; // adaptor_name='AaveV3ATokenAdaptor 1.02HF', underlying_asset='WSTETH', adaptor_data=['aEthWSTETH', 'WSTETH'])
+    uint32 public dV3USDCPosition = 2500001; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='USDC', adaptor_data=['variableDebtEthUSDC', 'USDC'])
+    uint32 public dV3USDTPosition = 2500002; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='USDT', adaptor_data=['variableDebtEthUSDT', 'USDT'])
+    uint32 public dV3DAIPosition = 2500003; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='DAI', adaptor_data=['variableDebtEthDAI', 'DAI'])
+    uint32 public dV3GHOPosition = 2500004; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='GHO', adaptor_data=['variableDebtEthGHO', 'GHO'])
+    uint32 public dV3LUSDPosition = 2500005; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='LUSD', adaptor_data=['variableDebtEthLUSD', 'LUSD'])
+    uint32 public dV3WETHPosition = 2500006; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['variableDebtEthWETH', 'WETH'])
+    uint32 public dV3WSTETHPosition = 2500007; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='WSTETH', adaptor_data=['variableDebtEthWSTETH', 'WSTETH'])
+    uint32 public dV2WETHPosition = 2500008; // adaptor_name='AaveDebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['variableDebtWETH', 'WETH'])
+    uint32 public dV2WETHPositionLHF = 2500009; // adaptor_name='AaveDebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['variableDebtWETH', 'WETH'])
+    uint32 public dV3WETHPositionLHF = 2500010; // adaptor_name='AaveV3DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['variableDebtEthWETH', 'WETH'])
+
+    // morpho
+    uint32 public maV2WETHPosition = 5000001; // adaptor_name='MorphoAaveV2ATokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
+    uint32 public maV3WETHPosition = 5000002; // adaptor_name='MorphoAaveV3P2PAdaptor', underlying_asset='WETH', adaptor_data=['WETH'])
+    uint32 public maV2STETHPosition = 5000006; // adaptor_name='MorphoAaveV2ATokenAdaptor', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH'])
+    uint32 public maV3WSTETHPosition = 5000007; // adaptor_name='MorphoAaveV3ATokenAdaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
+    uint32 public maV2STETHPositionLHF = 5000008; // adaptor_name='MorphoAaveV2ATokenAdaptor 1.02HF', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH'])
+    uint32 public maV3WSTETHPositionLHF = 5000009; // adaptor_name='MorphoAaveV3ATokenAdaptor 1.02HF', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
+    uint32 public mdV2WETHPosition = 5500004; // adaptor_name='MorphoAaveV2DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
+    uint32 public mdV3WETHPosition = 5500005; // adaptor_name='MorphoAaveV3DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['WETH'])
+    uint32 public mdV2WETHPositionLHF = 5500006; // adaptor_name='MorphoAaveV2DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
+    uint32 public mdV3WETHPositionLHF = 5500007; // adaptor_name='MorphoAaveV3DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['WETH'])
+    uint32 public ryUsdLegacyPosition = 10000001; // adaptor_name='LegacyCellarAdaptor', underlying_asset='USDC', adaptor_data=['RYUSD', 'USDC'])
+    uint32 public ryEthLegacyPosition = 10000002; // adaptor_name='LegacyCellarAdaptor', underlying_asset='WETH', adaptor_data=['RYETH', 'WETH'])
+    uint32 public turboStethtPosition = 10000003; // adaptor_name='CellarAdaptor', underlying_asset='WETH', adaptor_data=['TurboSTETH', 'WETH'])
+    uint32 public vestingGHOPosition = 100000001; // adaptor_name='VestingSimpleAdaptor', underlying_asset='GHO', adaptor_data=['0x70664b1f1c443bec0353a0ea6bbd9cccb5a4844c', 'GHO'])
+    uint32 public vestingSWETHPosition = 100000002; // adaptor_name='VestingSimpleAdaptor', underlying_asset='SWETH', adaptor_data=['0xda832c59ba8054d547e6c9248c146a2fc1ed1854', 'SWETH'])
+    uint32 public vestingWSTETHPosition = 100000003; // adaptor_name='VestingSimpleAdaptor', underlying_asset='WSTETH', adaptor_data=['0x1dc98303ec465ed5ed2ba069e21763a67101f54b', 'WSTETH'])
+    uint32 public vestingSOMMPosition = 100000005; // adaptor_name='VestingSimpleAdaptor SOMM', underlying_asset='SOMM', adaptor_data=['0xefbc79744f4a53bb9c565e4b0895d99fc4a5cecb', 'SOMM'])
+}
