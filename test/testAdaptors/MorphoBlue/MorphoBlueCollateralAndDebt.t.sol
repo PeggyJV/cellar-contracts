@@ -268,7 +268,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
 
         cellar.addPosition(1, usdcPosition, abi.encode(0), false);
         cellar.addPosition(2, wbtcPosition, abi.encode(0), false);
-        cellar.addPosition(3, morphoBlueSupplyWETHPosition, abi.encode(0), false);
+        cellar.addPosition(3, morphoBlueSupplyWETHPosition, abi.encode(true), false);
         cellar.addPosition(4, morphoBlueCollateralWETHPosition, abi.encode(0), false);
 
         cellar.addPosition(0, morphoBlueDebtWETHPosition, abi.encode(0), true);

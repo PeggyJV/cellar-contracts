@@ -216,7 +216,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         cellar.addPosition(1, wethPosition, abi.encode(0), false);
         cellar.addPosition(2, wbtcPosition, abi.encode(0), false);
-        cellar.addPosition(3, morphoBlueSupplyUSDCPosition, abi.encode(0), false);
+        cellar.addPosition(3, morphoBlueSupplyUSDCPosition, abi.encode(true), false);
 
         cellar.setHoldingPosition(morphoBlueSupplyUSDCPosition);
 
@@ -280,14 +280,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             1,
             "testDeposit: half of assets from cellar should remain in MB market."
         );
-
         cellar.withdraw((assets / 2), address(this), address(this)); // NOTE - initialAssets is actually originally from the deployer.
-
-        // console.log("deployer address: %s", address(deployer));
-        // vm.startPrank(address(deployer));
-        // USDC.safeApprove(address(cellar), type(uint256).max);
-        // cellar.withdraw((initialAssets / 2), address(deployer), address(deployer));
-        // vm.stopPrank();
     }
 
     function testTotalAssets(uint256 assets) external {
@@ -415,7 +408,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     function testRebalancingBetweenPairs(uint256 assets) external {
         // Add another Morpho Blue Market to cellar
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
-        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(0), false);
+        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(true), false);
 
         assets = bound(assets, 0.01e6, 100_000_000e6);
         deal(address(USDC), address(this), assets);
@@ -565,7 +558,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
     function testWithdrawableFrom() external {
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
 
-        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(0), false);
+        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(true), false);
 
         // Strategist rebalances to withdraw USDC, and lend in a different pair.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
@@ -690,6 +683,30 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         assertGt(balance3, balance2, "Supplied loanAsset into MorphoBlue should have accrued interest.");
     }
 
+    function testWithdrawWhenIlliquid(uint256 assets) external {
+        // Have user deposit into cellar.
+        assets = bound(assets, 0.01e6, 100_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Check logic in the withdraw function by having strategist call withdraw, passing in isLiquid = false.
+        bool isLiquid = false;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = abi.encodeWithSelector(
+                MorphoBlueSupplyAdaptor.withdraw.selector,
+                assets,
+                address(this),
+                abi.encode(usdcDaiMarket),
+                abi.encode(isLiquid)
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
+        }
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
 
     // setup multiple lending positions
@@ -699,8 +716,8 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
         cellar.addPositionToCatalogue(morphoBlueSupplyWBTCPosition);
 
-        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(0), false);
-        cellar.addPosition(5, morphoBlueSupplyWBTCPosition, abi.encode(0), false);
+        cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(true), false);
+        cellar.addPosition(5, morphoBlueSupplyWBTCPosition, abi.encode(true), false);
 
         // Strategist rebalances to withdraw set amount of USDC, and lend in a different pair.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);

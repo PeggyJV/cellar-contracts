@@ -32,7 +32,14 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     // Where:
     // `market` is the respective market used within Morpho Blue
     //================= Configuration Data Specification =================
-    // NA
+    // configurationData = abi.encode(bool isLiquid)
+    // Where:
+    // `isLiquid` dictates whether the position is liquid or not
+    // If true:
+    //      position can support use withdraws
+    // else:
+    //      position can not support user withdraws
+    //
     //====================================================================
 
     /**
@@ -83,9 +90,17 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param assets the amount of assets to withdraw from Morpho Blue lending market
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
-     * @dev configurationData is NOT used
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public override {
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
         // Run external receiver check.
         _externalReceiverCheck(receiver);
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
@@ -99,18 +114,23 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @dev Compares loanToken supplied to loanToken borrowed to check for liquidity.
      *      - If loanToken balance is greater than liquidity available, it returns the amount available.
      * @param adaptorData adaptor data containing the abi encoded Morpho Blue market.
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not
      * @return withdrawableSupply liquid amount of `loanToken` cellar has lent to specified MB market.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
-        bytes memory
+        bytes memory configurationData
     ) public view override returns (uint256 withdrawableSupply) {
-        MarketParams memory market = abi.decode(adaptorData, (MarketParams));
-        (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
-        if (totalBorrowAssets == totalSupplyAssets) return 0;
-        uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
-        uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
-        withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
+        bool isLiquid = abi.decode(configurationData, (bool));
+
+        if (isLiquid) {
+            MarketParams memory market = abi.decode(adaptorData, (MarketParams));
+            (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
+            if (totalBorrowAssets >= totalSupplyAssets) return 0;
+            uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
+            uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
+            withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
+        } else return 0;
     }
 
     /**
