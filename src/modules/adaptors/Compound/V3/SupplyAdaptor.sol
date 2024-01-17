@@ -81,7 +81,6 @@ contract SupplyAdaptor is BaseAdaptor {
         comet.withdrawTo(receiver, address(base), assets);
     }
 
-    // TODO this should account for USDC that is not liquid cuz it is borrowed.
     /**
      * @notice Identical to `balanceOf`, unless isLiquid configuration data is false, then returns 0.
      */
@@ -92,7 +91,9 @@ contract SupplyAdaptor is BaseAdaptor {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
             IComet comet = abi.decode(adaptorData, (IComet));
-            return comet.balanceOf(msg.sender);
+            uint256 baseSupplied = comet.balanceOf(msg.sender);
+            uint256 baseLiquid = comet.baseToken().balanceOf(address(comet));
+            return baseSupplied > baseLiquid ? baseLiquid : baseSupplied;
         } else return 0;
     }
 

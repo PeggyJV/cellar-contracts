@@ -36,7 +36,6 @@ contract RewardsAdaptor is PositionlessAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    // TODO add test where we pass in a malicious comet address.
     /**
      * @notice Claim rewards from the comet.
      * @dev src, and shouldAccrue are hardcoded to the cellar address, and true.
