@@ -1,0 +1,14 @@
+{
+    "chainId": "1",
+    "meta": {
+      "name": "Transactions Batch"
+    },
+    "transactions": [
+      {
+        "to": "0xEED68C267E9313a6ED6ee08de08c9F68dee44476",
+        "value": "0",
+        "data": "0x4420e486000000000000000000000000552aca1343a6383af32ce1b7c7b1b47959f7ad90"
+      }
+    ]
+  }
+  

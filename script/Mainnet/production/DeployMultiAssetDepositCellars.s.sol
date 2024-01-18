@@ -41,7 +41,6 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     // Positions.
     uint32 wethPositionId = 1;
     uint32 usdcPositionId = 3;
-
     uint32 crvUsdPositionId = 13;
 
     function run() external {

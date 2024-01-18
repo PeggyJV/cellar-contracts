@@ -2,19 +2,27 @@
 pragma solidity 0.8.21;
 
 contract ContractDeploymentNames {
-    // Multi-chain
-    string public registryName = "Registry V0.0";
-    string public priceRouterName = "PriceRouter V0.0";
+    // Infrastructure
+    string public registryName = "Registry V0.1";
+    string public priceRouterName = "PriceRouter V0.1";
+    string public timelockOwnerName = "Timelock Owner V0.0";
+
+    // Adaptors
     string public erc20AdaptorName = "ERC20 Adaptor V1.0";
     string public erc4626AdaptorName = "ERC4626 Adaptor V0.0";
     string public oneInchAdaptorName = "1Inch Adaptor V0.0";
     string public zeroXAdaptorName = "0x Adaptor V0.0";
-    string public uniswapV3Adaptor = "Uniswap V3 Adaptor V0.0";
-    string public uniswapV3PositionTracker = "Uniswap V3 Position Tracker V0.0";
-    string public swapWithUniswapAdaptor = "Swap With Uniswap Adaptor V0.0";
-    string public aaveV3ATokenAdaptor = "Aave V3 AToken Adaptor V0.0";
-    string public aaveV3DebtTokenAdaptor = "Aave V3 Debt Token Adaptor V0.0";
+    string public uniswapV3AdaptorName = "Uniswap V3 Adaptor V0.1";
+    string public uniswapV3PositionTrackerName = "Uniswap V3 Position Tracker V0.1";
+    string public swapWithUniswapAdaptorName = "Swap With Uniswap Adaptor V0.1";
+    string public aaveV3ATokenAdaptorName = "Aave V3 AToken Adaptor V0.1";
+    string public aaveV3DebtTokenAdaptorName = "Aave V3 Debt Token Adaptor V0.1";
+    string public balancerV2PoolAdaptorName = "Balancer Pool Adaptor V 1.0";
+    string public auraAdaptorName = "Aura ERC4626 Adaptor V 0.1";
+    string public curveAdaptorName = "Curve Adaptor V 0.0";
+    string public convexCurveAdaptorName = "Convex Curve Adaptor V 0.0";
 
+    // Vault Names
     string public realYieldEth = "Real Yield ETH V1.0";
     string public realYieldMatic = "Real Yield MATIC V0.0";
     string public realYieldAvax = "Real Yield AVAX V0.0";

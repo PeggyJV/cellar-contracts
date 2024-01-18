@@ -14,6 +14,8 @@ contract MainnetAddresses {
     address public ryusdRegistry = 0x2Cbd27E034FEE53f79b607430dA7771B22050741;
     address public ryusdRegistryOwner = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
+    address public dev0Address = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+
     address public priceRouterV1 = 0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA;
     address public priceRouterV2 = 0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92;
     address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
@@ -238,6 +240,8 @@ contract MainnetAddresses {
     address public CrvUsdSfraxPool = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxToken = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
+    address public FraxCrvUsdPool = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public FraxCrvUsdToken = 0x0CD6f267b2086bea681E922E19D40512511BE538;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 

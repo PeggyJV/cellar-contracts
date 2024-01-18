@@ -2,67 +2,104 @@
 pragma solidity 0.8.21;
 
 contract PositionIds {
-    // ERC20
-    uint32 public WETHErc20Position = 1; // adaptor_name='ERC20Adaptor', underlying_asset='WETH', adaptor_data=['WETH'])
-    uint32 public WBTCErc20Position = 2; // adaptor_name='ERC20Adaptor', underlying_asset='WBTC', adaptor_data=['WBTC'])
-    uint32 public USDCErc20Position = 3; // adaptor_name='ERC20Adaptor', underlying_asset='USDC', adaptor_data=['USDC'])
-    uint32 public DAIErc20Position = 4; // adaptor_name='ERC20Adaptor', underlying_asset='DAI', adaptor_data=['DAI'])
-    uint32 public USDTErc20Position = 5; // adaptor_name='ERC20Adaptor', underlying_asset='USDT', adaptor_data=['USDT'])
-    uint32 public GHOErc20Position = 6; // adaptor_name='ERC20Adaptor', underlying_asset='GHO', adaptor_data=['GHO'])
-    uint32 public SWETHErc20Position = 7; // adaptor_name='ERC20Adaptor', underlying_asset='SWETH', adaptor_data=['SWETH'])
-    uint32 public LUSDErc20Position = 8; // adaptor_name='ERC20Adaptor', underlying_asset='LUSD', adaptor_data=['LUSD'])
-    uint32 public WSTETHErc20Position = 9; // adaptor_name='ERC20Adaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
-    uint32 public STETHErc20Position = 10; // adaptor_name='ERC20Adaptor', underlying_asset='STETH', adaptor_data=['STETH'])
-    uint32 public SOMMErc20Position = 11; // adaptor_name='ERC20Adaptor', underlying_asset='SOMM', adaptor_data=['SOMM'])
+    /**
+     * Native refers to tokens that are natively minted on target chain, USDC, wAVAX
+     * Bridged refers to tokens that are bridged over from another chain using a custom bridge, USDCe
+     * Axelar refers to tokens that are bridged over from another chain using axelar, axlUSDC
+     */
 
-    // Uniswap V3
-    uint32 public WETH_SWETHuniswapV3Position = 1000001; // adaptor_name='UniswapV3Adaptor', underlying_asset='WETH', adaptor_data=['WETH', 'SWETH'])
-    uint32 public GHO_USDCuniswapV3Position = 1000002; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'USDC'])
-    uint32 public GHO_USDTuniswapV3Position = 1000003; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'USDT'])
-    uint32 public GHO_DAIuniswapV3Position = 1000004; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'DAI'])
-    uint32 public GHO_FRAXuniswapV3Position = 1000005; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'FRAX'])
-    uint32 public GHO_LUSDuniswapV3Position = 1000006; // adaptor_name='UniswapV3Adaptor', underlying_asset='GHO', adaptor_data=['GHO', 'LUSD'])
-    uint32 public WSTETH_WETHuniswapV3Position = 1000007; // adaptor_name='UniswapV3Adaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH', 'WETH'])
-    uint32 public SOMM_WETHuniswapV3Position = 1000008; // adaptor_name='UniswapV3Adaptor', underlying_asset='SOMM', adaptor_data=['SOMM', 'WETH'])
+    // ERC20 Native 1-10_000
+    uint32 public wethNative = 1;
+    uint32 public usdcNative = 2;
+    uint32 public daiNative = 3;
+    uint32 public usdtNative = 4;
+    uint32 public wbtcNative = 5;
+    uint32 public crvusdNative = 6;
+    uint32 public osethNative = 7;
+    uint32 public ethxNative = 8;
+    uint32 public stethNative = 9;
+    uint32 public wstethNative = 10;
+    uint32 public rethNative = 11;
+    uint32 public fraxNative = 12;
+    uint32 public lusdNative = 13;
 
-    // aave
-    uint32 public aV3USDCPosition = 2000001; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='USDC', adaptor_data=['aEthUSDC', 'USDC'])
-    uint32 public aV3USDTPosition = 2000002; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='USDT', adaptor_data=['aEthUSDT', 'USDT'])
-    uint32 public aV3DAIPosition = 2000003; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='DAI', adaptor_data=['aEthDAI', 'DAI'])
-    uint32 public aV3LUSDPosition = 2000004; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='LUSD', adaptor_data=['aEthLUSD', 'LUSD'])
-    uint32 public aV3WETHPosition = 2000005; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='WETH', adaptor_data=['aEthWETH', 'WETH'])
-    uint32 public aV3WSTETHPosition = 2000006; // adaptor_name='AaveV3ATokenAdaptor', underlying_asset='WSTETH', adaptor_data=['aEthWSTETH', 'WSTETH'])
-    uint32 public aV2WETHPosition = 2000007; // adaptor_name='AaveATokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
-    uint32 public aV2STETHPosition = 2000008; // adaptor_name='AaveATokenAdaptor', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH', 'WETH'])
-    uint32 public aV2STETHPositionLHF = 2000009; // adaptor_name='AaveATokenAdaptor 1.02HF', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH', 'WETH'])
-    uint32 public aV3WSTETHPositionLHF = 2000010; // adaptor_name='AaveV3ATokenAdaptor 1.02HF', underlying_asset='WSTETH', adaptor_data=['aEthWSTETH', 'WSTETH'])
-    uint32 public dV3USDCPosition = 2500001; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='USDC', adaptor_data=['variableDebtEthUSDC', 'USDC'])
-    uint32 public dV3USDTPosition = 2500002; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='USDT', adaptor_data=['variableDebtEthUSDT', 'USDT'])
-    uint32 public dV3DAIPosition = 2500003; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='DAI', adaptor_data=['variableDebtEthDAI', 'DAI'])
-    uint32 public dV3GHOPosition = 2500004; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='GHO', adaptor_data=['variableDebtEthGHO', 'GHO'])
-    uint32 public dV3LUSDPosition = 2500005; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='LUSD', adaptor_data=['variableDebtEthLUSD', 'LUSD'])
-    uint32 public dV3WETHPosition = 2500006; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['variableDebtEthWETH', 'WETH'])
-    uint32 public dV3WSTETHPosition = 2500007; // adaptor_name='AaveV3DebtTokenAdaptor', underlying_asset='WSTETH', adaptor_data=['variableDebtEthWSTETH', 'WSTETH'])
-    uint32 public dV2WETHPosition = 2500008; // adaptor_name='AaveDebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['variableDebtWETH', 'WETH'])
-    uint32 public dV2WETHPositionLHF = 2500009; // adaptor_name='AaveDebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['variableDebtWETH', 'WETH'])
-    uint32 public dV3WETHPositionLHF = 2500010; // adaptor_name='AaveV3DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['variableDebtEthWETH', 'WETH'])
+    // ERC20 Bridged 10_001-20_000
+    uint32 public wethBridged = 10_001;
+    uint32 public usdcBridged = 10_002;
+    uint32 public daiBridged = 10_003;
+    uint32 public usdtBridged = 10_004;
+    uint32 public wbtcBridged = 10_005;
 
-    // morpho
-    uint32 public maV2WETHPosition = 5000001; // adaptor_name='MorphoAaveV2ATokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
-    uint32 public maV3WETHPosition = 5000002; // adaptor_name='MorphoAaveV3P2PAdaptor', underlying_asset='WETH', adaptor_data=['WETH'])
-    uint32 public maV2STETHPosition = 5000006; // adaptor_name='MorphoAaveV2ATokenAdaptor', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH'])
-    uint32 public maV3WSTETHPosition = 5000007; // adaptor_name='MorphoAaveV3ATokenAdaptor', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
-    uint32 public maV2STETHPositionLHF = 5000008; // adaptor_name='MorphoAaveV2ATokenAdaptor 1.02HF', underlying_asset='STETH', adaptor_data=['aSTETH', 'STETH'])
-    uint32 public maV3WSTETHPositionLHF = 5000009; // adaptor_name='MorphoAaveV3ATokenAdaptor 1.02HF', underlying_asset='WSTETH', adaptor_data=['WSTETH'])
-    uint32 public mdV2WETHPosition = 5500004; // adaptor_name='MorphoAaveV2DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
-    uint32 public mdV3WETHPosition = 5500005; // adaptor_name='MorphoAaveV3DebtTokenAdaptor', underlying_asset='WETH', adaptor_data=['WETH'])
-    uint32 public mdV2WETHPositionLHF = 5500006; // adaptor_name='MorphoAaveV2DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['aWETH', 'WETH'])
-    uint32 public mdV3WETHPositionLHF = 5500007; // adaptor_name='MorphoAaveV3DebtTokenAdaptor 1.02HF', underlying_asset='WETH', adaptor_data=['WETH'])
-    uint32 public ryUsdLegacyPosition = 10000001; // adaptor_name='LegacyCellarAdaptor', underlying_asset='USDC', adaptor_data=['RYUSD', 'USDC'])
-    uint32 public ryEthLegacyPosition = 10000002; // adaptor_name='LegacyCellarAdaptor', underlying_asset='WETH', adaptor_data=['RYETH', 'WETH'])
-    uint32 public turboStethtPosition = 10000003; // adaptor_name='CellarAdaptor', underlying_asset='WETH', adaptor_data=['TurboSTETH', 'WETH'])
-    uint32 public vestingGHOPosition = 100000001; // adaptor_name='VestingSimpleAdaptor', underlying_asset='GHO', adaptor_data=['0x70664b1f1c443bec0353a0ea6bbd9cccb5a4844c', 'GHO'])
-    uint32 public vestingSWETHPosition = 100000002; // adaptor_name='VestingSimpleAdaptor', underlying_asset='SWETH', adaptor_data=['0xda832c59ba8054d547e6c9248c146a2fc1ed1854', 'SWETH'])
-    uint32 public vestingWSTETHPosition = 100000003; // adaptor_name='VestingSimpleAdaptor', underlying_asset='WSTETH', adaptor_data=['0x1dc98303ec465ed5ed2ba069e21763a67101f54b', 'WSTETH'])
-    uint32 public vestingSOMMPosition = 100000005; // adaptor_name='VestingSimpleAdaptor SOMM', underlying_asset='SOMM', adaptor_data=['0xefbc79744f4a53bb9c565e4b0895d99fc4a5cecb', 'SOMM'])
+    // ERC20 Axelar Bridged 20_001-30_000
+    uint32 public wethAxelar = 20_001;
+    uint32 public usdcAxelar = 20_002;
+    uint32 public daiAxelar = 20_003;
+    uint32 public usdtAxelar = 20_004;
+    uint32 public wbtcAxelar = 20_005;
+
+    // ERC20 Future Reserved 30_001-100_000
+
+    // Uniswap V3 Native-Native 100_001-110_000
+    uint32 public osethNative_wethNative_uniswap_v3 = 100_001;
+    uint32 public wstethNative_ethxNative_uniswap_v3 = 100_002;
+    uint32 public wethNative_ethxNative_uniswap_v3 = 100_003;
+
+    // Uniswap V3 Native-Bridged 110_001-120_000
+    // Uniswap V3 Bridged-Bridged 120_001-130_000
+    // Uniswap V3 Native-Axelar 130_001-140_000
+    // Uniswap V3 Axelar-Axelar 140_001-150_000
+    // Uniswap V3 Axelar-Bridged 150_001-160_000
+    // Uniswap V3 Future Reserved 160_001-200_000
+
+    // Aave V3 Native 200_001-210_000
+    // Aave V3 Bridged 210_001-220_000
+    // Aave V3 Axelar 220_001-230_000
+    // Aave V2 Native 230_001-240_000
+    // Aave V2 Bridged 240_001-250_000
+    // Aave V2 Axelar 250_001-260_000
+    // Aave Future Reserved 260_001-300_000
+
+    // Compound V2 Native 300_001-310_000
+    // Compound V2 Bridged 310_001-320_000
+    // Compound V2 Axelar 320_001-330_000
+    // Compound V2 Reserved 330_001-400_000
+
+    // Compound V3 Native 400_001-410_000
+    // Compound V3 Bridged 410_001-420_000
+    // Compound V3 Axelar 420_001-430_000
+    // Compound V3 Reserved 430_001-500_000
+
+    // Fraxlend
+    // Fraxlend Native 500_001-510_000
+    // Fraxlend Bridged 510_001-520_000
+    // Fraxlend Axelar 520_001-530_000
+    // Fraxlend Reserved 530_001-600_000
+
+    // Balancer V2 600_001-700_000
+    uint32 public osethNative_wethNative_balancer_v2 = 600_001;
+    uint32 public ethNative_ethxNative_balancer_v2 = 600_002;
+
+    // Aura 700_001-800_000
+    uint32 public osethNative_wethNative_aura = 700_001;
+    uint32 public ethNative_ethxNative_aura = 700_002;
+
+    // Curve 800_001-900_000
+    uint32 public usdcNative_crvusdNative_curve = 800_001;
+    uint32 public usdtNative_crvusdNative_curve = 800_002;
+    uint32 public fraxNative_crvusdNative_curve = 800_003;
+    uint32 public lusdNative_crvusdNative_curve = 800_004;
+    uint32 public osethNative_rethNative_curve = 800_005;
+    uint32 public wstethNative_ethxNative_curve = 800_006;
+    uint32 public ethNative_ethxNative_curve = 800_007;
+
+    // Convex 900_001-1_000_000
+    uint32 public usdcNative_crvusdNative_convex = 900_001;
+    uint32 public usdtNative_crvusdNative_convex = 900_002;
+    uint32 public fraxNative_crvusdNative_convex = 900_003;
+    uint32 public lusdNative_crvusdNative_convex = 900_004;
+    uint32 public osethNative_rethNative_convex = 900_005;
+    uint32 public wstethNative_ethxNative_convex = 900_006;
+    uint32 public ethNative_ethxNative_convex = 900_007;
+
+    // ERC4626 1_000_001-1_100_000
 }

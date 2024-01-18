@@ -4,7 +4,7 @@
 solc_version = '0.8.21'
 auto_detect_solc = false
 
-evm_version = 'london'
+evm_version = 'shanghai'
 # eth_rpc_url = "YOUR_ALCHEMY_HTTPS_URL_HERE"
 # etherscan_api_key = "YOUR_ETHERSCAN_API_KEY_HERE"
 block_number = 16869780
