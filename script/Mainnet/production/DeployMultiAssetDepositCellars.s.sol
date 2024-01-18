@@ -42,20 +42,19 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     uint32 wethPositionId = 1;
     uint32 usdcPositionId = 3;
 
-    uint32 crvUsdPositionId = 10000;
+    uint32 crvUsdPositionId = 13;
 
     function run() external {
         vm.startBroadcast();
 
         // Create CRVUSD Cellar.
-        // TODO change to account in CRVUSD.
         crvUsdCellar = _createCellarNoNativeSupport(
             "Turbo CRVUSD",
             "TurboCRVUSD",
-            USDC,
-            usdcPositionId,
+            CRVUSD,
+            crvUsdPositionId,
             abi.encode(0),
-            0.01e6,
+            0.01e18,
             0.8e18
         );
 

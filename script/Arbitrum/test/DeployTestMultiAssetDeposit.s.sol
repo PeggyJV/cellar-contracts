@@ -75,16 +75,7 @@ contract DeployTestMultiAssetDepositScript is Script, ArbitrumAddresses {
         cellar.setAlternativeAssetData(DAI, daiPosition, 0.0050e8);
         cellar.setAlternativeAssetData(USDT, usdtPosition, 0.0020e8);
 
-        // cellar.transferOwnership(devStrategist);
-
-        // CellarWithMultiAssetDeposit cellar = CellarWithMultiAssetDeposit(0x02b0Ad08BFc8D0cC3E0e5907D95898C4Ef464F9C);
-        // USDCe.approve(address(cellar), 1e6);
-
-        // // cellar.deposit(1e6, dev0Address);
-
-        // bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, 1e6, dev0Address, USDCe);
-
-        // address(cellar).functionCall(depositCallData);
+        cellar.transferOwnership(devStrategist);
 
         vm.stopBroadcast();
     }
@@ -99,7 +90,7 @@ contract DeployTestMultiAssetDepositScript is Script, ArbitrumAddresses {
         uint64 platformCut
     ) internal returns (CellarWithMultiAssetDeposit) {
         // Approve new cellar to spend assets.
-        string memory nameToUse = string.concat(cellarName, " V0.0");
+        string memory nameToUse = string.concat(cellarName, " V0.1");
         address cellarAddress = deployer.getAddress(nameToUse);
         holdingAsset.approve(cellarAddress, initialDeposit);
 
