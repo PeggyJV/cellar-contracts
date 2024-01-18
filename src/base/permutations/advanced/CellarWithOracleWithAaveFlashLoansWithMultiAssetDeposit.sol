@@ -2,9 +2,9 @@
 pragma solidity 0.8.21;
 
 import { Registry, ERC20, Math, SafeTransferLib, Address } from "src/base/Cellar.sol";
-import { CellarWithOracleWithBalancerFlashLoans } from "src/base/permutations/CellarWithOracleWithBalancerFlashLoans.sol";
+import { CellarWithOracleWithAaveFlashLoans } from "src/base/permutations/CellarWithOracleWithAaveFlashLoans.sol";
 
-contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWithOracleWithBalancerFlashLoans {
+contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOracleWithAaveFlashLoans {
     using Math for uint256;
     using SafeTransferLib for ERC20;
     using Address for address;
@@ -82,9 +82,9 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
         uint256 _initialDeposit,
         uint64 _strategistPlatformCut,
         uint192 _shareSupplyCap,
-        address _balancerVault
+        address _aavePool
     )
-        CellarWithOracleWithBalancerFlashLoans(
+        CellarWithOracleWithAaveFlashLoans(
             _owner,
             _registry,
             _asset,
@@ -95,7 +95,7 @@ contract CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit is CellarWi
             _initialDeposit,
             _strategistPlatformCut,
             _shareSupplyCap,
-            _balancerVault
+            _aavePool
         )
     {}
 

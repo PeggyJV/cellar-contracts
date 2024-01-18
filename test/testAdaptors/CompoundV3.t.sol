@@ -264,8 +264,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.setAlternativeAssetData(WETH, wethCompoundV3CollateralPosition, 0.0010e8);
 
         WETH.approve(address(cellar), assets);
-        bytes memory depositCallData = abi.encodeWithSelector(Cellar.deposit.selector, assets, address(this), WETH);
-        address(cellar).functionCall(depositCallData);
+        cellar.multiAssetDeposit(WETH, assets, address(this));
 
         assertApproxEqAbs(
             usdcComet.collateralBalanceOf(address(cellar), address(WETH)),
