@@ -29,7 +29,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     using Math for uint256;
     using SafeTransferLib for ERC20;
 
-    address public sommDev = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+    address public sommDev = 0x6d3655EE04820f4385a910FD1898d4Ec6241F520;
 
     Deployer public deployer = Deployer(deployerAddress);
 
@@ -132,8 +132,8 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._automationAdmin = devStrategist;
         args._link = address(LINK);
         args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.5e4;
-        args._allowedAnswerChangeUpper = 3e4;
+        args._allowedAnswerChangeLower = 0.8e4;
+        args._allowedAnswerChangeUpper = 1.2e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
         _createSharePriceOracle("TurboOSETH Share Price Oracle V0.0", args);
@@ -161,8 +161,8 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._automationAdmin = devStrategist;
         args._link = address(LINK);
         args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.5e4;
-        args._allowedAnswerChangeUpper = 3e4;
+        args._allowedAnswerChangeLower = 0.8e4;
+        args._allowedAnswerChangeUpper = 1.2e4;
         args._sequencerUptimeFeed = address(0);
         args._sequencerGracePeriod = 0;
         _createSharePriceOracle("TurboETHX Share Price Oracle V0.0", args);
@@ -174,8 +174,6 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         _createStakingContract(morphoBlueCellar, "Morpho ETH Maximizer Staking Contract V0.0");
         _createStakingContract(stakewiseCellar, "TurboOSETH Staking Contract V0.0");
         _createStakingContract(staderCellar, "TurboETHX Staking Contract V0.0");
-
-        // TODO add staking contract with default values
 
         // // Create Yield Maxi USDC Cellar.
         // maxiUsdc = _createCellar(
