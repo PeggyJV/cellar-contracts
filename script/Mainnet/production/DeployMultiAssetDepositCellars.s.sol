@@ -10,10 +10,12 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { CellarStaking } from "src/modules/staking/CellarStaking.sol";
 
 import { CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit } from "src/base/permutations/advanced/CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit.sol";
 import { CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport } from "src/base/permutations/advanced/CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport.sol";
-
+import { CellarWithOracleWithBalancerFlashLoans } from "src/base/permutations/CellarWithOracleWithBalancerFlashLoans.sol";
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 
 import "forge-std/Script.sol";
@@ -25,6 +27,7 @@ import "forge-std/Script.sol";
  */
 contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     using Math for uint256;
+    using SafeTransferLib for ERC20;
 
     address public sommDev = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
 
@@ -37,10 +40,13 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public morphoBlueCellar;
     CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public stakewiseCellar;
     CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public staderCellar;
+    CellarWithOracleWithBalancerFlashLoans public maxiUsdc;
+    CellarWithOracleWithBalancerFlashLoans public maxiUsdt;
 
     // Positions.
     uint32 wethPositionId = 1;
     uint32 usdcPositionId = 3;
+    uint32 usdtPositionId = 5;
     uint32 crvUsdPositionId = 13;
 
     function run() external {
@@ -163,6 +169,68 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
 
         staderCellar.transferOwnership(devStrategist);
 
+        // Deploy Staking Contracts.
+        _createStakingContract(crvUsdCellar, "TurboCRVUSD Staking Contract V0.0");
+        _createStakingContract(morphoBlueCellar, "Morpho ETH Maximizer Staking Contract V0.0");
+        _createStakingContract(stakewiseCellar, "TurboOSETH Staking Contract V0.0");
+        _createStakingContract(staderCellar, "TurboETHX Staking Contract V0.0");
+
+        // TODO add staking contract with default values
+
+        // // Create Yield Maxi USDC Cellar.
+        // maxiUsdc = _createCellar(
+        //     "YieldMAXI USDC",
+        //     "YieldMAXIUSDC",
+        //     USDC,
+        //     usdcPositionId,
+        //     abi.encode(0),
+        //     0.01e6,
+        //     0.8e18
+        // );
+
+        // args._target = maxiUsdc;
+        // args._heartbeat = 1 days;
+        // args._deviationTrigger = 0.0050e4;
+        // args._gracePeriod = 1 days / 4;
+        // args._observationsToUse = 4;
+        // args._automationRegistry = automationRegistryV2;
+        // args._automationRegistrar = automationRegistrarV2;
+        // args._automationAdmin = devStrategist;
+        // args._link = address(LINK);
+        // args._startingAnswer = 1e18;
+        // args._allowedAnswerChangeLower = 0.8e4;
+        // args._allowedAnswerChangeUpper = 1.2e4;
+        // args._sequencerUptimeFeed = address(0);
+        // args._sequencerGracePeriod = 0;
+        // _createSharePriceOracle("YieldMAXIUSDC Share Price Oracle V0.0", args);
+
+        // // Create Yield Maxi USDT Cellar.
+        // maxiUsdt = _createCellar(
+        //     "YieldMAXI USDT",
+        //     "YieldMAXIUSDT",
+        //     USDT,
+        //     usdtPositionId,
+        //     abi.encode(0),
+        //     0.01e6,
+        //     0.8e18
+        // );
+
+        // args._target = maxiUsdt;
+        // args._heartbeat = 1 days;
+        // args._deviationTrigger = 0.0050e4;
+        // args._gracePeriod = 1 days / 4;
+        // args._observationsToUse = 4;
+        // args._automationRegistry = automationRegistryV2;
+        // args._automationRegistrar = automationRegistrarV2;
+        // args._automationAdmin = devStrategist;
+        // args._link = address(LINK);
+        // args._startingAnswer = 1e18;
+        // args._allowedAnswerChangeLower = 0.8e4;
+        // args._allowedAnswerChangeUpper = 1.2e4;
+        // args._sequencerUptimeFeed = address(0);
+        // args._sequencerGracePeriod = 0;
+        // _createSharePriceOracle("YieldMAXIUSDT Share Price Oracle V0.0", args);
+
         vm.stopBroadcast();
     }
 
@@ -250,5 +318,73 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         constructorArgs = abi.encode(args);
 
         return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
+    }
+
+    function _createCellar(
+        string memory cellarName,
+        string memory cellarSymbol,
+        ERC20 holdingAsset,
+        uint32 holdingPosition,
+        bytes memory holdingPositionConfig,
+        uint256 initialDeposit,
+        uint64 platformCut
+    ) internal returns (CellarWithOracleWithBalancerFlashLoans) {
+        // Approve new cellar to spend assets.
+        string memory nameToUse = string.concat(cellarName, " V0.0");
+        address cellarAddress = deployer.getAddress(nameToUse);
+        holdingAsset.safeApprove(cellarAddress, initialDeposit);
+
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+        creationCode = type(CellarWithOracleWithBalancerFlashLoans).creationCode;
+        constructorArgs = abi.encode(
+            sommDev,
+            registry,
+            holdingAsset,
+            cellarName,
+            cellarSymbol,
+            holdingPosition,
+            holdingPositionConfig,
+            initialDeposit,
+            platformCut,
+            type(uint192).max,
+            address(vault)
+        );
+
+        return
+            CellarWithOracleWithBalancerFlashLoans(
+                deployer.deployContract(nameToUse, creationCode, constructorArgs, 0)
+            );
+    }
+
+    function _createStakingContract(ERC20 _stakingToken, string memory _name) internal returns (CellarStaking) {
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+
+        address _owner = devStrategist;
+        ERC20 _distributionToken = ERC20(0xa670d7237398238DE01267472C6f13e5B8010FD1); // somm
+        uint256 _epochDuration = 3 days;
+        uint256 shortBoost = 0.10e18;
+        uint256 mediumBoost = 0.30e18;
+        uint256 longBoost = 0.50e18;
+        uint256 shortBoostTime = 7 days;
+        uint256 mediumBoostTime = 14 days;
+        uint256 longBoostTime = 21 days;
+
+        // Deploy the staking contract.
+        creationCode = type(CellarStaking).creationCode;
+        constructorArgs = abi.encode(
+            _owner,
+            _stakingToken,
+            _distributionToken,
+            _epochDuration,
+            shortBoost,
+            mediumBoost,
+            longBoost,
+            shortBoostTime,
+            mediumBoostTime,
+            longBoostTime
+        );
+        return CellarStaking(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }
 }
