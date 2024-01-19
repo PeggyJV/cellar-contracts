@@ -58,6 +58,7 @@ contract MainnetAddresses {
     ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
     ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
     ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
+    ERC20 public weETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -110,6 +111,8 @@ contract MainnetAddresses {
     ERC20 public aV3USDT = ERC20(0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a);
     ERC20 public dV3USDT = ERC20(0x6df1C1E379bC5a00a7b4C6e67A203333772f45A8);
     ERC20 public aV3sDAI = ERC20(0x4C612E3B15b96Ff9A6faED838F8d07d479a8dD4c);
+    ERC20 public aV3CrvUsd = ERC20(0xb82fa9f31612989525992FCfBB09AB22Eff5c85A);
+    ERC20 public dV3CrvUsd = ERC20(0x028f7886F3e937f8479efaD64f31B3fE1119857a);
 
     // Balancer V2 Addresses
     ERC20 public BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
@@ -121,6 +124,9 @@ contract MainnetAddresses {
     ERC20 public GHO_LUSD_BPT = ERC20(0x3FA8C89704e5d07565444009e5d9e624B40Be813);
     ERC20 public swETH_bbaWETH = ERC20(0xaE8535c23afeDdA9304B03c68a3563B75fc8f92b);
     ERC20 public swETH_wETH = ERC20(0x02D928E68D8F10C0358566152677Db51E1e2Dc8C);
+    ERC20 public rETH_weETH = ERC20(0x05ff47AFADa98a98982113758878F9A8B9FddA0a);
+    address public rETH_weETH_gauge = 0xC859BF9d7B8C557bBd229565124c2C09269F3aEF;
+    address public aura_reth_weth = 0x07A319A023859BbD49CC9C38ee891c3EA9283Cc5;
 
     // Linear Pools.
     ERC20 public bb_a_dai = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
@@ -240,8 +246,9 @@ contract MainnetAddresses {
     address public CrvUsdSfraxPool = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxToken = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
-    address public FraxCrvUsdPool = 0x0CD6f267b2086bea681E922E19D40512511BE538;
-    address public FraxCrvUsdToken = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public LusdCrvUsdPool = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
+    address public LusdCrvUsdToken = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
+    address public LusdCrvUsdGauge = 0x66F65323bdE835B109A92045Aa7c655559dbf863;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
@@ -255,6 +262,8 @@ contract MainnetAddresses {
     address public wethYethBaseRewardPool = 0xB0867ADE998641Ab1Ff04cF5cA5e5773fA92AaE3;
     address public ethEthxBaseRewardPool = 0x399e111c7209a741B06F8F86Ef0Fdd88fC198D20;
     address public crvUsdSFraxBaseRewardPool = 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2;
+    address public usdtCrvUsdBaseRewardPool = 0xD1DdB0a0815fD28932fBb194C84003683AF8a824;
+    address public lusdCrvUsdBaseRewardPool = 0x633D3B227696B3FacF628a197f982eF68d26c7b5;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
