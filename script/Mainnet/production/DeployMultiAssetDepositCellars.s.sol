@@ -63,12 +63,13 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
+        // 7 day Time weighted average
         ERC4626SharePriceOracle.ConstructorArgs memory args;
         args._target = crvUsdCellar;
         args._heartbeat = 1 days;
         args._deviationTrigger = 0.0050e4;
-        args._gracePeriod = 1 days / 2;
-        args._observationsToUse = 8;
+        args._gracePeriod = 1 days / 2; // If 3 days change to 1 days / 4.
+        args._observationsToUse = 8; // If 3 days change to 4.
         args._automationRegistry = automationRegistryV2;
         args._automationRegistrar = automationRegistrarV2;
         args._automationAdmin = devStrategist;
@@ -93,6 +94,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
+        // 3 day Time weighted average
         args._target = morphoBlueCellar;
         args._heartbeat = 1 days;
         args._deviationTrigger = 0.0050e4;
@@ -122,6 +124,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
+        // 3 day Time weighted average
         args._target = stakewiseCellar;
         args._heartbeat = 1 days;
         args._deviationTrigger = 0.0050e4;
@@ -151,6 +154,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
+        // 3 day Time weighted average
         args._target = staderCellar;
         args._heartbeat = 1 days;
         args._deviationTrigger = 0.0050e4;
