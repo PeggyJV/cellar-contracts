@@ -158,7 +158,7 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
     //============================== CCIP RECEIVER ===============================
 
     /**
-     * @notice Implement internal _ccipRecevie function logic.
+     * @notice Implement internal _ccipReceive function logic.
      * @param any2EvmMessage CCIP encoded message specifying details to use to create paired DestinationMinter.
      */
     function _ccipReceive(

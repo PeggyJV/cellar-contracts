@@ -115,7 +115,7 @@ contract SourceLocker is CCIPReceiver {
      * @notice Reverts if target destination is not yet set.
      * @param amount number of `share` token to bridge.
      * @param to Specified address to receive newly minted bridged shares on destination network.
-     * @param maxLinkToPay Specified max amount of LINK fees to pay as per this contract.
+     * @param maxLinkToPay Specified max amount of LINK fees to pay.
      * @return messageId Resultant CCIP messageId.
      */
     function bridgeToDestination(
