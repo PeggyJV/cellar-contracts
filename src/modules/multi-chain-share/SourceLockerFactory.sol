@@ -12,7 +12,9 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
 /**
  * @title SourceLockerFactory
- * @notice Works with DestinationMinterFactory to create new bridgeable ERC4626 Shares.
+ * @notice Works with DestinationMinterFactory to create pairs of Source Lockers & Destination Minters for new bridgeable ERC4626 Shares
+ * @dev SourceLockerFactory `deploy()` function is used to enact the creation of SourceLocker and DestinationMinter pairs.  
+ * @dev Source Lockers lock up shares to bridge a mint request to paired Destination Minters, where the representation of the Source Network Shares is minted on Destination Network. 
  * @author crispymangoes
  */
 contract SourceLockerFactory is Owned, CCIPReceiver {
@@ -92,6 +94,9 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
     /**
      * @notice Allows admin to withdraw ERC20s from this factory contract.
+     * @param token specified ERC20 to withdraw.
+     * @param amount number of ERC20 token to withdraw.
+     * @param to receiver of the respective ERC20 tokens.
      */
     function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
         token.safeTransfer(to, amount);
@@ -99,6 +104,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
     /**
      * @notice Allows admin to link DestinationMinterFactory to this factory.
+     * @param _destinationMinterFactory The specified DestinationMinterFactory to pair with this SourceLockerFactory.
      */
     function setDestinationMinterFactory(address _destinationMinterFactory) external onlyOwner {
         if (destinationMinterFactory != address(0)) revert SourceLockerFactory___FactoryAlreadySet();
@@ -109,6 +115,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
      * @notice Allows admin to set this factories CCIP message gas limit.
      * @dev Note Owner can set a gas limit that is too low, and cause the message to run out of gas.
      *           If this happens the owner should raise gas limit, and call `deploy` on SourceLockerFactory again.
+     * @param limit Specified CCIP message gas limit.
      */
     function setMessageGasLimit(uint256 limit) external onlyOwner {
         messageGasLimit = limit;
@@ -117,6 +124,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     /**
      * @notice Allows admin to set newly deployed SourceLocker message gas limits
      * @dev Note This only effects newly deployed SourceLockers.
+     * @param limit Specified CCIP message gas limit.
      */
     function setLockerMessageGasLimit(uint256 limit) external onlyOwner {
         lockerMessageGasLimit = limit;
@@ -124,6 +132,9 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
     /**
      * @notice Allows admin to deploy a new SourceLocker and DestinationMinter, for a given `share`.
+     * @param target Specified `share` token for a ERC4626 vault.
+     * @return messageId Resultant CCIP messageId.
+     * @return newLocker Newly deployed Source Locker for specified `target`
      */
     function deploy(ERC20 target) external onlyOwner returns (bytes32 messageId, address newLocker) {
         // Deploy a new Source Target
@@ -163,7 +174,8 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     //============================== CCIP RECEIVER ===============================
 
     /**
-     * @notice Implement internal _ccipRecevie function logic.
+     * @notice Implement internal _ccipReceive function logic.
+     * @param any2EvmMessage CCIP encoded message specifying details to use to `setTargetDestination()` && finish creating pair of Source Locker & Destination Minter for specified `share`.
      */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage

@@ -86,6 +86,10 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     /**
      * @notice Bridge shares back to source chain.
+     * @param amount Number of shares to burn on destination network and unlock/transfer on source network.
+     * @param to Specified address to burn destination network `share` tokens, and receive unlocked `share` tokens on source network.
+     * @param maxLinkToPay Specified max amount of LINK fees to pay as per this contract.
+     * @return messageId Resultant CCIP messageId.
      */
     function bridgeToSource(uint256 amount, address to, uint256 maxLinkToPay) external returns (bytes32 messageId) {
         if (to == address(0)) revert DestinationMinter___InvalidTo();
@@ -111,6 +115,9 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     /**
      * @notice Preview fee required to bridge shares back to source.
+     * @param amount Specified amount of `share` tokens to bridge to source network.
+     * @param to Specified address to receive bridged shares on source network.
+     * @return fee required to bridge shares.
      */
     function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
         Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
@@ -124,6 +131,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     /**
      * @notice Implement internal _ccipRecevie function logic.
+     * @param any2EvmMessage CCIP encoded message specifying details to use to 'mint' `share` tokens to a specified address `to` on destination network.
      */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
@@ -141,6 +149,9 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     /**
      * @notice Build the CCIP message to send to source locker.
+     * @param amount number of `share` token to bridge.
+     * @param to Specified address to receive unlocked bridged shares on source network.
+     * @return message the CCIP message to send to source locker.
      */
     function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
         message = Client.EVM2AnyMessage({

@@ -9,8 +9,7 @@ import { IRouterClient } from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterC
 
 /**
  * @title SourceLocker
- * @notice Receives CCIP messages from DestinationMinter, to release ERC4626 shares that
- *         were previously bridged to destination chain.
+ * @notice Sends and receives CCIP messages to/from DestinationMinter to lock&mint / redeem&release ERC4626 shares from destination chain.
  * @author crispymangoes
  */
 contract SourceLocker is CCIPReceiver {
@@ -100,6 +99,7 @@ contract SourceLocker is CCIPReceiver {
 
     /**
      * @notice Allows factory to set target destination.
+     * @param _targetDestination The Destination Minter to pair with this Source Locker.
      */
     function setTargetDestination(address _targetDestination) external {
         if (msg.sender != factory) revert SourceLocker___OnlyFactory();
@@ -113,6 +113,10 @@ contract SourceLocker is CCIPReceiver {
     /**
      * @notice Bridge shares to destination chain.
      * @notice Reverts if target destination is not yet set.
+     * @param amount number of `share` token to bridge.
+     * @param to Specified address to receive newly minted bridged shares on destination network.
+     * @param maxLinkToPay Specified max amount of LINK fees to pay as per this contract.
+     * @return messageId Resultant CCIP messageId.
      */
     function bridgeToDestination(
         uint256 amount,
@@ -142,6 +146,9 @@ contract SourceLocker is CCIPReceiver {
 
     /**
      * @notice Preview fee required to bridge shares to destination.
+     * @param amount Specified amount of `share` tokens to bridge to destination network.
+     * @param to Specified address to receive newly minted bridged shares on destination network.
+     * @return fee required to bridge shares.
      */
     function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
         Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
@@ -154,7 +161,8 @@ contract SourceLocker is CCIPReceiver {
     //============================== CCIP RECEIVER ===============================
 
     /**
-     * @notice Implement internal _ccipRecevie function logic.
+     * @notice Implement internal _ccipReceive function logic.
+     * @param any2EvmMessage CCIP encoded message specifying details to use to 'unlock' `share` tokens to transfer to specified address `to`.
      */
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
@@ -171,8 +179,11 @@ contract SourceLocker is CCIPReceiver {
     //============================== INTERNAL HELPER ===============================
 
     /**
-     * @notice Build the CCIP message to send to destination minter.
+     * @notice Build the CCIP message to enact minting of bridged `share` tokens via destination minter on destination network.
      * @notice Reverts if target destination is not yet set.
+     * @param amount number of `share` token to bridge.
+     * @param to Specified address to receive newly minted bridged shares on destination network.
+     * @return message the CCIP message to send to destination minter.
      */
     function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
         address _targetDestination = targetDestination;
