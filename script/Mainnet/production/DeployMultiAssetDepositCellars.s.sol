@@ -49,6 +49,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     function run() external {
         ERC4626SharePriceOracle.ConstructorArgs memory args;
         // Set all oracles to use 50 bps deviation, 5 day TWAAs with 8 hour grace period.
+        // Allowed answer change upper and lower of 1.25x and 0.75x
         args._heartbeat = 1 days;
         args._deviationTrigger = 0.0050e4;
         args._gracePeriod = 1 days / 3;
@@ -64,7 +65,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._sequencerGracePeriod = 0;
         vm.startBroadcast();
 
-        // Create Morpho Blue Cellar.
+        // Create Turbo EETH Cellar.
         turboEETH = _createCellarWithNativeSupport(
             "Turbo EETH", // Name
             "TurboEETH", // Symbol
@@ -78,7 +79,9 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._target = turboEETH;
         _createSharePriceOracle("TurboEETH Share Price Oracle V0.0", args);
 
-        // Create Stader Cellar.
+        // turboEETH.transferOwnership(devStrategist);
+
+        // Create Turbo SWETH Cellar.
         turboSWETH = _createCellarWithNativeSupport(
             "Turbo SWETH",
             "TurboSWETH",
@@ -92,7 +95,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._target = turboSWETH;
         _createSharePriceOracle("TurboSWETH Share Price Oracle V0.0", args);
 
-        turboSWETH.transferOwnership(devStrategist);
+        // turboSWETH.transferOwnership(devStrategist);
 
         // Create Yield Maxi USDT Cellar.
         yieldMaxiUSDT = _createCellar(
@@ -108,8 +111,9 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._target = yieldMaxiUSDT;
         _createSharePriceOracle("YieldMaxiUSDT Share Price Oracle V0.0", args);
 
-        yieldMaxiUSDT.transferOwnership(devStrategist);
+        // yieldMaxiUSDT.transferOwnership(devStrategist);
 
+        // Create RYUSD 2
         RYUSD_2 = _createCellarNoNativeSupport(
             "Real Yield USD 2",
             "RYUSD 2",
@@ -123,7 +127,7 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         args._target = RYUSD_2;
         _createSharePriceOracle("RYUSD_2 Share Price Oracle V0.0", args);
 
-        RYUSD_2.transferOwnership(devStrategist);
+        // RYUSD_2.transferOwnership(devStrategist);
 
         // Deploy Staking Contracts.
         _createStakingContract(turboEETH, "TurboEETH Staking Contract V0.0");
