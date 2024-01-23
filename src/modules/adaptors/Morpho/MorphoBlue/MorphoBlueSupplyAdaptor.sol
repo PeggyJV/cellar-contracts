@@ -184,8 +184,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _assets the amount of loanToken to withdraw from MB market
      */
     function withdrawFromMorphoBlue(MarketParams memory _market, uint256 _assets) public {
-        // Run external receiver check.
-        _externalReceiverCheck(address(this));
         _validateMBMarket(_market);
         Id _id = MarketParamsLib.id(_market);
         if (_assets == type(uint256).max) {
