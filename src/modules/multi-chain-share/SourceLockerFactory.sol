@@ -132,6 +132,8 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
     /**
      * @notice Allows admin to deploy a new SourceLocker and DestinationMinter, for a given `share`.
+     * @dev Note Owner can set a gas limit that is too low, and cause the message to run out of gas.
+     *           If this happens the owner should raise gas limit, and call `deploy` on SourceLockerFactory again.
      * @param target Specified `share` token for a ERC4626 vault.
      * @return messageId Resultant CCIP messageId.
      * @return newLocker Newly deployed Source Locker for specified `target`
