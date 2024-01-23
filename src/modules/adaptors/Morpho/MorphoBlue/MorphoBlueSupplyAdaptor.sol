@@ -2,11 +2,11 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
-import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
+import { IMorpho, MarketParams, Id, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 
 /**
  * @title Morpho Blue Supply Adaptor
@@ -23,8 +23,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using MorphoLib for IMorpho;
-    using MorphoBalancesLib for IMorpho;
     using MarketParamsLib for MarketParams;
+    using SharesMathLib for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(MarketParams market)
@@ -124,11 +124,20 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         bool isLiquid = abi.decode(configurationData, (bool));
 
         if (isLiquid) {
-            MarketParams memory market = abi.decode(adaptorData, (MarketParams));
-            (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
+            MarketParams memory marketParams = abi.decode(adaptorData, (MarketParams));
+            Id id = MarketParamsLib.id(marketParams);
+            Market memory market = morphoBlue.market(id);
+            uint256 totalBorrowAssets = market.totalBorrowAssets;
+            uint256 totalSupplyAssets = market.totalSupplyAssets;
+            uint256 totalSupplyShares = market.totalSupplyShares;
+
             if (totalBorrowAssets >= totalSupplyAssets) return 0;
             uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
-            uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
+
+            uint256 cellarSuppliedBalance = (
+                morphoBlue.supplyShares(id, msg.sender).toAssetsDown(totalSupplyAssets, totalSupplyShares)
+            );
+
             withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
         } else return 0;
     }
