@@ -154,19 +154,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         }
     }
 
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     */
-    function accrueInterest(MarketParams memory market) public {
-        _validateMBMarket(market, identifier(), false);
-        _accrueInterest(market);
-    }
-
     //============================== Interface Details ==============================
     // General message on interface and virtual functions below: The Morpho Blue protocol is meant to be a primitive layer to DeFi, and so other projects may build atop of MB. These possible future projects may implement the same interface to simply interact with MB, and thus this adaptor is implementing a design that allows for future adaptors to simply inherit this "Base Morpho Adaptor" and override what they need appropriately to work with whatever project. Aspects that may be adjusted include using the flexible `bytes` param within `morphoBlue.supplyCollateral()` for example.
 

@@ -196,20 +196,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         }
     }
 
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market that the cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     * @param _market identifier of a Morpho Blue market.
-     */
-    function accrueInterest(MarketParams memory _market) public {
-        _validateMBMarket(_market, identifier(), false);
-        _accrueInterest(_market);
-    }
-
     //============================================ Interface Helper Functions ===========================================
 
     //============================== Interface Details ==============================

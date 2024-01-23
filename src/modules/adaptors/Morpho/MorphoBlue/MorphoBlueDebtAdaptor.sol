@@ -144,7 +144,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     function repayMorphoBlueDebt(MarketParams memory _market, uint256 _debtTokenRepayAmount) public {
         _validateMBMarket(_market, identifier(), true);
         Id id = MarketParamsLib.id(_market);
-        _accrueInterest(_market);
+        accrueInterest(_market);
         ERC20 tokenToRepay = ERC20(_market.loanToken);
         uint256 debtAmountToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         tokenToRepay.safeApprove(address(morphoBlue), debtAmountToRepay);
@@ -161,20 +161,6 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         }
 
         _revokeExternalApproval(tokenToRepay, address(morphoBlue));
-    }
-
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     * @param _market identifier of a Morpho Blue market.
-     */
-    function accrueInterest(MarketParams memory _market) public {
-        _validateMBMarket(_market, identifier(), true);
-        _accrueInterest(_market);
     }
 
     //============================== Interface Details ==============================

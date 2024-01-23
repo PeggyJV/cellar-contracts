@@ -98,10 +98,15 @@ contract MorphoBlueHelperLogic {
     }
 
     /**
-     * @notice Caller calls `accrueInterest` on specified MB market.
-     * @param _market The specified MB market.
+     * @notice Allows a strategist to call `accrueInterest()` on a MB Market that the cellar is using.
+     * @dev A strategist might want to do this if a MB market has not been interacted with
+     *      in a while, and the strategist does not plan on interacting with it during a
+     *      rebalance.
+     * @dev Calling this can increase the share price during the rebalance,
+     *      so a strategist should consider moving some assets into reserves.
+     * @param _market identifier of a Morpho Blue market.
      */
-    function _accrueInterest(MarketParams memory _market) internal virtual {
+    function accrueInterest(MarketParams memory _market) public {
         morphoBlue.accrueInterest(_market);
     }
 

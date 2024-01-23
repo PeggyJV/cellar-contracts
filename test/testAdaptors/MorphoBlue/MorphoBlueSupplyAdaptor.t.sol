@@ -648,7 +648,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestOnMorphoBlue(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -676,7 +676,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestOnMorphoBlue(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
