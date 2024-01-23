@@ -29,64 +29,45 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
     using Math for uint256;
     using SafeTransferLib for ERC20;
 
-    address public sommDev = 0x6d3655EE04820f4385a910FD1898d4Ec6241F520;
+    address public sommDev = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
 
     Deployer public deployer = Deployer(deployerAddress);
 
     Registry public registry = Registry(0xEED68C267E9313a6ED6ee08de08c9F68dee44476);
     PriceRouter public priceRouter = PriceRouter(0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92);
 
-    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit public crvUsdCellar;
-    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public morphoBlueCellar;
-    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public stakewiseCellar;
-    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public staderCellar;
-    CellarWithOracleWithBalancerFlashLoans public maxiUsdc;
-    CellarWithOracleWithBalancerFlashLoans public maxiUsdt;
+    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public turboEETH;
+    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport public turboSWETH;
+    CellarWithOracleWithBalancerFlashLoans public yieldMaxiUSDT;
+    CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit public RYUSD_2;
 
     // Positions.
     uint32 wethPositionId = 1;
     uint32 usdcPositionId = 3;
     uint32 usdtPositionId = 5;
-    uint32 crvUsdPositionId = 13;
 
     function run() external {
+        ERC4626SharePriceOracle.ConstructorArgs memory args;
+        // Set all oracles to use 50 bps deviation, 5 day TWAAs with 8 hour grace period.
+        args._heartbeat = 1 days;
+        args._deviationTrigger = 0.0050e4;
+        args._gracePeriod = 1 days / 3;
+        args._observationsToUse = 6;
+        args._automationRegistry = automationRegistryV2;
+        args._automationRegistrar = automationRegistrarV2;
+        args._automationAdmin = devStrategist;
+        args._link = address(LINK);
+        args._startingAnswer = 1e18;
+        args._allowedAnswerChangeLower = 0.75e4;
+        args._allowedAnswerChangeUpper = 1.25e4;
+        args._sequencerUptimeFeed = address(0);
+        args._sequencerGracePeriod = 0;
         vm.startBroadcast();
 
-        // Create CRVUSD Cellar.
-        crvUsdCellar = _createCellarNoNativeSupport(
-            "Turbo CRVUSD",
-            "TurboCRVUSD",
-            CRVUSD,
-            crvUsdPositionId,
-            abi.encode(0),
-            0.01e18,
-            0.8e18
-        );
-
-        // 7 day Time weighted average
-        ERC4626SharePriceOracle.ConstructorArgs memory args;
-        args._target = crvUsdCellar;
-        args._heartbeat = 1 days;
-        args._deviationTrigger = 0.0050e4;
-        args._gracePeriod = 1 days / 2; // If 3 days change to 1 days / 4.
-        args._observationsToUse = 8; // If 3 days change to 4.
-        args._automationRegistry = automationRegistryV2;
-        args._automationRegistrar = automationRegistrarV2;
-        args._automationAdmin = devStrategist;
-        args._link = address(LINK);
-        args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.8e4;
-        args._allowedAnswerChangeUpper = 1.2e4;
-        args._sequencerUptimeFeed = address(0);
-        args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("TurboCRVUSD Share Price Oracle V0.0", args);
-
-        crvUsdCellar.transferOwnership(devStrategist);
-
         // Create Morpho Blue Cellar.
-        morphoBlueCellar = _createCellarWithNativeSupport(
-            "Morpho ETH Maximizer",
-            "MaxMorphoETH",
+        turboEETH = _createCellarWithNativeSupport(
+            "Turbo EETH", // Name
+            "TurboEETH", // Symbol
             WETH,
             wethPositionId,
             abi.encode(0),
@@ -94,59 +75,13 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
-        // 3 day Time weighted average
-        args._target = morphoBlueCellar;
-        args._heartbeat = 1 days;
-        args._deviationTrigger = 0.0050e4;
-        args._gracePeriod = 1 days / 4;
-        args._observationsToUse = 4;
-        args._automationRegistry = automationRegistryV2;
-        args._automationRegistrar = automationRegistrarV2;
-        args._automationAdmin = devStrategist;
-        args._link = address(LINK);
-        args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.5e4;
-        args._allowedAnswerChangeUpper = 3e4;
-        args._sequencerUptimeFeed = address(0);
-        args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("Morpho ETH Maximizer Share Price Oracle V0.0", args);
-
-        morphoBlueCellar.transferOwnership(devStrategist);
-
-        // Create Stake Wise Cellar.
-        stakewiseCellar = _createCellarWithNativeSupport(
-            "Turbo OSETH",
-            "TurboOSETH",
-            WETH,
-            wethPositionId,
-            abi.encode(0),
-            0.0001e18,
-            0.8e18
-        );
-
-        // 3 day Time weighted average
-        args._target = stakewiseCellar;
-        args._heartbeat = 1 days;
-        args._deviationTrigger = 0.0050e4;
-        args._gracePeriod = 1 days / 4;
-        args._observationsToUse = 4;
-        args._automationRegistry = automationRegistryV2;
-        args._automationRegistrar = automationRegistrarV2;
-        args._automationAdmin = devStrategist;
-        args._link = address(LINK);
-        args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.8e4;
-        args._allowedAnswerChangeUpper = 1.2e4;
-        args._sequencerUptimeFeed = address(0);
-        args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("TurboOSETH Share Price Oracle V0.0", args);
-
-        stakewiseCellar.transferOwnership(devStrategist);
+        args._target = turboEETH;
+        _createSharePriceOracle("TurboEETH Share Price Oracle V0.0", args);
 
         // Create Stader Cellar.
-        staderCellar = _createCellarWithNativeSupport(
-            "Turbo ETHX",
-            "TurboETHX",
+        turboSWETH = _createCellarWithNativeSupport(
+            "Turbo SWETH",
+            "TurboSWETH",
             WETH,
             wethPositionId,
             abi.encode(0),
@@ -154,84 +89,47 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
             0.8e18
         );
 
-        // 3 day Time weighted average
-        args._target = staderCellar;
-        args._heartbeat = 1 days;
-        args._deviationTrigger = 0.0050e4;
-        args._gracePeriod = 1 days / 4;
-        args._observationsToUse = 4;
-        args._automationRegistry = automationRegistryV2;
-        args._automationRegistrar = automationRegistrarV2;
-        args._automationAdmin = devStrategist;
-        args._link = address(LINK);
-        args._startingAnswer = 1e18;
-        args._allowedAnswerChangeLower = 0.8e4;
-        args._allowedAnswerChangeUpper = 1.2e4;
-        args._sequencerUptimeFeed = address(0);
-        args._sequencerGracePeriod = 0;
-        _createSharePriceOracle("TurboETHX Share Price Oracle V0.0", args);
+        args._target = turboSWETH;
+        _createSharePriceOracle("TurboSWETH Share Price Oracle V0.0", args);
 
-        staderCellar.transferOwnership(devStrategist);
+        turboSWETH.transferOwnership(devStrategist);
+
+        // Create Yield Maxi USDT Cellar.
+        yieldMaxiUSDT = _createCellar(
+            "Yield Maxi USDT",
+            "YieldMaxiUSDT",
+            USDT,
+            usdtPositionId,
+            abi.encode(0),
+            0.1e6,
+            0.8e18
+        );
+
+        args._target = yieldMaxiUSDT;
+        _createSharePriceOracle("YieldMaxiUSDT Share Price Oracle V0.0", args);
+
+        yieldMaxiUSDT.transferOwnership(devStrategist);
+
+        RYUSD_2 = _createCellarNoNativeSupport(
+            "Real Yield USD 2",
+            "RYUSD 2",
+            USDC,
+            usdcPositionId,
+            abi.encode(0),
+            0.1e6,
+            0.8e18
+        );
+
+        args._target = RYUSD_2;
+        _createSharePriceOracle("RYUSD_2 Share Price Oracle V0.0", args);
+
+        RYUSD_2.transferOwnership(devStrategist);
 
         // Deploy Staking Contracts.
-        _createStakingContract(crvUsdCellar, "TurboCRVUSD Staking Contract V0.0");
-        _createStakingContract(morphoBlueCellar, "Morpho ETH Maximizer Staking Contract V0.0");
-        _createStakingContract(stakewiseCellar, "TurboOSETH Staking Contract V0.0");
-        _createStakingContract(staderCellar, "TurboETHX Staking Contract V0.0");
-
-        // // Create Yield Maxi USDC Cellar.
-        // maxiUsdc = _createCellar(
-        //     "YieldMAXI USDC",
-        //     "YieldMAXIUSDC",
-        //     USDC,
-        //     usdcPositionId,
-        //     abi.encode(0),
-        //     0.01e6,
-        //     0.8e18
-        // );
-
-        // args._target = maxiUsdc;
-        // args._heartbeat = 1 days;
-        // args._deviationTrigger = 0.0050e4;
-        // args._gracePeriod = 1 days / 4;
-        // args._observationsToUse = 4;
-        // args._automationRegistry = automationRegistryV2;
-        // args._automationRegistrar = automationRegistrarV2;
-        // args._automationAdmin = devStrategist;
-        // args._link = address(LINK);
-        // args._startingAnswer = 1e18;
-        // args._allowedAnswerChangeLower = 0.8e4;
-        // args._allowedAnswerChangeUpper = 1.2e4;
-        // args._sequencerUptimeFeed = address(0);
-        // args._sequencerGracePeriod = 0;
-        // _createSharePriceOracle("YieldMAXIUSDC Share Price Oracle V0.0", args);
-
-        // // Create Yield Maxi USDT Cellar.
-        // maxiUsdt = _createCellar(
-        //     "YieldMAXI USDT",
-        //     "YieldMAXIUSDT",
-        //     USDT,
-        //     usdtPositionId,
-        //     abi.encode(0),
-        //     0.01e6,
-        //     0.8e18
-        // );
-
-        // args._target = maxiUsdt;
-        // args._heartbeat = 1 days;
-        // args._deviationTrigger = 0.0050e4;
-        // args._gracePeriod = 1 days / 4;
-        // args._observationsToUse = 4;
-        // args._automationRegistry = automationRegistryV2;
-        // args._automationRegistrar = automationRegistrarV2;
-        // args._automationAdmin = devStrategist;
-        // args._link = address(LINK);
-        // args._startingAnswer = 1e18;
-        // args._allowedAnswerChangeLower = 0.8e4;
-        // args._allowedAnswerChangeUpper = 1.2e4;
-        // args._sequencerUptimeFeed = address(0);
-        // args._sequencerGracePeriod = 0;
-        // _createSharePriceOracle("YieldMAXIUSDT Share Price Oracle V0.0", args);
+        _createStakingContract(turboEETH, "TurboEETH Staking Contract V0.0");
+        _createStakingContract(turboSWETH, "TurboSWETH Staking Contract V0.0");
+        _createStakingContract(yieldMaxiUSDT, "YieldMaxiUSDT Staking Contract V0.0");
+        _createStakingContract(RYUSD_2, "Real Yield USD Staking Contract V0.0");
 
         vm.stopBroadcast();
     }
@@ -246,9 +144,9 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         uint64 platformCut
     ) internal returns (CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit) {
         // Approve new cellar to spend assets.
-        string memory nameToUse = string.concat(cellarName, " V0.0");
+        string memory nameToUse = string.concat(cellarName, " Multi Asset Deposit V0.0");
         address cellarAddress = deployer.getAddress(nameToUse);
-        holdingAsset.approve(cellarAddress, initialDeposit);
+        holdingAsset.safeApprove(cellarAddress, initialDeposit);
 
         bytes memory creationCode;
         bytes memory constructorArgs;
@@ -283,9 +181,9 @@ contract DeployMultiAssetDepositCellarsScript is Script, MainnetAddresses {
         uint64 platformCut
     ) internal returns (CellarWithOracleWithBalancerFlashLoansWithMultiAssetDepositWithNativeSupport) {
         // Approve new cellar to spend assets.
-        string memory nameToUse = string.concat(cellarName, " V0.0");
+        string memory nameToUse = string.concat(cellarName, " Multi Asset Deposit V0.0");
         address cellarAddress = deployer.getAddress(nameToUse);
-        holdingAsset.approve(cellarAddress, initialDeposit);
+        holdingAsset.safeApprove(cellarAddress, initialDeposit);
 
         bytes memory creationCode;
         bytes memory constructorArgs;
