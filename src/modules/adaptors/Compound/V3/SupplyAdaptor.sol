@@ -27,6 +27,11 @@ contract SupplyAdaptor is BaseAdaptor {
      */
     error SupplyAdaptor___InvalidComet(address comet);
 
+    /**
+     * @notice User withdraw would result in the Cellar taking on a debt position.
+     */
+    error SupplyAdaptor___WithdrawWouldResultInDebt();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -70,6 +75,13 @@ contract SupplyAdaptor is BaseAdaptor {
         if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         IComet comet = abi.decode(adaptorData, (IComet));
+
+        // Check if the withdrawal would result in debt being taken out.
+        // This should not be possible in the Cellar architecture as balanceOf returns
+        // the supplied base token balance, so at most withdraws would pull all supplied
+        // base token.
+        uint256 baseSupplied = comet.balanceOf(address(this));
+        if (assets > baseSupplied) revert SupplyAdaptor___WithdrawWouldResultInDebt();
 
         _verifyComet(comet);
 

@@ -33,7 +33,7 @@ contract V3Helper {
      * @dev Returns 0 if `maxNumberOfAssets` is exceeded. See `maxNumberOfAssets` above.
      */
     function getAccountHealthFactor(IComet comet, address account) public view returns (uint256) {
-        // Get the amount of base debt owed adjsuted for price.
+        // Get the amount of base debt owed adjusted for price.
         uint256 borrowBalanceInVirtualBase;
         {
             uint256 borrowBalanceInBase = comet.borrowBalanceOf(account);

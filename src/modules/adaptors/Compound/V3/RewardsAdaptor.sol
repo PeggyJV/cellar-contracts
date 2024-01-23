@@ -11,7 +11,7 @@ contract RewardsAdaptor is PositionlessAdaptor {
     // NOT USED
     // **************************** IMPORTANT ****************************
     // This adaptor has NO underlying position, its only purpose is to
-    // expose the swap function to strategists during rebalances.
+    // expose the claim logic from Compound V3, so Cellars can claim rewards.
     //====================================================================
 
     /**

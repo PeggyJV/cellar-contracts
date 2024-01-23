@@ -940,6 +940,48 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
+    function testWithdrawResultingInDebt(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+
+        // Add cUSDCV3 Supply position, and set as holding position.
+        cellar.addPosition(0, usdcCompoundV3SupplyPosition, abi.encode(true), false);
+        cellar.setHoldingPosition(usdcCompoundV3SupplyPosition);
+
+        // Deposit into Cellar.
+        cellar.deposit(assets, address(this));
+
+        // Have user deposit collateral into compound v3.
+        uint256 assetsInWeth = priceRouter.getValue(USDC, assets, WETH);
+        deal(address(WETH), address(this), assetsInWeth);
+
+        cellar.addPosition(0, wethCompoundV3CollateralPosition, abi.encode(0), false);
+
+        cellar.setAlternativeAssetData(WETH, wethCompoundV3CollateralPosition, 0.0010e8);
+
+        WETH.approve(address(cellar), assetsInWeth);
+        cellar.multiAssetDeposit(WETH, assetsInWeth, address(this));
+
+        vm.startPrank(address(cellar));
+        bytes memory callData = abi.encodeWithSelector(
+            SupplyAdaptor.withdraw.selector,
+            assets + 1,
+            address(this),
+            abi.encode(usdcComet),
+            abi.encode(true)
+        );
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SupplyAdaptor.SupplyAdaptor___WithdrawWouldResultInDebt.selector))
+        );
+        address(supplyAdaptor).functionDelegateCall(callData);
+        vm.stopPrank();
+    }
+
+    // Needed for tests so this contract can act like a cellar.
+    function isPositionUsed(uint256) public pure returns (bool) {
+        return true;
+    }
+
     function _createMultiAssetDepositCellar(
         string memory cellarName,
         ERC20 holdingAsset,
