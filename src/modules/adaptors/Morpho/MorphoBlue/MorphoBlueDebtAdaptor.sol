@@ -33,11 +33,6 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     //====================================================================
 
     /**
-     * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
-     */
-    error MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(MarketParams market);
-
-    /**
      * @notice Attempted tx that results in unhealthy cellar.
      */
     error MorphoBlueDebtAdaptor__HealthFactorTooLow(MarketParams market);
@@ -131,7 +126,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _amountToBorrow the amount of `loanToken` to borrow on the specified MB market.
      */
     function borrowFromMorphoBlue(MarketParams memory _market, uint256 _amountToBorrow) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), true);
         Id id = MarketParamsLib.id(_market);
         _borrowAsset(_market, _amountToBorrow, address(this));
         if (minimumHealthFactor > (_getHealthFactor(id, _market))) {
@@ -147,7 +142,7 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * NOTE - MorphoBlue reverts w/ underflow/overflow error if trying to repay with more than what cellar has. That said, we will accomodate for times that strategists tries to pass in type(uint256).max.
      */
     function repayMorphoBlueDebt(MarketParams memory _market, uint256 _debtTokenRepayAmount) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), true);
         Id id = MarketParamsLib.id(_market);
         _accrueInterest(_market);
         ERC20 tokenToRepay = ERC20(_market.loanToken);
@@ -178,22 +173,8 @@ contract MorphoBlueDebtAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _market identifier of a Morpho Blue market.
      */
     function accrueInterest(MarketParams memory _market) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), true);
         _accrueInterest(_market);
-    }
-
-    //============================================ Helper Functions ===========================================
-
-    /**
-     * @notice Validates that a given market is set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     * @param _market MarketParams struct for a specific Morpho Blue market.
-     */
-    function _validateMBMarket(MarketParams memory _market) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(_market)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked(_market);
     }
 
     //============================== Interface Details ==============================

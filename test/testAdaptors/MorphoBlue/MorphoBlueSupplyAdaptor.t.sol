@@ -11,6 +11,7 @@ import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libra
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { IrmMock } from "src/mocks/IrmMock.sol";
 import "test/resources/MainnetStarter.t.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 
 contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -478,7 +479,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    MorphoBlueSupplyAdaptor.MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked.selector,
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
                     (UNTRUSTED_mbFakeMarket)
                 )
             )
@@ -494,7 +495,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    MorphoBlueSupplyAdaptor.MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked.selector,
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
                     (UNTRUSTED_mbFakeMarket)
                 )
             )

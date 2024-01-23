@@ -7,6 +7,7 @@ import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/librari
 import { IOracle } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IOracle.sol";
 import { UtilsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/UtilsLib.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
+import { Cellar } from "src/modules/adaptors/BaseAdaptor.sol";
 
 /**
  * @title Morpho Blue Helper contract.
@@ -21,6 +22,11 @@ contract MorphoBlueHelperLogic {
     using UtilsLib for uint256;
     using SharesMathLib for uint256;
     using MorphoLib for IMorpho;
+
+    /**
+     * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
+     */
+    error MorphoBlueAdaptors__MarketPositionsMustBeTracked(MarketParams market);
 
     /**
      * @notice The Morpho Blue contract on current network.
@@ -97,5 +103,19 @@ contract MorphoBlueHelperLogic {
      */
     function _accrueInterest(MarketParams memory _market) internal virtual {
         morphoBlue.accrueInterest(_market);
+    }
+
+    /**
+     * @notice Validates that a given market is set up as a position in the Cellar.
+     * @dev This function uses `address(this)` as the address of the Cellar.
+     * @param _market MarketParams struct for a specific Morpho Blue market.
+     * @param _identifier Identifier unique to an adaptor for a shared registry.
+     * @param _isDebt Whether or not the respective position is a debt position.
+     */
+    function _validateMBMarket(MarketParams memory _market, bytes32 _identifier, bool _isDebt) internal view {
+        bytes32 positionHash = keccak256(abi.encode(_identifier, _isDebt, abi.encode(_market)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert MorphoBlueAdaptors__MarketPositionsMustBeTracked(_market);
     }
 }

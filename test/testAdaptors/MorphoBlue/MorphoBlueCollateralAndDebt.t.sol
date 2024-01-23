@@ -518,7 +518,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked.selector,
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
                     usdcDaiMarket
                 )
             )
@@ -680,7 +680,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    MorphoBlueDebtAdaptor.MorphoBlueDebtAdaptor__MarketPositionsMustBeTracked.selector,
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
                     wbtcUsdcMarket
                 )
             )
