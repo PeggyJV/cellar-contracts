@@ -13,8 +13,8 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 /**
  * @title SourceLockerFactory
  * @notice Works with DestinationMinterFactory to create pairs of Source Lockers & Destination Minters for new bridgeable ERC4626 Shares
- * @dev SourceLockerFactory `deploy()` function is used to enact the creation of SourceLocker and DestinationMinter pairs.  
- * @dev Source Lockers lock up shares to bridge a mint request to paired Destination Minters, where the representation of the Source Network Shares is minted on Destination Network. 
+ * @dev SourceLockerFactory `deploy()` function is used to enact the creation of SourceLocker and DestinationMinter pairs.
+ * @dev Source Lockers lock up shares to bridge a mint request to paired Destination Minters, where the representation of the Source Network Shares is minted on Destination Network.
  * @author crispymangoes
  */
 contract SourceLockerFactory is Owned, CCIPReceiver {
@@ -70,7 +70,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     uint64 public immutable destinationChainSelector;
 
     /**
-     * @notice This networks LINK contract.
+     * @notice This network's LINK contract.
      */
     ERC20 public immutable LINK;
 

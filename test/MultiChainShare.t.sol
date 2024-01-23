@@ -86,26 +86,27 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.stopPrank();
     }
 
-    function testHappyPath(uint256 amountToDesintation, uint256 amountToSource) external {
-        amountToDesintation = bound(amountToDesintation, 1e6, type(uint96).max);
-        amountToSource = bound(amountToSource, 0.999e6, amountToDesintation);
+    function testHappyPath(uint256 amountToDestination, uint256 amountToSource) external {
+        amountToDestination = bound(amountToDestination, 1e6, type(uint96).max);
+        amountToSource = bound(amountToSource, 0.999e6, amountToDestination);
 
         (SourceLocker locker, DestinationMinter minter) = _runDeploy();
 
         // Try bridging shares.
-        deal(address(cellar), address(this), amountToDesintation);
-        cellar.approve(address(locker), amountToDesintation);
-        uint256 fee = locker.previewFee(amountToDesintation, address(this));
+        deal(address(cellar), address(this), amountToDestination);
+        cellar.approve(address(locker), amountToDestination);
+        uint256 fee = locker.previewFee(amountToDestination, address(this));
         LINK.approve(address(locker), fee);
-        locker.bridgeToDestination(amountToDesintation, address(this), fee);
+        locker.bridgeToDestination(amountToDestination, address(this), fee);
 
         Client.Any2EVMMessage memory message = router.getLastMessage();
 
         vm.prank(address(router));
         minter.ccipReceive(message);
 
-        assertEq(amountToDesintation, minter.balanceOf(address(this)), "Should have minted shares.");
+        assertEq(amountToDestination, minter.balanceOf(address(this)), "Should have minted shares.");
         assertEq(0, cellar.balanceOf(address(this)), "Should have spent Cellar shares.");
+        assertEq(cellar.balanceOf(address(locker)), amountToDestination, "Should have sent shares to the locker.");
 
         // Try bridging the shares back.
         fee = minter.previewFee(amountToSource, address(this));
@@ -117,11 +118,16 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.prank(address(router));
         locker.ccipReceive(message);
 
-        assertEq(amountToDesintation - amountToSource, minter.balanceOf(address(this)), "Should have burned shares.");
+        assertEq(amountToDestination - amountToSource, minter.balanceOf(address(this)), "Should have burned shares.");
         assertEq(
             amountToSource,
             cellar.balanceOf(address(this)),
             "Should have sent Cellar shares back to this address."
+        );
+        assertEq(
+            amountToDestination - amountToSource,
+            cellar.balanceOf(address(locker)),
+            "Locker should have reduced shares."
         );
     }
 
@@ -362,7 +368,7 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         locker = SourceLocker(lockerAddress);
 
-        // Simulate CCIP Message to destinateion factory.
+        // Simulate CCIP Message to destination factory.
         Client.Any2EVMMessage memory message = router.getLastMessage();
         vm.prank(address(router));
         destinationMinterFactory.ccipReceive(message);

@@ -86,6 +86,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     /**
      * @notice Bridge shares back to source chain.
+     * @dev Caller should approve LINK to be spent by this contract.
      * @param amount Number of shares to burn on destination network and unlock/transfer on source network.
      * @param to Specified address to burn destination network `share` tokens, and receive unlocked `share` tokens on source network.
      * @param maxLinkToPay Specified max amount of LINK fees to pay as per this contract.
