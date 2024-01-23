@@ -75,6 +75,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
+        _validateMBMarket(market);
         ERC20 loanToken = ERC20(market.loanToken);
         loanToken.safeApprove(address(morphoBlue), assets);
         _deposit(market, assets, address(this));

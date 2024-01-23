@@ -484,6 +484,29 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
             )
         );
         cellar.callOnAdaptor(data);
+
+        vm.startPrank(address(cellar));
+        bytes memory callData = abi.encodeWithSelector(
+            morphoBlueSupplyAdaptor.deposit.selector,
+            assets,
+            abi.encode(UNTRUSTED_mbFakeMarket)
+        );
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoBlueSupplyAdaptor.MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked.selector,
+                    (UNTRUSTED_mbFakeMarket)
+                )
+            )
+        );
+        // cellar.withdraw(assets, address(this), address(this));
+        address(morphoBlueSupplyAdaptor).functionDelegateCall(callData);
+        vm.stopPrank();
+    }
+
+    // Needed for tests so this contract can act like a cellar.
+    function isPositionUsed(uint256) public pure returns (bool) {
+        return false;
     }
 
     // Check that loanToken in multiple different pairs is correctly accounted for in totalAssets().
