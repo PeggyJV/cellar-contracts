@@ -5,54 +5,10 @@ import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
 
-interface ISTETH {
-    function submit(address referral) external payable;
-}
+interface LiquidityPool {
+    function deposit() external payable;
 
-interface IWSTETH {
-    function wrap(uint256 amount) external;
-
-    function unwrap(uint256 amount) external;
-}
-
-interface IUNSTETH {
-    struct WithdrawalRequest {
-        /// @notice sum of the all stETH submitted for withdrawals including this request
-        uint128 cumulativeStETH;
-        /// @notice sum of the all shares locked for withdrawal including this request
-        uint128 cumulativeShares;
-        /// @notice address that can claim or transfer the request
-        address owner;
-        /// @notice block.timestamp when the request was created
-        uint40 timestamp;
-        /// @notice flag if the request was claimed
-        bool claimed;
-        /// @notice timestamp of last oracle report for this request
-        uint40 reportTimestamp;
-    }
-
-    struct WithdrawalRequestStatus {
-        /// @notice stETH token amount that was locked on withdrawal queue for this request
-        uint256 amountOfStETH;
-        /// @notice amount of stETH shares locked on withdrawal queue for this request
-        uint256 amountOfShares;
-        /// @notice address that can claim or transfer this request
-        address owner;
-        /// @notice timestamp of when the request was created, in seconds
-        uint256 timestamp;
-        /// @notice true, if request is finalized
-        bool isFinalized;
-        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
-        bool isClaimed;
-    }
-
-    function getWithdrawalRequests(address user) external view returns (uint256[] memory);
-
-    function getWithdrawalStatus(
-        uint256[] calldata _requestIds
-    ) external view returns (WithdrawalRequestStatus[] memory statuses);
-
-    function getLastFinalizedRequestId() external view returns (uint256);
+    function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
 }
 
 /**
