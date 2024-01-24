@@ -30,11 +30,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     //====================================================================
 
     /**
-     * @notice Attempted to interact with an Morpho Blue Lending Market the Cellar is not using.
-     */
-    error MorphoBlueCollateralAdaptor__MarketPositionsMustBeTracked(MarketParams market);
-
-    /**
      * @notice Removal of collateral causes Cellar Health Factor below what is required
      */
     error MorphoBlueCollateralAdaptor__HealthFactorTooLow(MarketParams market);
@@ -76,7 +71,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho Blue.
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
-        _validateMBMarket(market);
+        _validateMBMarket(market, identifier(), false);
         ERC20 collateralToken = ERC20(market.collateralToken);
         _addCollateral(market, assets, collateralToken);
     }
@@ -136,7 +131,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _collateralToDeposit The amount of `collateralToken` to add to specified MB market position.
      */
     function addCollateral(MarketParams memory _market, uint256 _collateralToDeposit) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), false);
         ERC20 collateralToken = ERC20(_market.collateralToken);
         uint256 amountToDeposit = _maxAvailable(collateralToken, _collateralToDeposit);
         _addCollateral(_market, amountToDeposit, collateralToken);
@@ -148,7 +143,7 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _collateralAmount The amount of collateral to remove from specified MB market position.
      */
     function removeCollateral(MarketParams memory _market, uint256 _collateralAmount) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), false);
         Id id = MarketParamsLib.id(_market);
         if (_collateralAmount == type(uint256).max) {
             _collateralAmount = _userCollateralBalance(id, address(this));
@@ -157,33 +152,6 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         if (minimumHealthFactor > (_getHealthFactor(id, _market))) {
             revert MorphoBlueCollateralAdaptor__HealthFactorTooLow(_market);
         }
-    }
-
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     */
-    function accrueInterest(MarketParams memory market) public {
-        _validateMBMarket(market);
-        _accrueInterest(market);
-    }
-
-    //============================================ Helper Functions ===========================================
-
-    /**
-     * @notice Validates that a given market is set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     * @param _market MarketParams struct for a specific Morpho Blue market.
-     */
-    function _validateMBMarket(MarketParams memory _market) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_market)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoBlueCollateralAdaptor__MarketPositionsMustBeTracked(_market);
     }
 
     //============================== Interface Details ==============================

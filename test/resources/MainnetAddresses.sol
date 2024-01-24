@@ -279,4 +279,6 @@ contract MainnetAddresses {
     address public cUSDCV3 = 0xc3d688B66703497DAA19211EEdff47f25384cdc3;
     address public cWETHV3 = 0xA17581A9E3356d9A858b789D68B4d866e593aE94;
     address public cometRewards = 0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
+    // Morpho Blue
+    address public _morphoBlue = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 }
