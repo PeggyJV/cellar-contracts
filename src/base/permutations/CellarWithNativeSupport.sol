@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { Cellar, Registry, ERC20, Math, SafeTransferLib, Address } from "src/base/Cellar.sol";
 
-contract CellarWithNativeSuppport is Cellar {
+contract CellarWithNativeSupport is Cellar {
     //============================== IMMUTABLES ===============================
 
     constructor(

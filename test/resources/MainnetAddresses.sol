@@ -261,6 +261,9 @@ contract MainnetAddresses {
     address public swEthAdapter = 0x68ba9602B2AeE30847412109D2eE89063bf08Ec2;
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
     bytes32 public swEthEthDataFeedId = 0x53574554482f4554480000000000000000000000000000000000000000000000;
+
+    address public ethXAdapter = 0xF3eB387Ac1317fBc7E2EFD82214eE1E148f0Fe00;
+    bytes32 public ethXUsdDataFeedId = 0x4554487800000000000000000000000000000000000000000000000000000000;
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 
@@ -273,4 +276,11 @@ contract MainnetAddresses {
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
+
+    // Lido
+    address public unstETH = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
+
+    // Stader
+    address public stakePoolManagerAddress = 0xcf5EA1b38380f6aF39068375516Daf40Ed70D299;
+    address public userWithdrawManagerAddress = 0x9F0491B32DBce587c50c4C43AB303b06478193A7;
 }

@@ -41,6 +41,12 @@ interface IUNSTETH {
     ) external returns (uint256[] memory requestIds);
 
     function claimWithdrawal(uint256 _requestId) external;
+
+    function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
+
+    function getRoleMember(bytes32 role, uint256 index) external view returns (address);
+
+    function FINALIZE_ROLE() external view returns (bytes32);
 }
 
 /**
@@ -67,14 +73,15 @@ contract LidoStakingAdaptor is StakingAdaptor {
     IUNSTETH public immutable unstETH;
 
     constructor(
-        IWETH9 _wrappedNative,
-        ISTETH _stETH,
-        IWSTETH _wstETH,
-        IUNSTETH _unstETH
-    ) StakingAdaptor(_wrappedNative, 8) {
-        stETH = _stETH;
-        wstETH = _wstETH;
-        unstETH = _unstETH;
+        address _wrappedNative,
+        uint8 _maxRequests,
+        address _stETH,
+        address _wstETH,
+        address _unstETH
+    ) StakingAdaptor(_wrappedNative, _maxRequests) {
+        stETH = ISTETH(_stETH);
+        wstETH = IWSTETH(_wstETH);
+        unstETH = IUNSTETH(_unstETH);
     }
 
     //============================================ Global Functions ===========================================
@@ -94,15 +101,20 @@ contract LidoStakingAdaptor is StakingAdaptor {
     }
 
     function _wrap(uint256 amount) internal override {
+        ERC20 derivative = ERC20(address(stETH));
+        amount = _maxAvailable(derivative, amount);
+        derivative.safeApprove(address(wstETH), amount);
         wstETH.wrap(amount);
+        _revokeExternalApproval(derivative, address(wstETH));
     }
 
     function _unwrap(uint256 amount) internal override {
+        amount = _maxAvailable(ERC20(address(wstETH)), amount);
         wstETH.unwrap(amount);
     }
 
     function _balanceOf(address account) internal view override returns (uint256 amount) {
-        bytes32[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
+        uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
         // Convert requests to uint256 objects.
         uint256[] memory requestsIds_uint256 = new uint256[](requests.length);
         for (uint256 i; i < requests.length; ++i) {
@@ -115,15 +127,17 @@ contract LidoStakingAdaptor is StakingAdaptor {
     }
 
     // https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1#writeProxyContract
-    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
+    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
+        ERC20 derivative = ERC20(address(stETH));
+        derivative.safeApprove(address(unstETH), amount);
         uint256[] memory ids = unstETH.requestWithdrawals(amounts, address(this));
-        id = bytes32(ids[0]);
+        _revokeExternalApproval(derivative, address(unstETH));
+        id = ids[0];
     }
 
-    function _completeBurn(bytes32 id) internal override {
-        // TODO call claim withdrawals on unstETH contract. Then wrap it to WETH.
-        unstETH.claimWithdrawal(uint256(id));
+    function _completeBurn(uint256 id) internal override {
+        unstETH.claimWithdrawal(id);
     }
 }

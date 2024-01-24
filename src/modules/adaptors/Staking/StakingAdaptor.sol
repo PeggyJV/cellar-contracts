@@ -19,34 +19,41 @@ abstract contract StakingAdaptor is BaseAdaptor {
     // interact with staking protocols.
     //====================================================================
 
-    // If I find that all protocols use uint256, just make this uint256
-    mapping(address => bytes32[]) public requestIds;
+    error StakingAdaptor__RequestNotFound(uint256 id);
+    error StakingAdaptor__DuplicateRequest(uint256 id);
+    error StakingAdaptor__MaximumRequestsExceeded();
+    error StakingAdaptor__NotSupported();
+    error StakingAdaptor__ZeroAmount();
 
-    IWETH9 public immutable wrappedNative;
+    // If I find that all protocols use uint256, just make this uint256
+    mapping(address => uint256[]) public requestIds;
+
+    IWETH9 public immutable wrappedPrimitive;
 
     address internal immutable adaptorAddress;
 
     uint8 internal immutable maximumRequests;
 
-    constructor(IWETH9 _wrappedNative, uint8 _maximumRequests) {
-        wrappedNative = _wrappedNative;
+    constructor(address _wrappedPrimitive, uint8 _maximumRequests) {
+        wrappedPrimitive = IWETH9(_wrappedPrimitive);
         maximumRequests = _maximumRequests;
+        adaptorAddress = address(this);
     }
 
     // TODO use unstructured storage to prevent cellar directly calling this.
     // Does not check for unique ids.
-    function addRequestId(bytes32 id) external {
-        bytes32[] storage ids = requestIds[msg.sender];
+    function addRequestId(uint256 id) external {
+        uint256[] storage ids = requestIds[msg.sender];
         uint256 idsLength = ids.length;
-        if (idsLength >= maximumRequests) revert("Max exceeded");
+        if (idsLength >= maximumRequests) revert StakingAdaptor__MaximumRequestsExceeded();
         for (uint256 i = 0; i < idsLength; ++i) {
-            if (ids[i] == id) revert("Duplicate id");
+            if (ids[i] == id) revert StakingAdaptor__DuplicateRequest(id);
         }
         ids.push(id);
     }
 
-    function removeRequestId(bytes32 id) external {
-        bytes32[] storage ids = requestIds[msg.sender];
+    function removeRequestId(uint256 id) external {
+        uint256[] storage ids = requestIds[msg.sender];
         uint256 idsLength = ids.length;
         for (uint256 i = 0; i < idsLength; ++i) {
             if (ids[i] == id) {
@@ -56,10 +63,10 @@ abstract contract StakingAdaptor is BaseAdaptor {
                 return;
             }
         }
-        revert("Id not found");
+        revert StakingAdaptor__RequestNotFound(id);
     }
 
-    function getRequestIds(address user) external view returns (bytes32[] memory) {
+    function getRequestIds(address user) external view returns (uint256[] memory) {
         return requestIds[user];
     }
 
@@ -99,8 +106,8 @@ abstract contract StakingAdaptor is BaseAdaptor {
      * @notice Returns `token`
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
-        ERC20 native = abi.decode(adaptorData, (ERC20));
-        return native;
+        ERC20 primitive = abi.decode(adaptorData, (ERC20));
+        return primitive;
     }
 
     /**
@@ -113,46 +120,74 @@ abstract contract StakingAdaptor is BaseAdaptor {
     //============================================ Strategist Functions ===========================================
 
     function mint(uint256 amount) external {
-        amount = _maxAvailable(ERC20(address(wrappedNative)), amount);
-        wrappedNative.withdraw(amount);
+        if (amount == 0) revert StakingAdaptor__ZeroAmount();
+
+        amount = _maxAvailable(ERC20(address(wrappedPrimitive)), amount);
+        wrappedPrimitive.withdraw(amount);
 
         _mint(amount);
     }
 
     function requestBurn(uint256 amount) external {
-        bytes32 id = _requestBurn(amount);
+        if (amount == 0) revert StakingAdaptor__ZeroAmount();
+
+        uint256 id = _requestBurn(amount);
 
         // Add request id to staking adaptor.
         StakingAdaptor(adaptorAddress).addRequestId(id);
     }
 
-    function completeBurn(bytes32 id) external {
+    function completeBurn(uint256 id) external {
+        uint256 primitiveDelta = address(this).balance;
         _completeBurn(id);
+        primitiveDelta = address(this).balance - primitiveDelta;
+        wrappedPrimitive.deposit{ value: primitiveDelta }();
+        StakingAdaptor(adaptorAddress).removeRequestId(id);
+    }
+
+    function cancelBurn(uint256 id) external {
+        _cancelBurn(id);
         StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
 
     function wrap(uint256 amount) external {
+        if (amount == 0) revert StakingAdaptor__ZeroAmount();
+
         _wrap(amount);
     }
 
     function unwrap(uint256 amount) external {
+        if (amount == 0) revert StakingAdaptor__ZeroAmount();
+
         _unwrap(amount);
     }
 
-    // should return the amount of native that is pending and matured that is owed to `account`.
-    function _balanceOf(address account) internal view virtual returns (uint256 amount);
+    // should return the amount of primitive that is pending and matured that is owed to `account`.
+    function _balanceOf(address) internal view virtual returns (uint256) {
+        revert StakingAdaptor__NotSupported();
+    }
 
-    function _mint(uint256 amount) internal virtual;
+    function _mint(uint256) internal virtual {
+        revert StakingAdaptor__NotSupported();
+    }
 
     function _wrap(uint256) internal virtual {
-        revert("Not supported");
+        revert StakingAdaptor__NotSupported();
     }
 
     function _unwrap(uint256) internal virtual {
-        revert("Not supported");
+        revert StakingAdaptor__NotSupported();
     }
 
-    function _requestBurn(uint256 amount) internal virtual returns (bytes32 id);
+    function _requestBurn(uint256) internal virtual returns (uint256) {
+        // revert StakingAdaptor__NotSupported();
+    }
 
-    function _completeBurn(bytes32 id) internal virtual;
+    function _completeBurn(uint256) internal virtual {
+        // revert StakingAdaptor__NotSupported();
+    }
+
+    function _cancelBurn(uint256) internal virtual {
+        revert StakingAdaptor__NotSupported();
+    }
 }

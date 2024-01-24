@@ -9,12 +9,6 @@ interface IStakePoolManager {
     function deposit(address _receiver) external payable returns (uint256);
 }
 
-interface IWSTETH {
-    function wrap(uint256 amount) external;
-
-    function unwrap(uint256 amount) external;
-}
-
 interface IUserWithdrawManager {
     struct WithdrawRequest {
         address owner;
@@ -52,14 +46,18 @@ contract StaderStakingAdaptor is StakingAdaptor {
 
     IStakePoolManager public immutable stakePoolManager;
     IUserWithdrawManager public immutable userWithdrawManager;
+    ERC20 public immutable ETHx;
 
     constructor(
-        IWETH9 _wrappedNative,
-        IStakePoolManager _stakePoolManager,
-        IUserWithdrawManager _userWithdrawManager
-    ) StakingAdaptor(_wrappedNative, 8) {
-        stakePoolManager = _stakePoolManager;
-        userWithdrawManager = _userWithdrawManager;
+        address _wrappedNative,
+        uint8 _maxRequests,
+        address _stakePoolManager,
+        address _userWithdrawManager,
+        address _ethx
+    ) StakingAdaptor(_wrappedNative, _maxRequests) {
+        stakePoolManager = IStakePoolManager(_stakePoolManager);
+        userWithdrawManager = IUserWithdrawManager(_userWithdrawManager);
+        ETHx = ERC20(_ethx);
     }
 
     //============================================ Global Functions ===========================================
@@ -79,7 +77,7 @@ contract StaderStakingAdaptor is StakingAdaptor {
     }
 
     function _balanceOf(address account) internal view override returns (uint256 amount) {
-        bytes32[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
+        uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
 
         for (uint256 i; i < requests.length; ++i) {
             IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
@@ -89,16 +87,14 @@ contract StaderStakingAdaptor is StakingAdaptor {
         }
     }
 
-    // TODO so an attacker could just send the cellar their NFT, to cause a rebalance to revert, so maybe I should use unstructured storage to store the request id.
-    // for this we can do a mapping from address to a uint256.
-    // TODO but do I really need unstructured storage? Or can I just make an external call to the adaptor to write to a mapping <----- this
-    // could probs jsut store a bytes32 then encode.decode however I need to.
     // https://etherscan.io/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
-    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
-        // TODO Call requestWithdraw
+    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+        ETHx.safeApprove(address(userWithdrawManager), amount);
+        id = userWithdrawManager.requestWithdraw(amount, address(this));
+        _revokeExternalApproval(ETHx, address(userWithdrawManager));
     }
 
-    function _completeBurn(bytes32 id) internal override {
-        // TODO call claim
+    function _completeBurn(uint256 id) internal override {
+        userWithdrawManager.claim(id);
     }
 }

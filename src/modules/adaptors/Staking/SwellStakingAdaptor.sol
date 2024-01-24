@@ -79,7 +79,7 @@ contract SwellStakingAdaptor is StakingAdaptor {
     IUNSTETH public immutable unstETH;
 
     constructor(
-        IWETH9 _wrappedNative,
+        address _wrappedNative,
         ISTETH _stETH,
         IWSTETH _wstETH,
         IUNSTETH _unstETH
@@ -125,11 +125,4 @@ contract SwellStakingAdaptor is StakingAdaptor {
     // TODO but do I really need unstructured storage? Or can I just make an external call to the adaptor to write to a mapping <----- this
     // could probs jsut store a bytes32 then encode.decode however I need to.
     // https://etherscan.io/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
-    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
-        // TODO Call requestWithdraw
-    }
-
-    function _completeBurn(bytes32 id) internal override {
-        // TODO call claim
-    }
 }
