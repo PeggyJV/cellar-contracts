@@ -273,4 +273,7 @@ contract MainnetAddresses {
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
+
+    // Morpho Blue
+    address public _morphoBlue = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 }

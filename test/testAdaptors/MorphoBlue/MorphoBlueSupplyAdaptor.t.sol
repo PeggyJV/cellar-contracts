@@ -43,7 +43,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     address private whaleBorrower = vm.addr(777);
 
-    IMorpho public morphoBlue = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+    IMorpho public morphoBlue = IMorpho(_morphoBlue);
     address public morphoBlueOwner = 0x6ABfd6139c7C3CC270ee2Ce132E309F59cAaF6a2;
     address public DEFAULT_IRM = 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
