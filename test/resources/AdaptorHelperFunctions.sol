@@ -302,6 +302,12 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Morpho Blue FUNCTIONS =========================================
 
+    function _createBytesDataToAccrueInterestOnMorphoBlue(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueHelperLogic.accrueInterest.selector, _market);
+    }
+
     // MorphoBlueSupplyAdaptor Functions
     function _createBytesDataToLendOnMorphoBlue(
         MarketParams memory _market,
@@ -315,12 +321,6 @@ contract AdaptorHelperFunctions {
         uint256 _assets
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _market, _assets);
-    }
-
-    function _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(
-        MarketParams memory _market
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.accrueInterest.selector, _market);
     }
 
     // MorphoBlueCollateralAdaptor Functions
@@ -339,12 +339,6 @@ contract AdaptorHelperFunctions {
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _market, _collateralAmount);
-    }
-
-    function _createBytesDataToAccrueInterestToMorphoBlue(
-        MarketParams memory _market
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.accrueInterest.selector, _market);
     }
 
     // MorphoBlueDebtAdaptor Functions

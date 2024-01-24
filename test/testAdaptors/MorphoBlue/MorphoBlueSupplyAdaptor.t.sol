@@ -11,6 +11,7 @@ import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libra
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { IrmMock } from "src/mocks/IrmMock.sol";
 import "test/resources/MainnetStarter.t.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 
 contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -42,7 +43,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
     address private whaleBorrower = vm.addr(777);
 
-    IMorpho public morphoBlue = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+    IMorpho public morphoBlue = IMorpho(_morphoBlue);
     address public morphoBlueOwner = 0x6ABfd6139c7C3CC270ee2Ce132E309F59cAaF6a2;
     address public DEFAULT_IRM = 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC;
     uint256 public DEFAULT_LLTV = 860000000000000000; // (86% LLTV)
@@ -478,12 +479,35 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    MorphoBlueSupplyAdaptor.MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked.selector,
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
                     (UNTRUSTED_mbFakeMarket)
                 )
             )
         );
         cellar.callOnAdaptor(data);
+
+        vm.startPrank(address(cellar));
+        bytes memory callData = abi.encodeWithSelector(
+            morphoBlueSupplyAdaptor.deposit.selector,
+            assets,
+            abi.encode(UNTRUSTED_mbFakeMarket)
+        );
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoBlueHelperLogic.MorphoBlueAdaptors__MarketPositionsMustBeTracked.selector,
+                    (UNTRUSTED_mbFakeMarket)
+                )
+            )
+        );
+        // cellar.withdraw(assets, address(this), address(this));
+        address(morphoBlueSupplyAdaptor).functionDelegateCall(callData);
+        vm.stopPrank();
+    }
+
+    // Needed for tests so this contract can act like a cellar.
+    function isPositionUsed(uint256) public pure returns (bool) {
+        return false;
     }
 
     // Check that loanToken in multiple different pairs is correctly accounted for in totalAssets().
@@ -624,7 +648,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestOnMorphoBlue(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
 
@@ -652,7 +676,7 @@ contract MorphoBlueSupplyAdaptorTest is MainnetStarterTest, AdaptorHelperFunctio
 
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(usdcDaiMarket);
+            adaptorCalls[0] = _createBytesDataToAccrueInterestOnMorphoBlue(usdcDaiMarket);
             data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);

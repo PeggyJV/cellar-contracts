@@ -315,7 +315,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     function addAdaptorToCatalogue(address adaptor) external {
         _onlyOwner();
-        // Make sure adaptor is not paused and is trusted.
+        // Make sure adaptor is trusted.
         registry.revertIfAdaptorIsNotTrusted(adaptor);
         adaptorCatalogue[adaptor] = true;
         emit AdaptorCatalogueAltered(adaptor, true);
