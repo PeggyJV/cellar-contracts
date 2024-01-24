@@ -5,10 +5,37 @@ import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
 
-interface LiquidityPool {
+interface ILiquidityPool {
     function deposit() external payable;
 
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
+
+    function amountForShare(uint256 shares) external view returns (uint256);
+}
+
+interface IWithdrawRequestNft {
+    struct WithdrawRequest {
+        uint96 amountOfEEth;
+        uint96 shareOfEEth;
+        bool isValid;
+        uint32 feeGwei;
+    }
+
+    function claimWithdraw(uint256 tokenId) external;
+
+    function getRequest(uint256 requestId) external view returns (WithdrawRequest memory);
+
+    function finalizeRequests(uint256 requestId) external;
+
+    function owner() external view returns (address);
+
+    function updateAdmin(address admin, bool isAdmin) external;
+}
+
+interface IWEETH {
+    function wrap(uint256 amount) external;
+
+    function unwrap(uint256 amount) external;
 }
 
 /**
@@ -30,19 +57,22 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     // expose the swap function to strategists during rebalances.
     //====================================================================
 
-    ISTETH public immutable stETH;
-    IWSTETH public immutable wstETH;
-    IUNSTETH public immutable unstETH;
+    ILiquidityPool public immutable liquidityPool;
+    IWithdrawRequestNft public immutable withdrawRequestNft;
+    IWEETH public immutable weETH;
+    ERC20 public immutable eETH;
 
     constructor(
         address _wrappedNative,
-        ISTETH _stETH,
-        IWSTETH _wstETH,
-        IUNSTETH _unstETH
+        address _liquidityPool,
+        address _withdrawRequestNft,
+        address _weETH,
+        address _eETH
     ) StakingAdaptor(_wrappedNative, 8) {
-        stETH = _stETH;
-        wstETH = _wstETH;
-        unstETH = _unstETH;
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        withdrawRequestNft = IWithdrawRequestNft(_withdrawRequestNft);
+        weETH = IWEETH(_weETH);
+        eETH = ERC20(_eETH);
     }
 
     //============================================ Global Functions ===========================================
@@ -58,35 +88,47 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
 
     //============================================ Override Functions ===========================================
     function _mint(uint256 amount) internal override {
-        // https://etherscan.io/address/0x308861a430be4cce5502d0a12724771fc6daf216
-        // call deposit
+        liquidityPool.deposit{ value: amount }();
     }
 
     function _wrap(uint256 amount) internal override {
-        wstETH.wrap(amount);
+        amount = _maxAvailable(eETH, amount);
+        eETH.safeApprove(address(weETH), amount);
+        weETH.wrap(amount);
+        _revokeExternalApproval(eETH, address(weETH));
     }
 
     function _unwrap(uint256 amount) internal override {
-        wstETH.unwrap(amount);
+        amount = _maxAvailable(ERC20(address(weETH)), amount);
+        weETH.unwrap(amount);
     }
 
+    // Formula for request value is on line 77 in WithdrawRequestNFT.sol here https://etherscan.io/address/0xdaaac9488f9934956b55fcdaef6f9d92f8008ca7#code
     function _balanceOf(address account) internal view override returns (uint256 amount) {
-        // Call getRewuestIdsByUser
-        // Call userWithdrawRequests(uint256 id)
-        // call nextRequestIdToFinalize to see if request is finalized.
+        uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
+        for (uint256 i; i < requests.length; ++i) {
+            IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(requests[i]);
+            // Take min between valuation at request creation, and current valuation.
+            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+            uint256 requestValueInPrimitive = (request.amountOfEEth < amountForShares)
+                ? request.amountOfEEth
+                : amountForShares;
+
+            // Remove fee
+            uint256 fee = request.feeGwei * 1 gwei;
+            requestValueInPrimitive = requestValueInPrimitive - fee;
+            amount += requestValueInPrimitive;
+        }
     }
 
-    // TODO so an attacker could just send the cellar their NFT, to cause a rebalance to revert, so maybe I should use unstructured storage to store the request id.
-    // for this we can do a mapping from address to a uint256.
-    // TODO but do I really need unstructured storage? Or can I just make an external call to the adaptor to write to a mapping <----- this
-    // could probs jsut store a bytes32 then encode.decode however I need to.
-    // https://etherscan.io/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
     function _requestBurn(uint256 amount) internal override returns (uint256 id) {
-        // TODO Call requestWithdraw
-        // https://etherscan.io/address/0x308861a430be4cce5502d0a12724771fc6daf216
+        amount = _maxAvailable(eETH, amount);
+        eETH.safeApprove(address(liquidityPool), amount);
+        id = liquidityPool.requestWithdraw(address(this), amount);
+        _revokeExternalApproval(eETH, address(liquidityPool));
     }
 
     function _completeBurn(uint256 id) internal override {
-        // TODO call claim
+        withdrawRequestNft.claimWithdraw(id);
     }
 }

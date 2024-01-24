@@ -115,12 +115,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
 
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
-        // Convert requests to uint256 objects.
-        uint256[] memory requestsIds_uint256 = new uint256[](requests.length);
-        for (uint256 i; i < requests.length; ++i) {
-            requestsIds_uint256[i] = uint256(requests[i]);
-        }
-        IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requestsIds_uint256);
+        IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
         for (uint256 i; i < statuses.length; ++i) {
             amount += statuses[i].amountOfStETH;
         }
@@ -131,6 +126,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         ERC20 derivative = ERC20(address(stETH));
+        amount = _maxAvailable(derivative, amount);
         derivative.safeApprove(address(unstETH), amount);
         uint256[] memory ids = unstETH.requestWithdrawals(amounts, address(this));
         _revokeExternalApproval(derivative, address(unstETH));

@@ -56,6 +56,8 @@ contract MainnetAddresses {
     ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
     ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
     ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
+    ERC20 public WEETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
+    ERC20 public EETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -264,6 +266,10 @@ contract MainnetAddresses {
 
     address public ethXAdapter = 0xF3eB387Ac1317fBc7E2EFD82214eE1E148f0Fe00;
     bytes32 public ethXUsdDataFeedId = 0x4554487800000000000000000000000000000000000000000000000000000000;
+
+    address public weethAdapter = 0xdDb6F90fFb4d3257dd666b69178e5B3c5Bf41136;
+    bytes32 public weethUsdDataFeedId = 0x7765455448000000000000000000000000000000000000000000000000000000;
+
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 
@@ -283,4 +289,8 @@ contract MainnetAddresses {
     // Stader
     address public stakePoolManagerAddress = 0xcf5EA1b38380f6aF39068375516Daf40Ed70D299;
     address public userWithdrawManagerAddress = 0x9F0491B32DBce587c50c4C43AB303b06478193A7;
+
+    // Etherfi
+    address public liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
+    address public withdrawalRequestNft = 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c;
 }
