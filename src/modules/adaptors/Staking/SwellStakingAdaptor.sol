@@ -31,6 +31,21 @@ interface IUNSTETH {
         uint40 reportTimestamp;
     }
 
+    struct WithdrawalRequestStatus {
+        /// @notice stETH token amount that was locked on withdrawal queue for this request
+        uint256 amountOfStETH;
+        /// @notice amount of stETH shares locked on withdrawal queue for this request
+        uint256 amountOfShares;
+        /// @notice address that can claim or transfer this request
+        address owner;
+        /// @notice timestamp of when the request was created, in seconds
+        uint256 timestamp;
+        /// @notice true, if request is finalized
+        bool isFinalized;
+        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
+        bool isClaimed;
+    }
+
     function getWithdrawalRequests(address user) external view returns (uint256[] memory);
 
     function getWithdrawalStatus(
@@ -68,7 +83,7 @@ contract SwellStakingAdaptor is StakingAdaptor {
         ISTETH _stETH,
         IWSTETH _wstETH,
         IUNSTETH _unstETH
-    ) StakingAdaptor(_wrappedNative) {
+    ) StakingAdaptor(_wrappedNative, 8) {
         stETH = _stETH;
         wstETH = _wstETH;
         unstETH = _unstETH;
@@ -99,9 +114,7 @@ contract SwellStakingAdaptor is StakingAdaptor {
         wstETH.unwrap(amount);
     }
 
-    function _getPendingWithdraw(
-        address account
-    ) internal view override returns (bool isRequestActive, bool isRequestPending, uint256 amount) {
+    function _balanceOf(address account) internal view override returns (uint256 amount) {
         // Call getRewuestIdsByUser
         // Call userWithdrawRequests(uint256 id)
         // call nextRequestIdToFinalize to see if request is finalized.
@@ -112,11 +125,11 @@ contract SwellStakingAdaptor is StakingAdaptor {
     // TODO but do I really need unstructured storage? Or can I just make an external call to the adaptor to write to a mapping <----- this
     // could probs jsut store a bytes32 then encode.decode however I need to.
     // https://etherscan.io/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
-    function _requestBurn(uint256 amount) internal override {
+    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
         // TODO Call requestWithdraw
     }
 
-    function _completeBurn(uint256 amount) internal override {
+    function _completeBurn(bytes32 id) internal override {
         // TODO call claim
     }
 }

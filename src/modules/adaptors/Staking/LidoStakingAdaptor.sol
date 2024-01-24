@@ -16,32 +16,35 @@ interface IWSTETH {
 }
 
 interface IUNSTETH {
-    struct WithdrawalRequest {
-        /// @notice sum of the all stETH submitted for withdrawals including this request
-        uint128 cumulativeStETH;
-        /// @notice sum of the all shares locked for withdrawal including this request
-        uint128 cumulativeShares;
-        /// @notice address that can claim or transfer the request
+    struct WithdrawalRequestStatus {
+        /// @notice stETH token amount that was locked on withdrawal queue for this request
+        uint256 amountOfStETH;
+        /// @notice amount of stETH shares locked on withdrawal queue for this request
+        uint256 amountOfShares;
+        /// @notice address that can claim or transfer this request
         address owner;
-        /// @notice block.timestamp when the request was created
-        uint40 timestamp;
-        /// @notice flag if the request was claimed
-        bool claimed;
-        /// @notice timestamp of last oracle report for this request
-        uint40 reportTimestamp;
+        /// @notice timestamp of when the request was created, in seconds
+        uint256 timestamp;
+        /// @notice true, if request is finalized
+        bool isFinalized;
+        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
+        bool isClaimed;
     }
-
-    function getWithdrawalRequests(address user) external view returns (uint256[] memory);
 
     function getWithdrawalStatus(
         uint256[] calldata _requestIds
     ) external view returns (WithdrawalRequestStatus[] memory statuses);
 
-    function getLastFinalizedRequestId() external view returns (uint256);
+    function requestWithdrawals(
+        uint256[] calldata _amounts,
+        address _owner
+    ) external returns (uint256[] memory requestIds);
+
+    function claimWithdrawal(uint256 _requestId) external;
 }
 
 /**
- * @title 0x Adaptor
+ * @title Lido Staking Adaptor
  * @notice Allows Cellars to swap with 0x.
  * @author crispymangoes
  */
@@ -68,7 +71,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
         ISTETH _stETH,
         IWSTETH _wstETH,
         IUNSTETH _unstETH
-    ) StakingAdaptor(_wrappedNative) {
+    ) StakingAdaptor(_wrappedNative, 8) {
         stETH = _stETH;
         wstETH = _wstETH;
         unstETH = _unstETH;
@@ -82,7 +85,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("0x Adaptor V 1.1"));
+        return keccak256(abi.encode("Lido Staking Adaptor V 0.0"));
     }
 
     //============================================ Override Functions ===========================================
@@ -98,26 +101,29 @@ contract LidoStakingAdaptor is StakingAdaptor {
         wstETH.unwrap(amount);
     }
 
-    function _getPendingWithdraw(
-        address account
-    ) internal view override returns (bool isRequestActive, bool isRequestPending, uint256 amount) {
-        uint256[] memory requests = unstETH.getWithdrawalRequests(account);
-        isRequestActive = requests.length > 0;
-        uint256 lastFinalizedRequestId = unstETH.getLastFinalizedRequestId();
-        if (requests[0] > lastFinalizedRequestId) {
-            isRequestPending = true;
-        } // else request has matured.
-        WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
-        amount = statuses[0].cumulativeStETH;
+    function _balanceOf(address account) internal view override returns (uint256 amount) {
+        bytes32[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
+        // Convert requests to uint256 objects.
+        uint256[] memory requestsIds_uint256 = new uint256[](requests.length);
+        for (uint256 i; i < requests.length; ++i) {
+            requestsIds_uint256[i] = uint256(requests[i]);
+        }
+        IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requestsIds_uint256);
+        for (uint256 i; i < statuses.length; ++i) {
+            amount += statuses[i].amountOfStETH;
+        }
     }
 
-    // TODO so an attacker could just send the cellar their NFT, to cause a rebalance to revert, so maybe I should use unstructured storage to store the request id.
     // https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1#writeProxyContract
-    function _requestBurn(uint256 amount) internal override {
-        // TODO Call requestWithdrawals on unstETH contract.
+    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+        uint256[] memory ids = unstETH.requestWithdrawals(amounts, address(this));
+        id = bytes32(ids[0]);
     }
 
-    function _completeBurn(uint256 amount) internal override {
+    function _completeBurn(bytes32 id) internal override {
         // TODO call claim withdrawals on unstETH contract. Then wrap it to WETH.
+        unstETH.claimWithdrawal(uint256(id));
     }
 }

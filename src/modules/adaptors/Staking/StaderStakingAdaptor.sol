@@ -5,8 +5,8 @@ import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
 
-interface ISTETH {
-    function submit(address referral) external payable;
+interface IStakePoolManager {
+    function deposit(address _receiver) external payable returns (uint256);
 }
 
 interface IWSTETH {
@@ -15,29 +15,20 @@ interface IWSTETH {
     function unwrap(uint256 amount) external;
 }
 
-interface IUNSTETH {
-    struct WithdrawalRequest {
-        /// @notice sum of the all stETH submitted for withdrawals including this request
-        uint128 cumulativeStETH;
-        /// @notice sum of the all shares locked for withdrawal including this request
-        uint128 cumulativeShares;
-        /// @notice address that can claim or transfer the request
+interface IUserWithdrawManager {
+    struct WithdrawRequest {
         address owner;
-        /// @notice block.timestamp when the request was created
-        uint40 timestamp;
-        /// @notice flag if the request was claimed
-        bool claimed;
-        /// @notice timestamp of last oracle report for this request
-        uint40 reportTimestamp;
+        uint256 ethXAmount;
+        uint256 ethExpected;
+        uint256 ethFinalized;
+        uint256 requestTime;
     }
 
-    function getWithdrawalRequests(address user) external view returns (uint256[] memory);
+    function requestWithdraw(uint256 _ethXAmount, address _owner) external returns (uint256);
 
-    function getWithdrawalStatus(
-        uint256[] calldata _requestIds
-    ) external view returns (WithdrawalRequestStatus[] memory statuses);
+    function claim(uint256 _requestId) external;
 
-    function getLastFinalizedRequestId() external view returns (uint256);
+    function userWithdrawRequests(uint256) external view returns (WithdrawRequest memory);
 }
 
 /**
@@ -59,19 +50,16 @@ contract StaderStakingAdaptor is StakingAdaptor {
     // expose the swap function to strategists during rebalances.
     //====================================================================
 
-    ISTETH public immutable stETH;
-    IWSTETH public immutable wstETH;
-    IUNSTETH public immutable unstETH;
+    IStakePoolManager public immutable stakePoolManager;
+    IUserWithdrawManager public immutable userWithdrawManager;
 
     constructor(
         IWETH9 _wrappedNative,
-        ISTETH _stETH,
-        IWSTETH _wstETH,
-        IUNSTETH _unstETH
-    ) StakingAdaptor(_wrappedNative) {
-        stETH = _stETH;
-        wstETH = _wstETH;
-        unstETH = _unstETH;
+        IStakePoolManager _stakePoolManager,
+        IUserWithdrawManager _userWithdrawManager
+    ) StakingAdaptor(_wrappedNative, 8) {
+        stakePoolManager = _stakePoolManager;
+        userWithdrawManager = _userWithdrawManager;
     }
 
     //============================================ Global Functions ===========================================
@@ -87,23 +75,18 @@ contract StaderStakingAdaptor is StakingAdaptor {
 
     //============================================ Override Functions ===========================================
     function _mint(uint256 amount) internal override {
-        stETH.submit{ value: amount }(address(0));
+        stakePoolManager.deposit{ value: amount }(address(this));
     }
 
-    function _wrap(uint256 amount) internal override {
-        wstETH.wrap(amount);
-    }
+    function _balanceOf(address account) internal view override returns (uint256 amount) {
+        bytes32[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
 
-    function _unwrap(uint256 amount) internal override {
-        wstETH.unwrap(amount);
-    }
-
-    function _getPendingWithdraw(
-        address account
-    ) internal view override returns (bool isRequestActive, bool isRequestPending, uint256 amount) {
-        // Call getRewuestIdsByUser
-        // Call userWithdrawRequests(uint256 id)
-        // call nextRequestIdToFinalize to see if request is finalized.
+        for (uint256 i; i < requests.length; ++i) {
+            IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
+                uint256(requests[i])
+            );
+            amount += request.ethExpected;
+        }
     }
 
     // TODO so an attacker could just send the cellar their NFT, to cause a rebalance to revert, so maybe I should use unstructured storage to store the request id.
@@ -111,11 +94,11 @@ contract StaderStakingAdaptor is StakingAdaptor {
     // TODO but do I really need unstructured storage? Or can I just make an external call to the adaptor to write to a mapping <----- this
     // could probs jsut store a bytes32 then encode.decode however I need to.
     // https://etherscan.io/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
-    function _requestBurn(uint256 amount) internal override {
+    function _requestBurn(uint256 amount) internal override returns (bytes32 id) {
         // TODO Call requestWithdraw
     }
 
-    function _completeBurn(uint256 amount) internal override {
+    function _completeBurn(bytes32 id) internal override {
         // TODO call claim
     }
 }

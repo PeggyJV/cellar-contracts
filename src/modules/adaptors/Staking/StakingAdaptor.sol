@@ -19,10 +19,48 @@ abstract contract StakingAdaptor is BaseAdaptor {
     // interact with staking protocols.
     //====================================================================
 
+    // If I find that all protocols use uint256, just make this uint256
+    mapping(address => bytes32[]) public requestIds;
+
     IWETH9 public immutable wrappedNative;
 
-    constructor(IWETH9 _wrappedNative) {
+    address internal immutable adaptorAddress;
+
+    uint8 internal immutable maximumRequests;
+
+    constructor(IWETH9 _wrappedNative, uint8 _maximumRequests) {
         wrappedNative = _wrappedNative;
+        maximumRequests = _maximumRequests;
+    }
+
+    // TODO use unstructured storage to prevent cellar directly calling this.
+    // Does not check for unique ids.
+    function addRequestId(bytes32 id) external {
+        bytes32[] storage ids = requestIds[msg.sender];
+        uint256 idsLength = ids.length;
+        if (idsLength >= maximumRequests) revert("Max exceeded");
+        for (uint256 i = 0; i < idsLength; ++i) {
+            if (ids[i] == id) revert("Duplicate id");
+        }
+        ids.push(id);
+    }
+
+    function removeRequestId(bytes32 id) external {
+        bytes32[] storage ids = requestIds[msg.sender];
+        uint256 idsLength = ids.length;
+        for (uint256 i = 0; i < idsLength; ++i) {
+            if (ids[i] == id) {
+                // Copy last element to current position.
+                ids[i] = ids[idsLength - 1];
+                ids.pop();
+                return;
+            }
+        }
+        revert("Id not found");
+    }
+
+    function getRequestIds(address user) external view returns (bytes32[] memory) {
+        return requestIds[user];
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -53,35 +91,16 @@ abstract contract StakingAdaptor is BaseAdaptor {
     /**
      * @notice Returns the balance of `token`.
      */
-    //  TODO this should return the amount of native that you get out of teh claim even if the claim is pending.
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (ERC20 native, ERC20 derivative) = abi.decode(adaptorData, (ERC20, ERC20));
-        (, , uint256 amount) = _getPendingWithdraw(msg.sender);
-        return amount;
-        // TODO check if there is a withdraw pending
-        // If we are still waiting for it to be confirmed, return derivative balance
-        // If withdraw period is over, return native balance
+    function balanceOf(bytes memory) public view override returns (uint256) {
+        return _balanceOf(msg.sender);
     }
 
     /**
      * @notice Returns `token`
      */
-    //  TODO I think this should always return native, since once you deposit a lot of these protocols will save the exchange rate, so you get no more rewards.
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (ERC20 native, ERC20 derivative) = abi.decode(adaptorData, (ERC20, ERC20));
-        (bool isRequestActive, bool isRequestPending, ) = _getPendingWithdraw(msg.sender);
-        if (isRequestActive) {
-            if (isRequestPending) {
-                // We have an active request that is pending, return derivative
-                return derivative;
-            } else {
-                // We have an active request that is matured, return native
-                return native;
-            }
-        } else {
-            // We do not have an active request, so balance will be zero, so just return native.
-            return native;
-        }
+    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
+        ERC20 native = abi.decode(adaptorData, (ERC20));
+        return native;
     }
 
     /**
@@ -101,27 +120,39 @@ abstract contract StakingAdaptor is BaseAdaptor {
     }
 
     function requestBurn(uint256 amount) external {
-        (bool isRequestActive, , ) = _getPendingWithdraw(address(this));
-        if (isRequestActive) revert("Can not start a new burn.");
+        bytes32 id = _requestBurn(amount);
+
+        // Add request id to staking adaptor.
+        StakingAdaptor(adaptorAddress).addRequestId(id);
     }
 
-    function completeBurn() external {}
+    function completeBurn(bytes32 id) external {
+        _completeBurn(id);
+        StakingAdaptor(adaptorAddress).removeRequestId(id);
+    }
 
-    // amount should either be zero if there is no active request, or the amount of the deriviative or native.
-    function _getPendingWithdraw(
-        address account
-    ) internal view virtual returns (bool isRequestActive, bool isRequestPending, uint256 amount);
+    function wrap(uint256 amount) external {
+        _wrap(amount);
+    }
+
+    function unwrap(uint256 amount) external {
+        _unwrap(amount);
+    }
+
+    // should return the amount of native that is pending and matured that is owed to `account`.
+    function _balanceOf(address account) internal view virtual returns (uint256 amount);
 
     function _mint(uint256 amount) internal virtual;
 
-    function _wrap(uint256 amount) internal virtual;
+    function _wrap(uint256) internal virtual {
+        revert("Not supported");
+    }
 
-    function _unwrap(uint256 amount) internal virtual;
+    function _unwrap(uint256) internal virtual {
+        revert("Not supported");
+    }
 
-    function _requestBurn(uint256 amount) internal virtual;
+    function _requestBurn(uint256 amount) internal virtual returns (bytes32 id);
 
-    function _completeBurn(uint256 amount) internal virtual;
-
-    // TODO I actually think this contract should ONLY report the native balance, cuz once a request is made, we stop accruing rewards
-    // also I dont think there is a way to cancel a requeset.
+    function _completeBurn(bytes32 id) internal virtual;
 }
