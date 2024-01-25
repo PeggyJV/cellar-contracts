@@ -48,12 +48,14 @@ contract eEthExtension is Extension {
      * @notice Called during pricing operations.
      * @dev asset not used since setup function confirms `asset` is weETH.
      * @return price of eETH in USD [USD/eETH]
+     * TODO - confirm that units are [weETH / eETH] for `getRate()`
      */
     function getPriceInUSD(ERC20) external view override returns (uint256) {
-        // get weETH/eETH exchange rate from weETH contract [weETH / eETH] --> 18 decimals
-        uint256 exchangeRate = IRateProvider(weETH).getRate(); // TODO - confirm that units are [weETH / eETH]
-
-        // get price: [USD/eETH] = [USD/weETH] * [weETH / eETH]
-        return exchangeRate.mulDivDown(priceRouter.getPriceInUSD(ERC20(weETH)), 10 ** ERC20(weETH).decimals());
+        // get price: [USD/eETH] =  [weETH / eETH] * [USD/weETH]
+        return
+            IRateProvider(weETH).getRate().mulDivDown(
+                priceRouter.getPriceInUSD(ERC20(weETH)),
+                10 ** ERC20(weETH).decimals()
+            );
     }
 }
