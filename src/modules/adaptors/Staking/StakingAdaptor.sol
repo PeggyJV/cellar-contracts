@@ -162,6 +162,12 @@ abstract contract StakingAdaptor is BaseAdaptor {
         _unwrap(amount);
     }
 
+    function mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) external {
+        if (amount == 0) revert StakingAdaptor__ZeroAmount();
+
+        _mintERC20(depositAsset, amount, minAmountOut);
+    }
+
     // should return the amount of primitive that is pending and matured that is owed to `account`.
     function _balanceOf(address) internal view virtual returns (uint256) {
         revert StakingAdaptor__NotSupported();
@@ -188,6 +194,10 @@ abstract contract StakingAdaptor is BaseAdaptor {
     }
 
     function _cancelBurn(uint256) internal virtual {
+        revert StakingAdaptor__NotSupported();
+    }
+
+    function _mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) internal virtual {
         revert StakingAdaptor__NotSupported();
     }
 }

@@ -814,4 +814,12 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToCancelBurnRequest(uint256 id) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(StakingAdaptor.cancelBurn.selector, id);
     }
+
+    function _createBytesDataToMintERC20(
+        ERC20 depositAsset,
+        uint256 amount,
+        uint256 minAmountOut
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mintERC20.selector, depositAsset, amount, minAmountOut);
+    }
 }

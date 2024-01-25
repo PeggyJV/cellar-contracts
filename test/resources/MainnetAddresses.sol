@@ -58,6 +58,8 @@ contract MainnetAddresses {
     ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
     ERC20 public WEETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
     ERC20 public EETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
+    ERC20 public EZETH = ERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
+    ERC20 public RSETH = ERC20(0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -293,4 +295,10 @@ contract MainnetAddresses {
     // Etherfi
     address public liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
     address public withdrawalRequestNft = 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c;
+
+    // Renzo
+    address public restakeManager = 0x74a09653A083691711cF8215a6ab074BB4e99ef5;
+
+    // Kelp DAO
+    address public lrtDepositPool = 0x036676389e48133B63a802f8635AD39E752D375D;
 }
