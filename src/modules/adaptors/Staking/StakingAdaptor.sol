@@ -11,13 +11,21 @@ abstract contract StakingAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // NOT USED
+    // adaptorData = abi.encode(ERC20 primitive)
+    // Where:
+    // primitive is the primitive asset that is returned from unstaking/burning a derivative.
     //================= Configuration Data Specification =================
     // NOT USED
-    // **************************** IMPORTANT ****************************
-    // This adaptor has NO underlying position, its only purpose is to
-    // interact with staking protocols.
     //====================================================================
+
+    // ========================================= GLOBAL STATE =========================================
+
+    /**
+     * @notice Stores burn/withdraw request ids for callers.
+     */
+    mapping(address => uint256[]) public requestIds;
+
+    //========================================= ERRORS =========================================
 
     error StakingAdaptor__RequestNotFound(uint256 id);
     error StakingAdaptor__DuplicateRequest(uint256 id);
@@ -25,24 +33,98 @@ abstract contract StakingAdaptor is BaseAdaptor {
     error StakingAdaptor__NotSupported();
     error StakingAdaptor__ZeroAmount();
 
-    // If I find that all protocols use uint256, just make this uint256
-    mapping(address => uint256[]) public requestIds;
+    /**
+     * @notice Attempted to read `locked` from unstructured storage, but found uninitialized value.
+     * @dev Most likely an external contract made a delegate call to this contract.
+     */
+    error StakingAdaptor___StorageSlotNotInitialized();
 
+    /**
+     * @notice Attempted to reenter into this contract.
+     */
+    error StakingAdaptor___Reentrancy();
+
+    //========================================= IMMUTABLES ==========================================
+
+    /**
+     * @notice The wrapper contract for the primitive/native asset.
+     */
     IWETH9 public immutable wrappedPrimitive;
 
+    /**
+     * @notice The address of this adaptor.
+     */
     address internal immutable adaptorAddress;
 
+    /**
+     * @notice The maximum requests a caller can store in `requestIds`.
+     * @dev This cap is here because `requestIds` must be iterated through in `_balanceOf`
+     *      and it is unsafe to have an unbounded for loop.
+     */
     uint8 internal immutable maximumRequests;
+
+    /**
+     * @notice The slot to store value needed to check for re-entrancy.
+     */
+    bytes32 public immutable lockedStoragePosition;
 
     constructor(address _wrappedPrimitive, uint8 _maximumRequests) {
         wrappedPrimitive = IWETH9(_wrappedPrimitive);
         maximumRequests = _maximumRequests;
         adaptorAddress = address(this);
+
+        lockedStoragePosition =
+            keccak256(abi.encode(uint256(keccak256("staking.adaptor.storage")) - 1)) &
+            ~bytes32(uint256(0xff));
+
+        // Initialize locked storage to 1;
+        setLockedStorage(1);
     }
 
-    // TODO use unstructured storage to prevent cellar directly calling this.
-    // Does not check for unique ids.
-    function addRequestId(uint256 id) external {
+    //========================================= Unstructured Reentrancy =========================================
+
+    /**
+     * @notice Helper function to read `locked` from unstructured storage.
+     */
+    function readLockedStorage() internal view returns (uint256 locked) {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            locked := sload(position)
+        }
+    }
+
+    /**
+     * @notice Helper function to set `locked` to unstructured storage.
+     */
+    function setLockedStorage(uint256 state) internal {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            sstore(position, state)
+        }
+    }
+
+    /**
+     * @notice nonReentrant modifier that uses unstructured storage.
+     */
+    modifier nonReentrant() virtual {
+        uint256 locked = readLockedStorage();
+        if (locked == 0) revert StakingAdaptor___StorageSlotNotInitialized();
+        if (locked != 1) revert StakingAdaptor___Reentrancy();
+
+        setLockedStorage(2);
+
+        _;
+
+        setLockedStorage(1);
+    }
+
+    //========================================= Request Id Storage =========================================
+
+    /**
+     * @notice Add a request id to callers `requestIds` array.
+     * @dev Reverts if maximum requests are stored, or if request id is duplicated.
+     */
+    function addRequestId(uint256 id) external nonReentrant {
         uint256[] storage ids = requestIds[msg.sender];
         uint256 idsLength = ids.length;
         if (idsLength >= maximumRequests) revert StakingAdaptor__MaximumRequestsExceeded();
@@ -52,7 +134,11 @@ abstract contract StakingAdaptor is BaseAdaptor {
         ids.push(id);
     }
 
-    function removeRequestId(uint256 id) external {
+    /**
+     * @notice Remove a request id from callers `requestIds` array.
+     * @dev Reverts if request id is not found.
+     */
+    function removeRequestId(uint256 id) external nonReentrant {
         uint256[] storage ids = requestIds[msg.sender];
         uint256 idsLength = ids.length;
         for (uint256 i = 0; i < idsLength; ++i) {
@@ -66,44 +152,45 @@ abstract contract StakingAdaptor is BaseAdaptor {
         revert StakingAdaptor__RequestNotFound(id);
     }
 
+    /**
+     * @notice Get a callers `requestIds` array.
+     */
     function getRequestIds(address user) external view returns (uint256[] memory) {
         return requestIds[user];
     }
 
     //============================================ Implement Base Functions ===========================================
+
     /**
-     * @notice Cellar already has possession of users ERC20 assets by the time this function is called,
-     *         so there is nothing to do.
+     * @notice This adaptor does not support user deposits.
      */
     function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
-     * @notice Cellar just needs to transfer ERC20 token to `receiver`.
-     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
+     * @notice This adaptor does not support user withdraws.
      */
     function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
     /**
-     * @notice Identical to `balanceOf`, if an asset is used with a non ERC20 standard locking logic,
-     *         then a NEW adaptor contract is needed.
+     * @notice This adaptor is not user withdrawable.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the balance of `token`.
+     * @notice Returns the balance of `primitive` that is unstaking.
      */
     function balanceOf(bytes memory) public view override returns (uint256) {
         return _balanceOf(msg.sender);
     }
 
     /**
-     * @notice Returns `token`
+     * @notice Returns `primitive`
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 primitive = abi.decode(adaptorData, (ERC20));
@@ -119,6 +206,11 @@ abstract contract StakingAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
+    /**
+     * @notice Allows a strategist to `mint` a derivative asset using the chains native asset.
+     * @dev Will automatically unwrap the native asset.
+     * @param amount the amount of native asset to use for minting
+     */
     function mint(uint256 amount) external {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
@@ -128,6 +220,10 @@ abstract contract StakingAdaptor is BaseAdaptor {
         _mint(amount);
     }
 
+    /**
+     * @notice Allows a strategist to request to burn/withdraw a derivative for a chains native asset.
+     * @param amount the amount of derivative to burn/withdraw
+     */
     function requestBurn(uint256 amount) external {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
@@ -137,6 +233,11 @@ abstract contract StakingAdaptor is BaseAdaptor {
         StakingAdaptor(adaptorAddress).addRequestId(id);
     }
 
+    /**
+     * @notice Allows a strategist to complete a burn/withdraw of a derivative asset for a native asset.
+     * @dev Will automatically wrap the native asset received from burn/withdraw.
+     * @param id the request id
+     */
     function completeBurn(uint256 id) external {
         uint256 primitiveDelta = address(this).balance;
         _completeBurn(id);
@@ -145,59 +246,132 @@ abstract contract StakingAdaptor is BaseAdaptor {
         StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
 
+    /**
+     * @notice Allows a strategist to cancel an active burn/withdraw request.
+     * @param id the request id
+     */
     function cancelBurn(uint256 id) external {
         _cancelBurn(id);
         StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
 
+    /**
+     * @notice Allows a strategist to wrap a derivative asset.
+     * @param amount the amount of derivative to wrap
+     */
     function wrap(uint256 amount) external {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _wrap(amount);
     }
 
+    /**
+     * @notice Allows a strategist to unwrap a wrapped derivative asset.
+     * @param amount the amount of wrapped derivative to unwrap
+     */
     function unwrap(uint256 amount) external {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _unwrap(amount);
     }
 
+    /**
+     * @notice Allows a strategist to mint a derivative asset using an ERC20.
+     * @param depositAsset the ERC20 asset to mint with
+     * @param amount the amount of `depositAsset` to mint with
+     * @param minAmountOut the minimum amount of derivative out
+     */
     function mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) external {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _mintERC20(depositAsset, amount, minAmountOut);
     }
 
-    // should return the amount of primitive that is pending and matured that is owed to `account`.
+    //============================================ Interface Helper Functions ===========================================
+    //============================== Interface Details =========================================
+    // Staking protocols have very similar patterns when staking/unstaking, and wrapping/unwrapping.
+    // This pattern has been generalized to the below interface helper functions.
+    // Note inheriting adaptors do NOT need to implement all helper functions, rather they
+    // should only implement the functions that they actually logically support.
+    // ie A lot of protocols do not suppoer unstaking, so the burn related functions should not be
+    // implemented. Some protocols do not have a wrapped asset, so the wrapping functions
+    // should not be implemented.
+
+    // Note the below base implementations use this weird `if (true) revert` pattern so that
+    // if a helper interface is not implemented, calls to the associated strategist function will
+    // revert.
+    // Also this was the only way I could get it so that the compiler would not complain about
+    // unreachable code :)
+    //==========================================================================================
+
+    /**
+     * @notice An inheriting adaptor should implement `_balanceOf` if they support unstaking.
+     * @dev Should report both balances in both pending and finalized unstaking requests.
+     * @dev Address input is the address to get balances for.
+     */
     function _balanceOf(address) internal view virtual returns (uint256) {
-        revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_mint` if they support staking with native.
+     * @dev Uint256 is the amount of native to mint with.
+     */
     function _mint(uint256) internal virtual {
-        revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_wrap` if they support wrapping a derivative.
+     * @dev Uint256 is the amount of derivative to wrap.
+     */
     function _wrap(uint256) internal virtual {
-        revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_unwrap` if they support unwrapping a derivative.
+     * @dev Uint256 is the amount of wrapped derivative to unwrap.
+     */
     function _unwrap(uint256) internal virtual {
-        revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_requestBurn` if they support unstaking.
+     * @dev Uint256 is the amount of derivative to unstake.
+     * @dev Returns the request id.
+     */
     function _requestBurn(uint256) internal virtual returns (uint256) {
-        // revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_completeBurn` if they support unstaking.
+     * @dev Uint256 is the request id.
+     */
     function _completeBurn(uint256) internal virtual {
-        // revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
     }
 
+    /**
+     * @notice An inheriting adaptor should implement `_cancelBurn` if they support canceling unstaking.
+     * @dev Uint256 is the request id.
+     */
     function _cancelBurn(uint256) internal virtual {
-        revert StakingAdaptor__NotSupported();
+        if (true) revert StakingAdaptor__NotSupported();
     }
 
-    function _mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) internal virtual {
-        revert StakingAdaptor__NotSupported();
+    /**
+     * @notice An inheriting adaptor should implement `_mintERC20` if they support minting using ERC20 assets.
+     * @dev It is a could idea for interhiting adaptors to implement a value in vs value out check.
+     * @dev First arg is the ERC20 to mint with.
+     * @dev Second arg is the amount of ERC20.
+     * @dev Third arg is the minimum amount of derivative out from mint.
+     */
+    function _mintERC20(ERC20, uint256, uint256) internal virtual {
+        if (true) revert StakingAdaptor__NotSupported();
     }
 }

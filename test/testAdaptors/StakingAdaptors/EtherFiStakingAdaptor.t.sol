@@ -5,6 +5,7 @@ import { EtherFiStakingAdaptor, StakingAdaptor, IWithdrawRequestNft } from "src/
 import { CellarWithNativeSupport } from "src/base/permutations/CellarWithNativeSupport.sol";
 import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -15,6 +16,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
+    using Address for address payable;
 
     EtherFiStakingAdaptor private etherFiAdaptor;
     CellarWithNativeSupport private cellar;
@@ -292,7 +294,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         vm.stopPrank();
 
         deal(address(this), amount);
-        payable(liquidityPool).call{ value: amount }("");
+        payable(liquidityPool).functionCallWithValue("", amount);
 
         w.finalizeRequests(requestId);
     }

@@ -1,33 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { KelpDAOStakingAdaptor, StakingAdaptor } from "src/modules/adaptors/Staking/KelpDAOStakingAdaptor.sol";
+import { SwellStakingAdaptor, StakingAdaptor } from "src/modules/adaptors/Staking/SwellStakingAdaptor.sol";
 import { CellarWithNativeSupport } from "src/base/permutations/CellarWithNativeSupport.sol";
 import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
-import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
-
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
+contract SwellStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    KelpDAOStakingAdaptor private kelpDAOAdaptor;
+    SwellStakingAdaptor private swellAdaptor;
     CellarWithNativeSupport private cellar;
     RedstonePriceFeedExtension private redstonePriceFeedExtension;
-    MockDataFeed public mockRSETHdataFeed;
 
     uint32 public wethPosition = 1;
-    uint32 public rsethPosition = 2;
-    uint32 public ethXPosition = 3;
+    uint32 public swethPosition = 2;
 
     ERC20 public primitive = WETH;
-    ERC20 public derivative = RSETH;
+    ERC20 public derivative = SWETH;
     ERC20 public wrappedDerivative = ERC20(address(0));
 
     uint256 public initialAssets;
@@ -43,9 +39,8 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         // Run Starter setUp code.
         _setUp();
 
-        kelpDAOAdaptor = new KelpDAOStakingAdaptor(address(WETH), lrtDepositPool, address(RSETH));
+        swellAdaptor = new SwellStakingAdaptor(address(WETH), address(SWETH));
         redstonePriceFeedExtension = new RedstonePriceFeedExtension(priceRouter);
-        mockRSETHdataFeed = new MockDataFeed(WETH_USD_FEED);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -55,29 +50,22 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
-        // Set RSETH to be 1:1 with ETH.
-        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockRSETHdataFeed));
-        priceRouter.addAsset(RSETH, settings, abi.encode(stor), price);
-
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtension));
         RedstonePriceFeedExtension.ExtensionStorage memory rstor;
-        rstor.dataFeedId = 0x4554487800000000000000000000000000000000000000000000000000000000;
+        rstor.dataFeedId = swEthDataFeedId;
         rstor.heartbeat = 1 days;
-        rstor.redstoneAdapter = IRedstoneAdapter(ethXAdapter);
-        price = IRedstoneAdapter(ethXAdapter).getValueForDataFeed(rstor.dataFeedId);
-        priceRouter.addAsset(ETHX, settings, abi.encode(rstor), price);
-
+        rstor.redstoneAdapter = IRedstoneAdapter(swEthAdapter);
+        price = IRedstoneAdapter(swEthAdapter).getValueForDataFeed(rstor.dataFeedId);
+        priceRouter.addAsset(SWETH, settings, abi.encode(rstor), price);
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(kelpDAOAdaptor));
+        registry.trustAdaptor(address(swellAdaptor));
 
         registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(rsethPosition, address(erc20Adaptor), abi.encode(RSETH));
-        registry.trustPosition(ethXPosition, address(erc20Adaptor), abi.encode(ETHX));
+        registry.trustPosition(swethPosition, address(erc20Adaptor), abi.encode(SWETH));
 
-        string memory cellarName = "Renzo Cellar V0.0";
+        string memory cellarName = "Swell Cellar V0.0";
         uint256 initialDeposit = 0.0001e18;
         uint64 platformCut = 0.75e18;
 
@@ -90,15 +78,12 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
             platformCut
         );
 
-        cellar.addAdaptorToCatalogue(address(kelpDAOAdaptor));
+        cellar.addAdaptorToCatalogue(address(swellAdaptor));
 
-        cellar.addPositionToCatalogue(rsethPosition);
-        cellar.addPositionToCatalogue(ethXPosition);
+        cellar.addPositionToCatalogue(swethPosition);
+        cellar.addPosition(1, swethPosition, abi.encode(true), false);
 
-        cellar.addPosition(1, rsethPosition, abi.encode(true), false);
-        cellar.addPosition(2, ethXPosition, abi.encode(true), false);
-
-        cellar.setRebalanceDeviation(0.03e18);
+        cellar.setRebalanceDeviation(0.01e18);
 
         initialAssets = initialDeposit;
 
@@ -106,69 +91,33 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
     }
 
     function testMint(uint256 mintAmount) external {
-        mintAmount = bound(mintAmount, 0.001e18, 10_000e18);
+        mintAmount = bound(mintAmount, 0.0001e18, 10_000e18);
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
-
-        // Simulate a swap/mint.
-        uint256 ethXAmount = priceRouter.getValue(WETH, mintAmount, ETHX);
-        deal(address(WETH), address(cellar), initialAssets);
-        deal(address(ETHX), address(cellar), ethXAmount);
-
         // Rebalance Cellar to mint derivative.
-        _mintDeriviativeERC20(ETHX, ethXAmount, 0);
-        assertApproxEqAbs(ETHX.balanceOf(address(cellar)), 0, 2, "Should have used all ETHX to mint.");
-        uint256 expectedDerivativeAmount = priceRouter.getValue(ETHX, mintAmount, derivative);
+        _mintDeriviative(mintAmount);
+        assertApproxEqAbs(
+            primitive.balanceOf(address(cellar)),
+            initialAssets,
+            2,
+            "Should only have initialAssets of primitive left."
+        );
+        uint256 expectedDerivativeAmount = priceRouter.getValue(primitive, mintAmount, derivative);
         assertApproxEqRel(
             derivative.balanceOf(address(cellar)),
             expectedDerivativeAmount,
-            0.05e18,
+            0.01e18,
             "Should have minted wrapped derivative with mintAmount."
         );
     }
 
-    function testIllogicalInputs() external {
-        uint256 mintAmount = 1_000e18;
-        deal(address(primitive), address(this), mintAmount);
-        cellar.deposit(mintAmount, address(this));
-
-        // Try minting with an asset that is not supported.
-        vm.expectRevert();
-        _mintDeriviativeERC20(LINK, mintAmount, 0);
-
-        // Simulate a swap/mint.
-        uint256 ethXAmount = priceRouter.getValue(WETH, mintAmount, ETHX);
-        deal(address(WETH), address(cellar), initialAssets);
-        deal(address(ETHX), address(cellar), ethXAmount);
-
-        // Check that min amount out works.
-        vm.expectRevert();
-        _mintDeriviativeERC20(ETHX, ethXAmount, type(uint256).max);
-
-        // Check slippage revert.
-        uint256 rsETHValue = priceRouter.getPriceInUSD(WETH);
-        rsETHValue = rsETHValue.mulDivDown(0.9e4, 1e4);
-        mockRSETHdataFeed.setMockAnswer(int256(rsETHValue));
-
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    KelpDAOStakingAdaptor.KelpDAOStakingAdaptor__Slippage.selector,
-                    988978075745340096142,
-                    999999999999999999999
-                )
-            )
-        );
-        _mintDeriviativeERC20(ETHX, ethXAmount, 0);
-    }
-
-    function _mintDeriviativeERC20(ERC20 depositAsset, uint256 mintAmount, uint256 minMintAmountOut) internal {
+    function _mintDeriviative(uint256 mintAmount) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMintERC20(depositAsset, mintAmount, minMintAmountOut);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount);
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(kelpDAOAdaptor), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swellAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 

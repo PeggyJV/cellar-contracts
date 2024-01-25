@@ -144,7 +144,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
 
-        uint256 requestId = staderAdaptor.requestIds(address(cellar), 0);
+        // uint256 requestId = staderAdaptor.requestIds(address(cellar), 0);
 
         // _finalizeRequest(requestId, mintAmount);
 
