@@ -4,19 +4,11 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
-
-interface ILRTDepositPool {
-    function depositAsset(
-        address asset,
-        uint256 depositAmount,
-        uint256 minRSETHAmountToReceive,
-        string calldata referralId
-    ) external;
-}
+import { ILRTDepositPool } from "src/interfaces/external/IStaking.sol";
 
 /**
  * @title Kelp DAO Staking Adaptor
- * @notice Allows Cellars to swap with 0x.
+ * @notice Allows Cellars to stake with Kelp.
  * @author crispymangoes
  */
 contract KelpDAOStakingAdaptor is StakingAdaptor {
@@ -24,21 +16,27 @@ contract KelpDAOStakingAdaptor is StakingAdaptor {
     using Math for uint256;
     using Address for address;
 
-    //==================== Adaptor Data Specification ====================
-    // NOT USED
-    //================= Configuration Data Specification =================
-    // NOT USED
-    // **************************** IMPORTANT ****************************
-    // This adaptor has NO underlying position, its only purpose is to
-    // expose the swap function to strategists during rebalances.
-    //====================================================================
-
+    /**
+     * @notice Attempted mint had high slippage.
+     */
     error KelpDAOStakingAdaptor__Slippage(uint256 valueOut, uint256 minValueOut);
 
+    /**
+     * @notice LRT deposit pool deposits are made to.
+     */
     ILRTDepositPool public immutable lrtDepositPool;
+
+    /**
+     * @notice Token returned from deposits.
+     */
     ERC20 public immutable rsETH;
 
-    constructor(address _wrappedNative, address _lrtDepositPool, address _rsETH) StakingAdaptor(_wrappedNative, 8) {
+    constructor(
+        address _wrappedNative,
+        uint8 _maxRequests,
+        address _lrtDepositPool,
+        address _rsETH
+    ) StakingAdaptor(_wrappedNative, _maxRequests) {
         lrtDepositPool = ILRTDepositPool(_lrtDepositPool);
         rsETH = ERC20(_rsETH);
     }
@@ -51,11 +49,14 @@ contract KelpDAOStakingAdaptor is StakingAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Kelp DAO Staking Adaptor V 1.1"));
+        return keccak256(abi.encode("Kelp DAO Staking Adaptor V 0.0"));
     }
 
     //============================================ Override Functions ===========================================
 
+    /**
+     * @notice Deposit into Kelp LRT pool to get rsETH.
+     */
     function _mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) internal override {
         depositAsset.safeApprove(address(lrtDepositPool), amount);
         uint256 valueOut = rsETH.balanceOf(address(this));

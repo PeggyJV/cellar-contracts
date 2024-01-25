@@ -4,14 +4,11 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
-
-interface IRestakeManager {
-    function depositETH() external payable;
-}
+import { IRestakeManager } from "src/interfaces/external/IStaking.sol";
 
 /**
  * @title Renzo Staking Adaptor
- * @notice Allows Cellars to swap with 0x.
+ * @notice Allows Cellars to stake with Renzo.
  * @author crispymangoes
  */
 contract RenzoStakingAdaptor is StakingAdaptor {
@@ -19,18 +16,16 @@ contract RenzoStakingAdaptor is StakingAdaptor {
     using Math for uint256;
     using Address for address;
 
-    //==================== Adaptor Data Specification ====================
-    // NOT USED
-    //================= Configuration Data Specification =================
-    // NOT USED
-    // **************************** IMPORTANT ****************************
-    // This adaptor has NO underlying position, its only purpose is to
-    // expose the swap function to strategists during rebalances.
-    //====================================================================
-
+    /**
+     * @notice The Renzo contract staking calls are made to.
+     */
     IRestakeManager public immutable restakeManager;
 
-    constructor(address _wrappedNative, address _restakeManager) StakingAdaptor(_wrappedNative, 8) {
+    constructor(
+        address _wrappedNative,
+        uint8 _maxRequests,
+        address _restakeManager
+    ) StakingAdaptor(_wrappedNative, _maxRequests) {
         restakeManager = IRestakeManager(_restakeManager);
     }
 
@@ -46,7 +41,10 @@ contract RenzoStakingAdaptor is StakingAdaptor {
     }
 
     //============================================ Override Functions ===========================================
-    // 0x74a09653A083691711cF8215a6ab074BB4e99ef5
+
+    /**
+     * @notice Stakes into Renzo using native asset.
+     */
     function _mint(uint256 amount) internal override {
         restakeManager.depositETH{ value: amount }();
     }

@@ -37,7 +37,7 @@ contract RenzoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Run Starter setUp code.
         _setUp();
 
-        renzoAdaptor = new RenzoStakingAdaptor(address(WETH), restakeManager);
+        renzoAdaptor = new RenzoStakingAdaptor(address(WETH), 8, restakeManager);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 

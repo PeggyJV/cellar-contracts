@@ -39,7 +39,7 @@ contract SwellStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Run Starter setUp code.
         _setUp();
 
-        swellAdaptor = new SwellStakingAdaptor(address(WETH), address(SWETH));
+        swellAdaptor = new SwellStakingAdaptor(address(WETH), 8, address(SWETH));
         redstonePriceFeedExtension = new RedstonePriceFeedExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

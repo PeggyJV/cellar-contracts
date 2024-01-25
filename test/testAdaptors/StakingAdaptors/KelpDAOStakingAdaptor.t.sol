@@ -43,7 +43,7 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         // Run Starter setUp code.
         _setUp();
 
-        kelpDAOAdaptor = new KelpDAOStakingAdaptor(address(WETH), lrtDepositPool, address(RSETH));
+        kelpDAOAdaptor = new KelpDAOStakingAdaptor(address(WETH), 8, lrtDepositPool, address(RSETH));
         redstonePriceFeedExtension = new RedstonePriceFeedExtension(priceRouter);
         mockRSETHdataFeed = new MockDataFeed(WETH_USD_FEED);
 

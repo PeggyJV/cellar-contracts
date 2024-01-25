@@ -4,54 +4,11 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
-
-interface ISTETH {
-    function submit(address referral) external payable;
-}
-
-interface IWSTETH {
-    function wrap(uint256 amount) external;
-
-    function unwrap(uint256 amount) external;
-}
-
-interface IUNSTETH {
-    struct WithdrawalRequestStatus {
-        /// @notice stETH token amount that was locked on withdrawal queue for this request
-        uint256 amountOfStETH;
-        /// @notice amount of stETH shares locked on withdrawal queue for this request
-        uint256 amountOfShares;
-        /// @notice address that can claim or transfer this request
-        address owner;
-        /// @notice timestamp of when the request was created, in seconds
-        uint256 timestamp;
-        /// @notice true, if request is finalized
-        bool isFinalized;
-        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
-        bool isClaimed;
-    }
-
-    function getWithdrawalStatus(
-        uint256[] calldata _requestIds
-    ) external view returns (WithdrawalRequestStatus[] memory statuses);
-
-    function requestWithdrawals(
-        uint256[] calldata _amounts,
-        address _owner
-    ) external returns (uint256[] memory requestIds);
-
-    function claimWithdrawal(uint256 _requestId) external;
-
-    function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
-
-    function getRoleMember(bytes32 role, uint256 index) external view returns (address);
-
-    function FINALIZE_ROLE() external view returns (bytes32);
-}
+import { IUNSTETH, IWSTETH, ISTETH } from "src/interfaces/external/IStaking.sol";
 
 /**
  * @title Lido Staking Adaptor
- * @notice Allows Cellars to swap with 0x.
+ * @notice Allows Cellars to stake with Lido.
  * @author crispymangoes
  */
 contract LidoStakingAdaptor is StakingAdaptor {
@@ -59,17 +16,19 @@ contract LidoStakingAdaptor is StakingAdaptor {
     using Math for uint256;
     using Address for address;
 
-    //==================== Adaptor Data Specification ====================
-    // NOT USED
-    //================= Configuration Data Specification =================
-    // NOT USED
-    // **************************** IMPORTANT ****************************
-    // This adaptor has NO underlying position, its only purpose is to
-    // expose the swap function to strategists during rebalances.
-    //====================================================================
-
+    /**
+     * @notice stETH contract deposits are made to.
+     */
     ISTETH public immutable stETH;
+
+    /**
+     * @notice Wrapper contract for stETH.
+     */
     IWSTETH public immutable wstETH;
+
+    /**
+     * @notice Contract to handle stETH withdraws.
+     */
     IUNSTETH public immutable unstETH;
 
     constructor(
@@ -96,10 +55,17 @@ contract LidoStakingAdaptor is StakingAdaptor {
     }
 
     //============================================ Override Functions ===========================================
+
+    /**
+     * @notice Stakes into Lido using native asset.
+     */
     function _mint(uint256 amount) internal override {
         stETH.submit{ value: amount }(address(0));
     }
 
+    /**
+     * @notice Wrap stETH.
+     */
     function _wrap(uint256 amount) internal override {
         ERC20 derivative = ERC20(address(stETH));
         amount = _maxAvailable(derivative, amount);
@@ -108,11 +74,18 @@ contract LidoStakingAdaptor is StakingAdaptor {
         _revokeExternalApproval(derivative, address(wstETH));
     }
 
+    /**
+     * @notice Unwrap wstETH.
+     */
     function _unwrap(uint256 amount) internal override {
         amount = _maxAvailable(ERC20(address(wstETH)), amount);
         wstETH.unwrap(amount);
     }
 
+    // TODO verify that amountOfStETH is the actual amount of ETH sent.
+    /**
+     * @notice Returns balance in pending and finalized withdraw requests.
+     */
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
         IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
@@ -121,7 +94,9 @@ contract LidoStakingAdaptor is StakingAdaptor {
         }
     }
 
-    // https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1#writeProxyContract
+    /**
+     * @notice Request to withdraw.
+     */
     function _requestBurn(uint256 amount) internal override returns (uint256 id) {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
@@ -133,6 +108,9 @@ contract LidoStakingAdaptor is StakingAdaptor {
         id = ids[0];
     }
 
+    /**
+     * @notice Complete a withdraw.
+     */
     function _completeBurn(uint256 id) internal override {
         unstETH.claimWithdrawal(id);
     }

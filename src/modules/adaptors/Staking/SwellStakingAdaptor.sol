@@ -4,14 +4,11 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
-
-interface ISWETH {
-    function deposit() external payable;
-}
+import { ISWETH } from "src/interfaces/external/IStaking.sol";
 
 /**
  * @title Swell Staking Adaptor
- * @notice Allows Cellars to swap with 0x.
+ * @notice Allows Cellars to stake with Swell.
  * @author crispymangoes
  */
 contract SwellStakingAdaptor is StakingAdaptor {
@@ -19,18 +16,16 @@ contract SwellStakingAdaptor is StakingAdaptor {
     using Math for uint256;
     using Address for address;
 
-    //==================== Adaptor Data Specification ====================
-    // NOT USED
-    //================= Configuration Data Specification =================
-    // NOT USED
-    // **************************** IMPORTANT ****************************
-    // This adaptor has NO underlying position, its only purpose is to
-    // expose the swap function to strategists during rebalances.
-    //====================================================================
-
+    /**
+     * @notice The swETH contract staking calls are made to.
+     */
     ISWETH public immutable swETH;
 
-    constructor(address _wrappedNative, address _swETH) StakingAdaptor(_wrappedNative, 8) {
+    constructor(
+        address _wrappedNative,
+        uint8 _maxRequests,
+        address _swETH
+    ) StakingAdaptor(_wrappedNative, _maxRequests) {
         swETH = ISWETH(_swETH);
     }
 
@@ -42,10 +37,14 @@ contract SwellStakingAdaptor is StakingAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Swell Staking Adaptor V 1.1"));
+        return keccak256(abi.encode("Swell Staking Adaptor V 0.0"));
     }
 
     //============================================ Override Functions ===========================================
+
+    /**
+     * @notice Stakes into Swell using native asset.
+     */
     function _mint(uint256 amount) internal override {
         swETH.deposit{ value: amount }();
     }

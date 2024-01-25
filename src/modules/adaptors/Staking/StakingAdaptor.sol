@@ -6,6 +6,12 @@ import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { IWETH9 } from "src/interfaces/external/IWETH9.sol";
 import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 
+/**
+ * @title Staking Adaptor
+ * @notice Serves as a universal template for a variety of staking adaptors.
+ * @dev Allows inheriting adaptors to implement staking, unstaking, wrapping, unwrapping.
+ * @author crispymangoes
+ */
 abstract contract StakingAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;

@@ -45,6 +45,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
 
         etherFiAdaptor = new EtherFiStakingAdaptor(
             address(WETH),
+            8,
             liquidityPool,
             withdrawalRequestNft,
             address(WEETH),

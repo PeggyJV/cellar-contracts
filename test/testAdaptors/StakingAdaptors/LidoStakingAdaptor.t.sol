@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { LidoStakingAdaptor, StakingAdaptor } from "src/modules/adaptors/Staking/LidoStakingAdaptor.sol";
 import { CellarWithNativeSupport } from "src/base/permutations/CellarWithNativeSupport.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -14,6 +15,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
+    using Address for address;
 
     LidoStakingAdaptor private lidoAdaptor;
     CellarWithNativeSupport private cellar;
@@ -283,6 +285,21 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
         lidoAdaptor.addRequestId(maxRequests);
+
+        // If caller makes a delegate call to adaptors requestId management functions it should revert.
+        bytes memory callData = abi.encodeWithSelector(StakingAdaptor.addRequestId.selector, 0);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor___StorageSlotNotInitialized.selector))
+        );
+        address(lidoAdaptor).functionDelegateCall(callData);
+
+        callData = abi.encodeWithSelector(StakingAdaptor.removeRequestId.selector, 0);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor___StorageSlotNotInitialized.selector))
+        );
+        address(lidoAdaptor).functionDelegateCall(callData);
     }
 
     function _finalizeRequest(uint256 requestId, uint256 amount) internal {
