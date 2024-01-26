@@ -27,12 +27,12 @@ contract eEthExtension is Extension {
     /**
      * @notice Ethereum mainnet eETH.
      */
-    address public eETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    ERC20 internal constant eETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
 
     /**
      * @notice Ethereum mainnet weETH.
      */
-    address public weETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    ERC20 internal constant weETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
 
     /**
      * @notice Called by the price router during `_updateAsset` calls.
@@ -40,8 +40,8 @@ contract eEthExtension is Extension {
      * @dev bytes input is not used
      */
     function setupSource(ERC20 asset, bytes memory) external view override onlyPriceRouter {
-        if (address(asset) != eETH) revert eEthExtension__ASSET_NOT_EETH();
-        if (!priceRouter.isSupported(ERC20(address(weETH)))) revert eEthExtension__WEETH_NOT_SUPPORTED();
+        if (address(asset) != address(eETH)) revert eEthExtension__ASSET_NOT_EETH();
+        if (!priceRouter.isSupported(weETH)) revert eEthExtension__WEETH_NOT_SUPPORTED();
     }
 
     /**
@@ -52,9 +52,9 @@ contract eEthExtension is Extension {
     function getPriceInUSD(ERC20) external view override returns (uint256) {
         // get price: [USD/eETH] =  [weETH / eETH] * [USD/weETH]
         return
-            IRateProvider(weETH).getRate().mulDivDown(
-                priceRouter.getPriceInUSD(ERC20(weETH)),
-                10 ** ERC20(weETH).decimals()
+            IRateProvider(address(weETH)).getRate().mulDivDown(
+                priceRouter.getPriceInUSD(weETH),
+                10 ** weETH.decimals()
             );
     }
 }
