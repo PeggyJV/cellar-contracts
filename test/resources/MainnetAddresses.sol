@@ -87,6 +87,7 @@ contract MainnetAddresses {
     address public CVX_USD_FEED = 0xd962fC30A72A84cE50161031391756Bf2876Af5D;
     address public CVX_ETH_FEED = 0xC9CbF687f43176B302F03f5e58470b77D07c61c6;
     address public CRVUSD_USD_FEED = 0xEEf0C605546958c1f899b6fB336C20671f9cD49F;
+    address public LINK_USD_FEED = 0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -302,4 +303,10 @@ contract MainnetAddresses {
 
     // Kelp DAO
     address public lrtDepositPool = 0x036676389e48133B63a802f8635AD39E752D375D;
+    // Compound V3
+    address public cUSDCV3 = 0xc3d688B66703497DAA19211EEdff47f25384cdc3;
+    address public cWETHV3 = 0xA17581A9E3356d9A858b789D68B4d866e593aE94;
+    address public cometRewards = 0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
+    // Morpho Blue
+    address public _morphoBlue = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 }

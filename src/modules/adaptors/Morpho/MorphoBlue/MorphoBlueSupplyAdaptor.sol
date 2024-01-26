@@ -2,11 +2,11 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho, MarketParams, Id } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
-import { MorphoBalancesLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoBalancesLib.sol";
+import { IMorpho, MarketParams, Id, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { MorphoLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/periphery/MorphoLib.sol";
 import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
 import { MarketParamsLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/MarketParamsLib.sol";
+import { SharesMathLib } from "src/interfaces/external/Morpho/MorphoBlue/libraries/SharesMathLib.sol";
 
 /**
  * @title Morpho Blue Supply Adaptor
@@ -23,8 +23,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using MorphoLib for IMorpho;
-    using MorphoBalancesLib for IMorpho;
     using MarketParamsLib for MarketParams;
+    using SharesMathLib for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(MarketParams market)
@@ -75,6 +75,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
+        _validateMBMarket(market, identifier(), false);
         ERC20 loanToken = ERC20(market.loanToken);
         loanToken.safeApprove(address(morphoBlue), assets);
         _deposit(market, assets, address(this));
@@ -104,7 +105,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         _externalReceiverCheck(receiver);
         MarketParams memory market = abi.decode(adaptorData, (MarketParams));
         // Withdraw assets from Morpho Blue.
-        _validateMBMarket(market);
+        _validateMBMarket(market, identifier(), false);
         _withdraw(market, assets, receiver);
     }
 
@@ -123,11 +124,20 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
         bool isLiquid = abi.decode(configurationData, (bool));
 
         if (isLiquid) {
-            MarketParams memory market = abi.decode(adaptorData, (MarketParams));
-            (uint256 totalSupplyAssets, , uint256 totalBorrowAssets, ) = morphoBlue.expectedMarketBalances(market);
+            MarketParams memory marketParams = abi.decode(adaptorData, (MarketParams));
+            Id id = MarketParamsLib.id(marketParams);
+            Market memory market = morphoBlue.market(id);
+            uint256 totalBorrowAssets = market.totalBorrowAssets;
+            uint256 totalSupplyAssets = market.totalSupplyAssets;
+            uint256 totalSupplyShares = market.totalSupplyShares;
+
             if (totalBorrowAssets >= totalSupplyAssets) return 0;
             uint256 liquidSupply = totalSupplyAssets - totalBorrowAssets;
-            uint256 cellarSuppliedBalance = morphoBlue.expectedSupplyAssets(market, msg.sender);
+
+            uint256 cellarSuppliedBalance = (
+                morphoBlue.supplyShares(id, msg.sender).toAssetsDown(totalSupplyAssets, totalSupplyShares)
+            );
+
             withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
         } else return 0;
     }
@@ -169,7 +179,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _assets the amount of loanToken to lend on specified MB market.
      */
     function lendToMorphoBlue(MarketParams memory _market, uint256 _assets) public {
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), false);
         ERC20 loanToken = ERC20(_market.loanToken);
         _assets = _maxAvailable(loanToken, _assets);
         loanToken.safeApprove(address(morphoBlue), _assets);
@@ -184,9 +194,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
      * @param _assets the amount of loanToken to withdraw from MB market
      */
     function withdrawFromMorphoBlue(MarketParams memory _market, uint256 _assets) public {
-        // Run external receiver check.
-        _externalReceiverCheck(address(this));
-        _validateMBMarket(_market);
+        _validateMBMarket(_market, identifier(), false);
         Id _id = MarketParamsLib.id(_market);
         if (_assets == type(uint256).max) {
             uint256 _shares = _userSupplyShareBalance(_id, address(this));
@@ -195,32 +203,6 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor, MorphoBlueHelperLogic {
             // Withdraw assets from Morpho Blue.
             _withdraw(_market, _assets, address(this));
         }
-    }
-
-    /**
-     * @notice Allows a strategist to call `accrueInterest()` on a MB Market that the cellar is using.
-     * @dev A strategist might want to do this if a MB market has not been interacted with
-     *      in a while, and the strategist does not plan on interacting with it during a
-     *      rebalance.
-     * @dev Calling this can increase the share price during the rebalance,
-     *      so a strategist should consider moving some assets into reserves.
-     * @param _market identifier of a Morpho Blue market.
-     */
-    function accrueInterest(MarketParams memory _market) public {
-        _validateMBMarket(_market);
-        _accrueInterest(_market);
-    }
-
-    /**
-     * @notice Validates that a given market is set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     * @param _market MarketParams struct for a specific Morpho Blue market.
-     */
-    function _validateMBMarket(MarketParams memory _market) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_market)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoBlueSupplyAdaptor__MarketPositionsMustBeTracked(_market);
     }
 
     //============================================ Interface Helper Functions ===========================================
