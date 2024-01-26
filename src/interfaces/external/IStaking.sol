@@ -13,6 +13,10 @@ interface ILiquidityPool {
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
 
     function amountForShare(uint256 shares) external view returns (uint256);
+
+    function etherFiAdminContract() external view returns (address);
+
+    function addEthAmountLockedForWithdrawal(uint128 _amount) external;
 }
 
 interface IWithdrawRequestNft {

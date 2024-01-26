@@ -104,7 +104,7 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
                 : amountForShares;
 
             // Remove fee
-            uint256 fee = request.feeGwei * 1 gwei;
+            uint256 fee = uint256(request.feeGwei) * 1 gwei;
             requestValueInPrimitive = requestValueInPrimitive - fee;
             amount += requestValueInPrimitive;
         }

@@ -82,9 +82,14 @@ contract LidoStakingAdaptor is StakingAdaptor {
         wstETH.unwrap(amount);
     }
 
-    // TODO verify that amountOfStETH is the actual amount of ETH sent.
+    // TODO so I dont really get the math in WithdrawQueueBase.sol Line 484
+    // https://etherscan.deth.net/address/0xe42c659dc09109566720ea8b2de186c2be7d94d9
+    // It seems like a safe estimation to say 1 stETH is 1 ETH, but this logic is doing
+    // a whole bunch of stuff with check points and hints, which we really wouldn't be able to
+    // provide hints since this needs to be called in balance of.
     /**
      * @notice Returns balance in pending and finalized withdraw requests.
+     * @dev This function assumes that the primitive and derivative asset are 1:1.
      */
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
@@ -108,6 +113,8 @@ contract LidoStakingAdaptor is StakingAdaptor {
         id = ids[0];
     }
 
+    // TODO I could add a slippage check here? Like look at the delta balance of native transferred, and comapare it to the requests amountOfStETH?
+    // Then make sure they are within like 10 bps?
     /**
      * @notice Complete a withdraw.
      */
