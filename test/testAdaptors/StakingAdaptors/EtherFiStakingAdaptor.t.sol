@@ -119,7 +119,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
         // Rebalance Cellar to mint derivative.
-        _mintDeriviative(mintAmount);
+        _mintDerivative(mintAmount);
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
             initialAssets,
@@ -140,9 +140,9 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
         uint256 startingTotalAssets = cellar.totalAssets();
-        _mintDeriviative(mintAmount);
+        _mintDerivative(mintAmount);
         // Rebalance cellar to start a burn request.
-        _startDeriviativeBurnRequest(type(uint256).max);
+        _startDerivativeBurnRequest(type(uint256).max);
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 4, "totalAssets should not have changed.");
         uint256 requestId = etherFiAdaptor.requestIds(address(cellar), 0);
         _finalizeRequest(requestId, mintAmount);
@@ -169,19 +169,19 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
             deal(address(primitive), address(this), mintAmounts[i]);
             cellar.deposit(mintAmounts[i], address(this));
 
-            _mintDeriviative(mintAmounts[i]);
+            _mintDerivative(mintAmounts[i]);
             burnAmount = derivative.balanceOf(address(cellar));
-            _startDeriviativeBurnRequest(burnAmount);
+            _startDerivativeBurnRequest(burnAmount);
 
             requests = etherFiAdaptor.getRequestIds(address(cellar));
             assertEq(requests.length, i + 1, "Should have i + 1 requests.");
         }
 
         // Making 1 more burn request should revert.
-        _mintDeriviative(initialAssets);
+        _mintDerivative(initialAssets);
         burnAmount = derivative.balanceOf(address(cellar));
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
-        _startDeriviativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount);
 
         // Finalize requests.
         for (uint256 i; i < maxRequests; ++i) {
@@ -224,7 +224,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         deal(address(primitive), address(this), amount);
         cellar.deposit(amount, address(this));
 
-        _mintDeriviative(amount);
+        _mintDerivative(amount);
 
         uint256 derivativeBalance = derivative.balanceOf(address(cellar));
 
@@ -265,7 +265,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         w.finalizeRequests(requestId);
     }
 
-    function _startDeriviativeBurnRequest(uint256 burnAmount) internal {
+    function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
@@ -290,7 +290,7 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         cellar.callOnAdaptor(data);
     }
 
-    function _mintDeriviative(uint256 mintAmount) internal {
+    function _mintDerivative(uint256 mintAmount) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);

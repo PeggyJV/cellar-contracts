@@ -95,7 +95,7 @@ contract SwellStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
         // Rebalance Cellar to mint derivative.
-        _mintDeriviative(mintAmount);
+        _mintDerivative(mintAmount);
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
             initialAssets,
@@ -111,7 +111,7 @@ contract SwellStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function _mintDeriviative(uint256 mintAmount) internal {
+    function _mintDerivative(uint256 mintAmount) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);

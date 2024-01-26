@@ -112,7 +112,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
         // Rebalance Cellar to mint derivative.
-        _mintDeriviative(mintAmount);
+        _mintDerivative(mintAmount);
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
             initialAssets,
@@ -136,12 +136,12 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         uint256 startingTotalAssets = cellar.totalAssets();
 
-        _mintDeriviative(mintAmount);
+        _mintDerivative(mintAmount);
 
         uint256 burnAmount = derivative.balanceOf(address(cellar));
 
         // Rebalance cellar to start a burn request.
-        _startDeriviativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount);
 
         assertApproxEqRel(
             cellar.totalAssets(),
@@ -190,19 +190,19 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
             deal(address(primitive), address(this), mintAmounts[i]);
             cellar.deposit(mintAmounts[i], address(this));
 
-            _mintDeriviative(mintAmounts[i]);
+            _mintDerivative(mintAmounts[i]);
             burnAmount = derivative.balanceOf(address(cellar));
-            _startDeriviativeBurnRequest(burnAmount);
+            _startDerivativeBurnRequest(burnAmount);
 
             requests = staderAdaptor.getRequestIds(address(cellar));
             assertEq(requests.length, i + 1, "Should have i + 1 requests.");
         }
 
         // Making 1 more burn request should revert.
-        _mintDeriviative(initialAssets);
+        _mintDerivative(initialAssets);
         burnAmount = derivative.balanceOf(address(cellar));
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
-        _startDeriviativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount);
 
         // Finalize requests.
         _finalizeRequests();
@@ -244,7 +244,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         IUserWithdrawManager(userWithdrawManagerAddress).finalizeUserWithdrawalRequest();
     }
 
-    function _startDeriviativeBurnRequest(uint256 burnAmount) internal {
+    function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
@@ -269,7 +269,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         cellar.callOnAdaptor(data);
     }
 
-    function _mintDeriviative(uint256 mintAmount) internal {
+    function _mintDerivative(uint256 mintAmount) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);

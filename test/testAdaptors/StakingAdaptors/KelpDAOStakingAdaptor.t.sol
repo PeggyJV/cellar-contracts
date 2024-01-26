@@ -116,7 +116,7 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         deal(address(ETHX), address(cellar), ethXAmount);
 
         // Rebalance Cellar to mint derivative.
-        _mintDeriviativeERC20(ETHX, ethXAmount, 0);
+        _mintDerivativeERC20(ETHX, ethXAmount, 0);
         assertApproxEqAbs(ETHX.balanceOf(address(cellar)), 0, 2, "Should have used all ETHX to mint.");
         uint256 expectedDerivativeAmount = priceRouter.getValue(ETHX, mintAmount, derivative);
         assertApproxEqRel(
@@ -134,7 +134,7 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
 
         // Try minting with an asset that is not supported.
         vm.expectRevert();
-        _mintDeriviativeERC20(LINK, mintAmount, 0);
+        _mintDerivativeERC20(LINK, mintAmount, 0);
 
         // Simulate a swap/mint.
         uint256 ethXAmount = priceRouter.getValue(WETH, mintAmount, ETHX);
@@ -143,7 +143,7 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
 
         // Check that min amount out works.
         vm.expectRevert();
-        _mintDeriviativeERC20(ETHX, ethXAmount, type(uint256).max);
+        _mintDerivativeERC20(ETHX, ethXAmount, type(uint256).max);
 
         // Check slippage revert.
         uint256 rsETHValue = priceRouter.getPriceInUSD(WETH);
@@ -159,10 +159,10 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
                 )
             )
         );
-        _mintDeriviativeERC20(ETHX, ethXAmount, 0);
+        _mintDerivativeERC20(ETHX, ethXAmount, 0);
     }
 
-    function _mintDeriviativeERC20(ERC20 depositAsset, uint256 mintAmount, uint256 minMintAmountOut) internal {
+    function _mintDerivativeERC20(ERC20 depositAsset, uint256 mintAmount, uint256 minMintAmountOut) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);

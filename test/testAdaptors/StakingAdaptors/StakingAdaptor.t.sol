@@ -81,10 +81,10 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testReverts() external {
         // Zero amount reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _mintDeriviative(0);
+        _mintDerivative(0);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _startDeriviativeBurnRequest(0);
+        _startDerivativeBurnRequest(0);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
         _wrap(0);
@@ -93,14 +93,14 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _unwrap(0);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _mintDeriviativeERC20(primitive, 0, 0);
+        _mintDerivativeERC20(primitive, 0, 0);
 
         // Function not implemented revert.
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
-        _mintDeriviative(1);
+        _mintDerivative(1);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
-        _startDeriviativeBurnRequest(1);
+        _startDerivativeBurnRequest(1);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
         _completeDerivativeBurnRequest(0);
@@ -115,7 +115,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _unwrap(1);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
-        _mintDeriviativeERC20(primitive, 1, 0);
+        _mintDerivativeERC20(primitive, 1, 0);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
         stakingAdaptor.balanceOf(abi.encode());
@@ -158,7 +158,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         address(stakingAdaptor).functionDelegateCall(callData);
     }
 
-    function _startDeriviativeBurnRequest(uint256 burnAmount) internal {
+    function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
@@ -183,7 +183,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    function _mintDeriviative(uint256 mintAmount) internal {
+    function _mintDerivative(uint256 mintAmount) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
@@ -211,7 +211,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    function _mintDeriviativeERC20(ERC20 depositAsset, uint256 mintAmount, uint256 minMintAmountOut) internal {
+    function _mintDerivativeERC20(ERC20 depositAsset, uint256 mintAmount, uint256 minMintAmountOut) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
