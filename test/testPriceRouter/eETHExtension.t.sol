@@ -4,7 +4,6 @@ pragma solidity 0.8.21;
 import { eEthExtension } from "src/modules/price-router/Extensions/EtherFi/eETHExtension.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
-import { MockRedstoneClassicAdapter } from "src/mocks/MockRedstoneClassicAdapter.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
 import { IRateProvider } from "src/interfaces/external/EtherFi/IRateProvider.sol";
 
@@ -16,7 +15,6 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     using stdStorage for StdStorage;
 
     RedstonePriceFeedExtension private redstonePriceFeedExtension;
-    MockRedstoneClassicAdapter private mockRedstoneClassicAdapter;
 
     // Deploy the extension.
     eEthExtension private eethExtension;
@@ -29,43 +27,44 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Run Starter setUp code.
         _setUp();
+
+        eethExtension = new eEthExtension(priceRouter);
     }
 
     // ======================================= HAPPY PATH =======================================
     function testAddEEthExtension() external {
         // Setup dependent price feeds.
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer()); // [USD / WETH] to be used as a mock for [USD / EETH]
-        PriceRouter.AssetSettings memory settings;
-
         _addDependentPriceFeeds();
+
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = priceRouter.getPriceInUSD(WEETH); // 8 decimals
 
         // Add eETH.
         uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
-        price = price.mulDivDown(weEthToEEthConversion, 1e18);
+        price = weEthToEEthConversion.mulDivDown(price, 10 ** WEETH.decimals());
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(eethExtension));
         priceRouter.addAsset(EETH, settings, abi.encode(0), price);
 
-        // // check getValue()
-        // assertApproxEqRel(
-        //     priceRouter.getValue(EETH, 1e18, WEETH), // should be [WEETH / EETH]
-        //     weEthToEEthConversion,
-        //     1e8,
-        //     "WEETH value in EETH should approx equal conversion."
-        // );
+        // check getValue()
+        assertApproxEqRel(
+            priceRouter.getValue(EETH, 1e18, WEETH), // should be [WEETH / EETH]
+            weEthToEEthConversion,
+            1e8,
+            "WEETH value in EETH should approx equal conversion."
+        );
     }
 
     // ======================================= REVERTS =======================================
     function testUsingExtensionWithWrongAsset() external {
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
         // Setup dependent price feeds.
         _addDependentPriceFeeds();
 
-        // Add wstEth.
         PriceRouter.AssetSettings memory settings;
+        uint256 price = priceRouter.getPriceInUSD(WEETH); // 8 decimals
 
         // Add eETH.
         uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
-        price = price.mulDivDown(weEthToEEthConversion, 1e18);
+        price = weEthToEEthConversion.mulDivDown(price, 10 ** WEETH.decimals());
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(eethExtension));
 
         address notWSTETH = vm.addr(123);
@@ -73,45 +72,37 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         priceRouter.addAsset(ERC20(notWSTETH), settings, abi.encode(0), price);
     }
 
-    function testAddingWstethWithoutPricingSteth() external {
+    function testAddingEethWithoutPricingWeEth() external {
         uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-
-        // Add wstEth.
         PriceRouter.AssetSettings memory settings;
+
         // Add eETH.
         uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
-        price = price.mulDivDown(weEthToEEthConversion, 1e18);
+        price = weEthToEEthConversion.mulDivDown(price, 10 ** WEETH.decimals());
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(eethExtension));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(eEthExtension.eEthExtension__WEETH_NOT_SUPPORTED.selector)));
         priceRouter.addAsset(EETH, settings, abi.encode(0), price);
     }
 
+    // NOTE: this is for weETH:USD datafeed
     function _addDependentPriceFeeds() internal {
-        mockRedstoneClassicAdapter = new MockRedstoneClassicAdapter();
         redstonePriceFeedExtension = new RedstonePriceFeedExtension(priceRouter);
-        eethExtension = new eEthExtension(priceRouter);
 
-        // wstethExtension = new WstEthExtension(priceRouter);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
 
         PriceRouter.AssetSettings memory settings;
 
-        // TODO - shouldn't price router already have weth and usdc in it?
-
-        // setup price for WEETH in price router using mock redstone oracle for weETH
-        bytes32 weethDataFeedId = bytes32("WEETH");
-
-        // TODO - setup actual redstone
-        mockRedstoneClassicAdapter.setValueForDataFeed(weethDataFeedId, 1e8);
-        mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp));
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtension));
-
-        RedstonePriceFeedExtension.ExtensionStorage memory stor;
-        stor.dataFeedId = weethDataFeedId;
-        stor.heartbeat = 1 days;
-        stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
-
-        priceRouter.addAsset(WEETH, settings, abi.encode(stor), 1e8);
+        RedstonePriceFeedExtension.ExtensionStorage memory rstor;
+        rstor.dataFeedId = weethUsdDataFeedId;
+        rstor.heartbeat = 1 days;
+        rstor.redstoneAdapter = IRedstoneAdapter(weethAdapter);
+        price = IRedstoneAdapter(weethAdapter).getValueForDataFeed(rstor.dataFeedId);
+        priceRouter.addAsset(WEETH, settings, abi.encode(rstor), price);
     }
 }

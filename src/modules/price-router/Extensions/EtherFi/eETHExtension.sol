@@ -15,12 +15,12 @@ contract eEthExtension is Extension {
     constructor(PriceRouter _priceRouter) Extension(_priceRouter) {}
 
     /**
-     * @notice Attempted to add wstEth support when stEth is not supported.
+     * @notice Attempted to add eETH support when weETH is not supported.
      */
     error eEthExtension__WEETH_NOT_SUPPORTED();
 
     /**
-     * @notice Attempted to use this extension to price something other than wstEth.
+     * @notice Attempted to use this extension to price something other than eETH.
      */
     error eEthExtension__ASSET_NOT_EETH();
 
@@ -48,7 +48,6 @@ contract eEthExtension is Extension {
      * @notice Called during pricing operations.
      * @dev asset not used since setup function confirms `asset` is weETH.
      * @return price of eETH in USD [USD/eETH]
-     * TODO - confirm that units are [weETH / eETH] for `getRate()`
      */
     function getPriceInUSD(ERC20) external view override returns (uint256) {
         // get price: [USD/eETH] =  [weETH / eETH] * [USD/weETH]
