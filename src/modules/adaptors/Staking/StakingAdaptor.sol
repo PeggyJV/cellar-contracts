@@ -12,7 +12,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAd
  * @dev Allows inheriting adaptors to implement staking, unstaking, wrapping, unwrapping.
  * @author crispymangoes
  */
-abstract contract StakingAdaptor is BaseAdaptor {
+contract StakingAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 

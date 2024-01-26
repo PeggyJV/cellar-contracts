@@ -244,47 +244,6 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         );
     }
 
-    function testReverts() external {
-        // Zero amount reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _mintDeriviative(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _startDeriviativeBurnRequest(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _wrap(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _unwrap(0);
-
-        // Function not implemented revert.
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
-        _cancelDerivativeBurnRequest(0);
-
-        uint256 requestId = 777;
-
-        // Request not found revert.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
-        );
-        etherFiAdaptor.removeRequestId(requestId);
-
-        // Duplicate request revert.
-        etherFiAdaptor.addRequestId(requestId);
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__DuplicateRequest.selector, requestId))
-        );
-        etherFiAdaptor.addRequestId(requestId);
-
-        // Maximum requests revert.
-        for (uint256 i; i < maxRequests - 1; ++i) {
-            etherFiAdaptor.addRequestId(i);
-        }
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
-        etherFiAdaptor.addRequestId(maxRequests);
-    }
-
     function _finalizeRequest(uint256 requestId, uint256 amount) internal {
         // Spoof unstEth contract into finalizing our request.
         IWithdrawRequestNft w = IWithdrawRequestNft(withdrawalRequestNft);

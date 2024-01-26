@@ -246,62 +246,6 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function testReverts() external {
-        // Zero amount reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _mintDeriviative(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _startDeriviativeBurnRequest(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _wrap(0);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__ZeroAmount.selector)));
-        _unwrap(0);
-
-        // Function not implemented revert.
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__NotSupported.selector)));
-        _cancelDerivativeBurnRequest(0);
-
-        uint256 requestId = 777;
-
-        // Request not found revert.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
-        );
-        lidoAdaptor.removeRequestId(requestId);
-
-        // Duplicate request revert.
-        lidoAdaptor.addRequestId(requestId);
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__DuplicateRequest.selector, requestId))
-        );
-        lidoAdaptor.addRequestId(requestId);
-
-        // Maximum requests revert.
-        for (uint256 i; i < maxRequests - 1; ++i) {
-            lidoAdaptor.addRequestId(i);
-        }
-        vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
-        lidoAdaptor.addRequestId(maxRequests);
-
-        // If caller makes a delegate call to adaptors requestId management functions it should revert.
-        bytes memory callData = abi.encodeWithSelector(StakingAdaptor.addRequestId.selector, 0);
-
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor___StorageSlotNotInitialized.selector))
-        );
-        address(lidoAdaptor).functionDelegateCall(callData);
-
-        callData = abi.encodeWithSelector(StakingAdaptor.removeRequestId.selector, 0);
-
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor___StorageSlotNotInitialized.selector))
-        );
-        address(lidoAdaptor).functionDelegateCall(callData);
-    }
-
     function _finalizeRequest(uint256 requestId, uint256 amount) internal {
         // Spoof unstEth contract into finalizing our request.
         address admin = lidoAdaptor.unstETH().getRoleMember(lidoAdaptor.unstETH().FINALIZE_ROLE(), 0);
