@@ -5,7 +5,7 @@ import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Ex
 import { IRateProvider } from "src/interfaces/external/EtherFi/IRateProvider.sol";
 
 /**
- * @title Sommelier Price Router eETH Extension
+ * @title Sommelier Price Router eETH Extension.
  * @notice Allows the Price Router to price eETH.
  * @author 0xEinCodes
  */
