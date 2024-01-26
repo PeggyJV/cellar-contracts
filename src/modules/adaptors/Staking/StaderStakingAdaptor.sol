@@ -92,6 +92,7 @@ contract StaderStakingAdaptor is StakingAdaptor {
      * @notice Request to withdraw.
      */
     function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+        amount = _maxAvailable(ETHx, amount);
         ETHx.safeApprove(address(userWithdrawManager), amount);
         id = userWithdrawManager.requestWithdraw(amount, address(this));
         _revokeExternalApproval(ETHx, address(userWithdrawManager));
