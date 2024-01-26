@@ -219,7 +219,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @dev Will automatically unwrap the native asset.
      * @param amount the amount of native asset to use for minting
      */
-    function mint(uint256 amount) external {
+    function mint(uint256 amount) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         amount = _maxAvailable(ERC20(address(wrappedPrimitive)), amount);
@@ -232,7 +232,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice Allows a strategist to request to burn/withdraw a derivative for a chains native asset.
      * @param amount the amount of derivative to burn/withdraw
      */
-    function requestBurn(uint256 amount) external {
+    function requestBurn(uint256 amount) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         uint256 id = _requestBurn(amount);
@@ -246,7 +246,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @dev Will automatically wrap the native asset received from burn/withdraw.
      * @param id the request id
      */
-    function completeBurn(uint256 id) external {
+    function completeBurn(uint256 id) external virtual {
         uint256 primitiveDelta = address(this).balance;
         _completeBurn(id);
         primitiveDelta = address(this).balance - primitiveDelta;
@@ -258,7 +258,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice Allows a strategist to cancel an active burn/withdraw request.
      * @param id the request id
      */
-    function cancelBurn(uint256 id) external {
+    function cancelBurn(uint256 id) external virtual {
         _cancelBurn(id);
         StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
@@ -267,7 +267,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice Allows a strategist to wrap a derivative asset.
      * @param amount the amount of derivative to wrap
      */
-    function wrap(uint256 amount) external {
+    function wrap(uint256 amount) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _wrap(amount);
@@ -277,7 +277,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice Allows a strategist to unwrap a wrapped derivative asset.
      * @param amount the amount of wrapped derivative to unwrap
      */
-    function unwrap(uint256 amount) external {
+    function unwrap(uint256 amount) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _unwrap(amount);
@@ -289,7 +289,7 @@ contract StakingAdaptor is BaseAdaptor {
      * @param amount the amount of `depositAsset` to mint with
      * @param minAmountOut the minimum amount of derivative out
      */
-    function mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) external {
+    function mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         _mintERC20(depositAsset, amount, minAmountOut);

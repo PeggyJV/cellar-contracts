@@ -37,7 +37,7 @@ contract RenzoStakingAdaptor is StakingAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Renzo Staking Adaptor V 1.1"));
+        return keccak256(abi.encode("Renzo Staking Adaptor V 0.0"));
     }
 
     //============================================ Override Functions ===========================================
