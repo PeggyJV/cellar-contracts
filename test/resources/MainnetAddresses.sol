@@ -291,6 +291,7 @@ contract MainnetAddresses {
     // Stader
     address public stakePoolManagerAddress = 0xcf5EA1b38380f6aF39068375516Daf40Ed70D299;
     address public userWithdrawManagerAddress = 0x9F0491B32DBce587c50c4C43AB303b06478193A7;
+    address public staderConfig = 0x4ABEF2263d5A5ED582FC9A9789a41D85b68d69DB;
 
     // Etherfi
     address public liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;

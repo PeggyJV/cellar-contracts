@@ -107,6 +107,12 @@ interface IRestakeManager {
 // Stader
 interface IStakePoolManager {
     function deposit(address _receiver) external payable returns (uint256);
+
+    function getExchangeRate() external view returns (uint256);
+}
+
+interface IStaderConfig {
+    function getDecimals() external view returns (uint256);
 }
 
 interface IUserWithdrawManager {
@@ -123,4 +129,6 @@ interface IUserWithdrawManager {
     function claim(uint256 _requestId) external;
 
     function userWithdrawRequests(uint256) external view returns (WithdrawRequest memory);
+
+    function finalizeUserWithdrawalRequest() external;
 }

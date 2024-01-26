@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
-import { IStakePoolManager, IUserWithdrawManager } from "src/interfaces/external/IStaking.sol";
+import { IStakePoolManager, IUserWithdrawManager, IStaderConfig } from "src/interfaces/external/IStaking.sol";
 
 /**
  * @title Stader Staking Adaptor
@@ -26,6 +26,8 @@ contract StaderStakingAdaptor is StakingAdaptor {
      */
     IUserWithdrawManager public immutable userWithdrawManager;
 
+    IStaderConfig public immutable staderConfig;
+
     /**
      * @notice The asset returned from staking.
      */
@@ -36,11 +38,13 @@ contract StaderStakingAdaptor is StakingAdaptor {
         uint8 _maxRequests,
         address _stakePoolManager,
         address _userWithdrawManager,
-        address _ethx
+        address _ethx,
+        address _staderConfig
     ) StakingAdaptor(_wrappedNative, _maxRequests) {
         stakePoolManager = IStakePoolManager(_stakePoolManager);
         userWithdrawManager = IUserWithdrawManager(_userWithdrawManager);
         ETHx = ERC20(_ethx);
+        staderConfig = IStaderConfig(_staderConfig);
     }
 
     //============================================ Global Functions ===========================================
@@ -65,15 +69,22 @@ contract StaderStakingAdaptor is StakingAdaptor {
 
     /**
      * @notice Returns balance in pending and finalized withdraw requests.
+     * @dev Calculation uses logic from Line 154 here
+     *      https://etherscan.deth.net/address/0x9F0491B32DBce587c50c4C43AB303b06478193A7
      */
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
 
+        uint256 exchangeRate = stakePoolManager.getExchangeRate();
+        uint256 DECIMALS = staderConfig.getDecimals();
         for (uint256 i; i < requests.length; ++i) {
             IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
                 uint256(requests[i])
             );
-            amount += request.ethExpected;
+            uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
+            amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
+            // amount += request.ethExpected;
+            // TODO remove old line
         }
     }
 
