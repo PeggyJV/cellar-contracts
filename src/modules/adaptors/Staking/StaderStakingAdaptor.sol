@@ -83,8 +83,6 @@ contract StaderStakingAdaptor is StakingAdaptor {
             );
             uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
             amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
-            // amount += request.ethExpected;
-            // TODO remove old line
         }
     }
 
