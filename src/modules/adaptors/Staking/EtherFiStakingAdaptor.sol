@@ -95,7 +95,8 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
      */
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
-        for (uint256 i; i < requests.length; ++i) {
+        uint256 requestsLength = requests.length;
+        for (uint256 i; i < requestsLength; ++i) {
             IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(requests[i]);
             // Take min between valuation at request creation, and current valuation.
             uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);

@@ -77,7 +77,8 @@ contract StaderStakingAdaptor is StakingAdaptor {
 
         uint256 exchangeRate = stakePoolManager.getExchangeRate();
         uint256 DECIMALS = staderConfig.getDecimals();
-        for (uint256 i; i < requests.length; ++i) {
+        uint256 requestsLength = requests.length;
+        for (uint256 i; i < requestsLength; ++i) {
             IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
                 uint256(requests[i])
             );

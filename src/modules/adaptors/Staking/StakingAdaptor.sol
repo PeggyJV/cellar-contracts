@@ -9,6 +9,8 @@ import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAd
 /**
  * @title Staking Adaptor
  * @notice Serves as a universal template for a variety of staking adaptors.
+ * @notice A staking adaptor position will only check for value that is locked in unstaking
+ *         requests, other value must be accounted for using other adaptors.
  * @dev Allows inheriting adaptors to implement staking, unstaking, wrapping, unwrapping.
  * @author crispymangoes
  */

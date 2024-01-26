@@ -115,6 +115,8 @@ contract LidoStakingAdaptor is StakingAdaptor {
 
     // TODO I could add a slippage check here? Like look at the delta balance of native transferred, and comapare it to the requests amountOfStETH?
     // Then make sure they are within like 10 bps?
+
+    // TODO could allow strategist to provide a min value.
     /**
      * @notice Complete a withdraw.
      */
