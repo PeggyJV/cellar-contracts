@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
-interface IMultiAssetSolver {
+interface IAtomicSolver {
     function finishSolve(
         bytes calldata runData,
         address initiator,

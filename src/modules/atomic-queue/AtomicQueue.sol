@@ -2,36 +2,34 @@
 pragma solidity 0.8.21;
 
 import { Math } from "src/utils/Math.sol";
-import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
-import { IMultiAssetSolver } from "./IMultiAssetSolver.sol";
+import { IAtomicSolver } from "./IAtomicSolver.sol";
 
 /**
- * @title WithdrawQueue
- * @notice Allows users to exit ERC4626 positions by offloading complex withdraws to 3rd party solvers.
+ * @title AtomicQueue
+ * @notice Allows users to create `AtomicRequests` that specify an ERC20 asset to `give`
+ *         and an ERC20 asset to `take` in return.
  * @author crispymangoes
  */
-contract MutiAssetWithdrawQueue is ReentrancyGuard {
-    using SafeTransferLib for ERC4626;
+contract AtomicQueue is ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-    using Math for uint128;
 
     // ========================================= STRUCTS =========================================
 
     /**
-     * @notice Stores request information needed to fulfill a users withdraw request.
+     * @notice Stores request information needed to fulfill a users atomic request.
      * @param deadline unix timestamp for when request is no longer valid
-     * @param executionSharePrice the share price in terms of share.asset() the user wants their shares "sold" at
-     * @param sharesToWithdraw the amount of shares the user wants withdrawn
+     * @param atomicPrice the price in terms of `take` asset the user wants their `give` assets "sold" at
+     * @param giveAmount the amount of `give` asset the user wants converted to `take` asset
      * @param inSolve bool used during solves to prevent duplicate users, and to prevent redoing multiple checks
      */
-    struct WithdrawRequest {
+    struct AtomicRequest {
         uint64 deadline; // deadline to fulfill request
-        uint88 executionSharePrice; // In terms of asset decimals
-        uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
+        uint88 atomicPrice; // In terms of take asset decimals
+        uint96 giveAmount; // The amount of give asset the user wants to sell.
         bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
     }
 
@@ -42,48 +40,47 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
      *              Either all flags are false(user is solvable) or only 1 is true(an error occurred).
      *              From right to left
      *              - 0: indicates user deadline has passed.
-     *              - 1: indicates user request has zero share amount.
+     *              - 1: indicates user request has zero give amount.
      *              - 2: indicates user does not have enough shares in wallet.
-     *              - 3: indicates user has not given WithdrawQueue approval.
-     * @param sharesToSolve the amount of shares to solve
-     * @param requiredAssets the amount of assets users wants for their shares
+     *              - 3: indicates user has not given AtomicQueue approval.
+     * @param giveToSolve the amount of give asset to solve
+     * @param assetsToTake the amount of take assets users wants for their give assets
      */
     struct SolveMetaData {
         address user;
         uint8 flags;
-        uint256 sharesToSolve;
-        uint256 requiredAssets;
+        uint256 assetsToGive;
+        uint256 assetsToTake;
     }
 
     /**
      * @notice Used to reduce the number of local variables in `solve`.
      */
     struct SolveData {
-        ERC20 asset;
-        uint8 assetDecimals;
-        uint8 shareDecimals;
+        uint8 takeDecimals;
+        uint8 giveDecimals;
     }
 
     // ========================================= GLOBAL STATE =========================================
 
     /**
-     * @notice Maps user address to give asset to take asset to a WithdrawRequest struct.
+     * @notice Maps user address to give asset to take asset to a AtomicRequest struct.
      */
-    mapping(address => mapping(ERC20 => mapping(ERC20 => WithdrawRequest))) public userWithdrawRequest;
+    mapping(address => mapping(ERC20 => mapping(ERC20 => AtomicRequest))) public userAtomicRequest;
 
     //============================== ERRORS ===============================
 
-    error WithdrawQueue__UserRepeated(address user);
-    error WithdrawQueue__RequestDeadlineExceeded(address user);
-    error WithdrawQueue__UserNotInSolve(address user);
-    error WithdrawQueue__NoShares(address user);
+    error AtomicQueue__UserRepeated(address user);
+    error AtomicQueue__RequestDeadlineExceeded(address user);
+    error AtomicQueue__UserNotInSolve(address user);
+    error AtomicQueue__ZeroGiveAmount(address user);
 
     //============================== EVENTS ===============================
 
     /**
-     * @notice Emitted when `updateWithdrawRequest` is called.
+     * @notice Emitted when `updateAtomicRequest` is called.
      */
-    event RequestUpdated(
+    event AtomicRequestUpdated(
         address user,
         address give,
         address take,
@@ -96,7 +93,7 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
     /**
      * @notice Emitted when `solve` exchanges a users shares for the underlying asset.
      */
-    event RequestFulfilled(
+    event AtomicRequestFulfilled(
         address user,
         address give,
         address take,
@@ -114,12 +111,8 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
     /**
      * @notice Get a users Withdraw Request.
      */
-    function getUserWithdrawRequest(
-        address user,
-        ERC20 give,
-        ERC20 take
-    ) external view returns (WithdrawRequest memory) {
-        return userWithdrawRequest[user][give][take];
+    function getUserAtomicRequest(address user, ERC20 give, ERC20 take) external view returns (AtomicRequest memory) {
+        return userAtomicRequest[user][give][take];
     }
 
     /**
@@ -127,50 +120,50 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
      *         true: Withdraw request is valid.
      *         false: Withdraw request is not valid.
      * @dev It is possible for a withdraw request to return false from this function, but using the
-     *      request in `updateWithdrawRequest` will succeed, but solvers will not be able to include
+     *      request in `updateAtomicRequest` will succeed, but solvers will not be able to include
      *      the user in `solve` unless some other state is changed.
      */
-    function isWithdrawRequestValid(
+    function isAtomicRequestValid(
         ERC20 give,
         address user,
-        WithdrawRequest calldata userRequest
+        AtomicRequest calldata userRequest
     ) external view returns (bool) {
         // Validate amount.
-        if (userRequest.sharesToWithdraw > give.balanceOf(user)) return false;
+        if (userRequest.giveAmount > give.balanceOf(user)) return false;
         // Validate deadline.
         if (block.timestamp > userRequest.deadline) return false;
         // Validate approval.
-        if (give.allowance(user, address(this)) < userRequest.sharesToWithdraw) return false;
-        // Validate sharesToWithdraw is nonzero.
-        if (userRequest.sharesToWithdraw == 0) return false;
-        // Validate sharesToWithdraw is nonzero.
-        if (userRequest.executionSharePrice == 0) return false;
+        if (give.allowance(user, address(this)) < userRequest.giveAmount) return false;
+        // Validate giveAmount is nonzero.
+        if (userRequest.giveAmount == 0) return false;
+        // Validate atomicPrice is nonzero.
+        if (userRequest.atomicPrice == 0) return false;
 
         return true;
     }
 
     /**
      * @notice Allows user to add/update their withdraw request.
-     * @notice It is possible for a withdraw request with a zero executionSharePrice to be made, and solved.
+     * @notice It is possible for a withdraw request with a zero atomicPrice to be made, and solved.
      *         If this happens, users will be selling their shares for no assets in return.
-     *         To determine a safe executionSharePrice, share.previewRedeem should be used to get
+     *         To determine a safe atomicPrice, share.previewRedeem should be used to get
      *         a good share price, then the user can lower it from there to make their request fill faster.
      */
-    function updateWithdrawRequest(ERC20 give, ERC20 take, WithdrawRequest calldata userRequest) external nonReentrant {
-        WithdrawRequest storage request = userWithdrawRequest[msg.sender][give][take];
+    function updateAtomicRequest(ERC20 give, ERC20 take, AtomicRequest calldata userRequest) external nonReentrant {
+        AtomicRequest storage request = userAtomicRequest[msg.sender][give][take];
 
         request.deadline = userRequest.deadline;
-        request.executionSharePrice = userRequest.executionSharePrice;
-        request.sharesToWithdraw = userRequest.sharesToWithdraw;
+        request.atomicPrice = userRequest.atomicPrice;
+        request.giveAmount = userRequest.giveAmount;
 
         // Emit full amount user has.
-        emit RequestUpdated(
+        emit AtomicRequestUpdated(
             msg.sender,
             address(give),
             address(take),
-            userRequest.sharesToWithdraw,
+            userRequest.giveAmount,
             userRequest.deadline,
-            userRequest.executionSharePrice,
+            userRequest.atomicPrice,
             block.timestamp
         );
     }
@@ -178,7 +171,9 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
     //============================== SOLVER FUNCTIONS ===============================
 
     /**
-     * @notice Called by solvers in order to exchange shares for share.asset().
+     * @notice Called by solvers in order to exchange give asset for take asset.
+     * @notice Solvers are optimistically transferred the give asset, then are required to
+     *         approve this contrac to spend enough of take assets to cover all requests.
      * @dev It is very likely `solve` TXs will be front run if broadcasted to public mem pools,
      *      so solvers should use private mem pools.
      */
@@ -191,63 +186,58 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
     ) external nonReentrant {
         // Get Solve Data.
         SolveData memory solveData;
-        solveData.asset = take;
-        solveData.assetDecimals = solveData.asset.decimals();
-        solveData.shareDecimals = give.decimals();
+        solveData.takeDecimals = take.decimals();
+        solveData.giveDecimals = give.decimals();
 
-        uint256 sharesToSolver;
-        uint256 requiredAssets;
+        uint256 assetsToGive;
+        uint256 assetsToTake;
         for (uint256 i; i < users.length; ++i) {
-            WithdrawRequest storage request = userWithdrawRequest[users[i]][give][take];
+            AtomicRequest storage request = userAtomicRequest[users[i]][give][take];
 
-            if (request.inSolve) revert WithdrawQueue__UserRepeated(users[i]);
-            if (block.timestamp > request.deadline) revert WithdrawQueue__RequestDeadlineExceeded(users[i]);
-            if (request.sharesToWithdraw == 0) revert WithdrawQueue__NoShares(users[i]);
+            if (request.inSolve) revert AtomicQueue__UserRepeated(users[i]);
+            if (block.timestamp > request.deadline) revert AtomicQueue__RequestDeadlineExceeded(users[i]);
+            if (request.giveAmount == 0) revert AtomicQueue__ZeroGiveAmount(users[i]);
 
             // User gets whatever their execution share price is.
-            requiredAssets += _calculateAssetAmount(
-                request.sharesToWithdraw,
-                request.executionSharePrice,
-                solveData.shareDecimals
-            );
+            assetsToTake += _calculateAssetAmount(request.giveAmount, request.atomicPrice, solveData.giveDecimals);
 
             // If all checks above passed, the users request is valid and should be fulfilled.
-            sharesToSolver += request.sharesToWithdraw;
+            assetsToGive += request.giveAmount;
             request.inSolve = true;
             // Transfer shares from user to solver.
-            give.safeTransferFrom(users[i], solver, request.sharesToWithdraw);
+            give.safeTransferFrom(users[i], solver, request.giveAmount);
         }
 
-        IMultiAssetSolver(solver).finishSolve(runData, msg.sender, give, take, sharesToSolver, requiredAssets);
+        IAtomicSolver(solver).finishSolve(runData, msg.sender, give, take, assetsToGive, assetsToTake);
 
         for (uint256 i; i < users.length; ++i) {
-            WithdrawRequest storage request = userWithdrawRequest[users[i]][give][take];
+            AtomicRequest storage request = userAtomicRequest[users[i]][give][take];
 
             if (request.inSolve) {
                 // We know that the minimum price and deadline arguments are satisfied since this can only be true if they were.
 
                 // Send user their share of assets.
                 uint256 assetsToUser = _calculateAssetAmount(
-                    request.sharesToWithdraw,
-                    request.executionSharePrice,
-                    solveData.shareDecimals
+                    request.giveAmount,
+                    request.atomicPrice,
+                    solveData.giveDecimals
                 );
 
-                solveData.asset.safeTransferFrom(solver, users[i], assetsToUser);
+                take.safeTransferFrom(solver, users[i], assetsToUser);
 
-                emit RequestFulfilled(
+                emit AtomicRequestFulfilled(
                     users[i],
                     address(give),
                     address(take),
-                    request.sharesToWithdraw,
+                    request.giveAmount,
                     assetsToUser,
                     block.timestamp
                 );
 
                 // Set shares to withdraw to 0.
-                request.sharesToWithdraw = 0;
+                request.giveAmount = 0;
                 request.inSolve = false;
-            } else revert WithdrawQueue__UserNotInSolve(users[i]);
+            } else revert AtomicQueue__UserNotInSolve(users[i]);
         }
     }
 
@@ -255,53 +245,51 @@ contract MutiAssetWithdrawQueue is ReentrancyGuard {
      * @notice Helper function solvers can use to determine if users are solvable, and the required amounts to do so.
      * @notice Repeated users are not accounted for in this setup, so if solvers have repeat users in their `users`
      *         array the results can be wrong.
+     * @dev Since a user can have multiple requests with the same give asset but different take asset, it is
+     *      possible for `viewSolveMetaData` to report no errors, but for a solve to fail, if any solves were done
+     *      between the time `viewSolveMetaData` and before `solve` is called.
      */
     function viewSolveMetaData(
         ERC20 give,
         ERC20 take,
         address[] calldata users
-    ) external view returns (SolveMetaData[] memory metaData, uint256 totalRequiredAssets, uint256 totalSharesToSolve) {
+    ) external view returns (SolveMetaData[] memory metaData, uint256 totalAssetsToTake, uint256 totalAssetsToGive) {
         // Get Solve Data.
         SolveData memory solveData;
-        solveData.asset = take;
-        solveData.assetDecimals = solveData.asset.decimals();
-        solveData.shareDecimals = give.decimals();
+        solveData.takeDecimals = take.decimals();
+        solveData.giveDecimals = give.decimals();
 
         // Setup meta data.
         metaData = new SolveMetaData[](users.length);
 
         for (uint256 i; i < users.length; ++i) {
-            WithdrawRequest memory request = userWithdrawRequest[users[i]][give][take];
+            AtomicRequest memory request = userAtomicRequest[users[i]][give][take];
 
             metaData[i].user = users[i];
 
             if (block.timestamp > request.deadline) {
                 metaData[i].flags |= uint8(1);
             }
-            if (request.sharesToWithdraw == 0) {
+            if (request.giveAmount == 0) {
                 metaData[i].flags |= uint8(1) << 1;
             }
-            if (give.balanceOf(users[i]) < request.sharesToWithdraw) {
+            if (give.balanceOf(users[i]) < request.giveAmount) {
                 metaData[i].flags |= uint8(1) << 2;
             }
-            if (give.allowance(users[i], address(this)) < request.sharesToWithdraw) {
+            if (give.allowance(users[i], address(this)) < request.giveAmount) {
                 metaData[i].flags |= uint8(1) << 3;
             }
 
-            metaData[i].sharesToSolve = request.sharesToWithdraw;
+            metaData[i].assetsToGive = request.giveAmount;
 
             // User gets whatever their execution share price is.
-            uint256 userAssets = _calculateAssetAmount(
-                request.sharesToWithdraw,
-                request.executionSharePrice,
-                solveData.shareDecimals
-            );
-            metaData[i].requiredAssets = userAssets;
+            uint256 userAssets = _calculateAssetAmount(request.giveAmount, request.atomicPrice, solveData.giveDecimals);
+            metaData[i].assetsToTake = userAssets;
 
             // If flags is zero, no errors occurred.
             if (metaData[i].flags == 0) {
-                totalRequiredAssets += userAssets;
-                totalSharesToSolve += request.sharesToWithdraw;
+                totalAssetsToTake += userAssets;
+                totalAssetsToGive += request.giveAmount;
             }
         }
     }
