@@ -9,7 +9,7 @@ interface IAtomicSolver {
         address initiator,
         ERC20 give,
         ERC20 take,
-        uint256 sharesReceived,
-        uint256 assetApprovalAmount
+        uint256 assetsToOffer,
+        uint256 assetsForWant
     ) external;
 }
