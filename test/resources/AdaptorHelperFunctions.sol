@@ -71,6 +71,8 @@ import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdapt
 
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
+import { StakingAdaptor } from "src/modules/adaptors/Staking/StakingAdaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -783,6 +785,40 @@ contract AdaptorHelperFunctions {
         bool _claimExtras
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _baseRewardPool, _claimExtras);
+    }
+
+    // ========================================= MINTING/BURNING FUNCTIONS =========================================
+
+    function _createBytesDataToMint(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount);
+    }
+
+    function _createBytesDataToRequestBurn(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.requestBurn.selector, amount);
+    }
+
+    function _createBytesDataToCompleteBurn(uint256 id) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id);
+    }
+
+    function _createBytesDataToWrap(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount);
+    }
+
+    function _createBytesDataToUnwrap(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount);
+    }
+
+    function _createBytesDataToCancelBurnRequest(uint256 id) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.cancelBurn.selector, id);
+    }
+
+    function _createBytesDataToMintERC20(
+        ERC20 depositAsset,
+        uint256 amount,
+        uint256 minAmountOut
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mintERC20.selector, depositAsset, amount, minAmountOut);
     }
 
     // ========================================= Compound V3 FUNCTIONS =========================================
