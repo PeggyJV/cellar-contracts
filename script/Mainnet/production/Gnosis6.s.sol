@@ -37,6 +37,7 @@ contract Gnosis6Script is Script, MainnetAddresses {
     address public curveAdaptor = 0x94E28529f73dAD189CD0bf9D83a06572d4bFB26a;
     address public convexCurveAdaptor = 0x98C44FF447c62364E3750C5e2eF8acc38391A8B0;
     address public uniswapV3Adaptor = 0xC74fFa211A8148949a77ec1070Df7013C8D5Ce92;
+    address public erc20Adaptor = 0xa5D315eA3D066160651459C4123ead9264130BFd;
 
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
     uint8 public constant TWAP_DERIVATIVE = 2;
@@ -58,6 +59,8 @@ contract Gnosis6Script is Script, MainnetAddresses {
 
     uint32 public WstethEthxUniswapV3Position = 1_000_010;
     uint32 public EthXWethUniswapV3Position = 1_000_011;
+
+    uint32 public ethxPosition = 14;
 
     uint256 public wstethEthxCurveLpPriceWith8Decimals = 4_989e8;
     uint256 public ethEthxCurveLpPriceWith8Decimals = 2_318e8;
@@ -137,6 +140,9 @@ contract Gnosis6Script is Script, MainnetAddresses {
         // Add Uniswap V3 Positions.
         registry.trustPosition(WstethEthxUniswapV3Position, uniswapV3Adaptor, abi.encode(WSTETH, ETHX));
         registry.trustPosition(EthXWethUniswapV3Position, uniswapV3Adaptor, abi.encode(ETHX, WETH));
+
+        // Add ERC20 position
+        registry.trustPosition(ethxPosition, erc20Adaptor, abi.encode(ETHX));
 
         vm.stopBroadcast();
     }
