@@ -23,6 +23,7 @@ contract AtomicQueue is ReentrancyGuard {
      * @notice Stores request information needed to fulfill a users atomic request.
      * @param deadline unix timestamp for when request is no longer valid
      * @param atomicPrice the price in terms of `want` asset the user wants their `offer` assets "sold" at
+     * @dev atomicPrice MUST be in terms of `want` asset decimals.
      * @param offerAmount the amount of `offer` asset the user wants converted to `want` asset
      * @param inSolve bool used during solves to prevent duplicate users, and to prevent redoing multiple checks
      */
@@ -44,21 +45,13 @@ contract AtomicQueue is ReentrancyGuard {
      *              - 2: indicates user does not have enough shares in wallet.
      *              - 3: indicates user has not given AtomicQueue approval.
      * @param offerToSolve the amount of offer asset to solve
-     * @param assetsForWant the amount of want assets users wants for their offer assets
+     * @param assetsForWant the amount of assets users want for their offer assets
      */
     struct SolveMetaData {
         address user;
         uint8 flags;
         uint256 assetsToOffer;
         uint256 assetsForWant;
-    }
-
-    /**
-     * @notice Used to reduce the number of local variables in `solve`.
-     */
-    struct SolveData {
-        uint8 wantDecimals;
-        uint8 offerDecimals;
     }
 
     // ========================================= GLOBAL STATE =========================================
@@ -101,10 +94,6 @@ contract AtomicQueue is ReentrancyGuard {
         uint256 assetsReceived,
         uint256 timestamp
     );
-
-    //============================== IMMUTABLES ===============================
-
-    constructor() {}
 
     //============================== USER FUNCTIONS ===============================
 
@@ -184,10 +173,8 @@ contract AtomicQueue is ReentrancyGuard {
         bytes calldata runData,
         address solver
     ) external nonReentrant {
-        // Get Solve Data.
-        SolveData memory solveData;
-        solveData.wantDecimals = want.decimals();
-        solveData.offerDecimals = offer.decimals();
+        // Save offer asset decimals.
+        uint8 offerDecimals = offer.decimals();
 
         uint256 assetsToOffer;
         uint256 assetsForWant;
@@ -199,7 +186,7 @@ contract AtomicQueue is ReentrancyGuard {
             if (request.offerAmount == 0) revert AtomicQueue__ZeroOfferAmount(users[i]);
 
             // User gets whatever their execution share price is.
-            assetsForWant += _calculateAssetAmount(request.offerAmount, request.atomicPrice, solveData.offerDecimals);
+            assetsForWant += _calculateAssetAmount(request.offerAmount, request.atomicPrice, offerDecimals);
 
             // If all checks above passed, the users request is valid and should be fulfilled.
             assetsToOffer += request.offerAmount;
@@ -217,11 +204,7 @@ contract AtomicQueue is ReentrancyGuard {
                 // We know that the minimum price and deadline arguments are satisfied since this can only be true if they were.
 
                 // Send user their share of assets.
-                uint256 assetsToUser = _calculateAssetAmount(
-                    request.offerAmount,
-                    request.atomicPrice,
-                    solveData.offerDecimals
-                );
+                uint256 assetsToUser = _calculateAssetAmount(request.offerAmount, request.atomicPrice, offerDecimals);
 
                 want.safeTransferFrom(solver, users[i], assetsToUser);
 
@@ -254,10 +237,8 @@ contract AtomicQueue is ReentrancyGuard {
         ERC20 want,
         address[] calldata users
     ) external view returns (SolveMetaData[] memory metaData, uint256 totalAssetsForWant, uint256 totalAssetsToOffer) {
-        // Get Solve Data.
-        SolveData memory solveData;
-        solveData.wantDecimals = want.decimals();
-        solveData.offerDecimals = offer.decimals();
+        // Save offer asset decimals.
+        uint8 offerDecimals = offer.decimals();
 
         // Setup meta data.
         metaData = new SolveMetaData[](users.length);
@@ -283,11 +264,7 @@ contract AtomicQueue is ReentrancyGuard {
             metaData[i].assetsToOffer = request.offerAmount;
 
             // User gets whatever their execution share price is.
-            uint256 userAssets = _calculateAssetAmount(
-                request.offerAmount,
-                request.atomicPrice,
-                solveData.offerDecimals
-            );
+            uint256 userAssets = _calculateAssetAmount(request.offerAmount, request.atomicPrice, offerDecimals);
             metaData[i].assetsForWant = userAssets;
 
             // If flags is zero, no errors occurred.
@@ -301,9 +278,14 @@ contract AtomicQueue is ReentrancyGuard {
     //============================== INTERNAL FUNCTIONS ===============================
 
     /**
-     * @notice Helper function to calculate the amount of assets a user is owed based off their shares, and execution price.
+     * @notice Helper function to calculate the amount of want assets a users wants in exchange for
+     *         `offerAmount` of offer asset.
      */
-    function _calculateAssetAmount(uint256 shares, uint256 price, uint8 shareDecimals) internal pure returns (uint256) {
-        return price.mulDivDown(shares, 10 ** shareDecimals);
+    function _calculateAssetAmount(
+        uint256 offerAmount,
+        uint256 atomicPrice,
+        uint8 offerDecimals
+    ) internal pure returns (uint256) {
+        return atomicPrice.mulDivDown(offerAmount, 10 ** offerDecimals);
     }
 }
