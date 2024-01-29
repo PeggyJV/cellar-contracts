@@ -11,6 +11,13 @@ import { IAtomicSolver } from "./IAtomicSolver.sol";
  * @title AtomicQueue
  * @notice Allows users to create `AtomicRequests` that specify an ERC20 asset to `offer`
  *         and an ERC20 asset to `want` in return.
+ * @notice Making atomic requests where the exchange rate between offer and want is not
+ *         relatively stable is effectively the same as placing a limit order between
+ *         those assets, so requests can be filled at a rate worse than the current market rate.
+ * @notice It is possible for a user to make multiple requests that use the same offer asset.
+ *         If this is done it is important that the user has approved the queue to spend the
+ *         total amount of assets aggregated from all their requests, and to also have enough
+ *         `offer` asset to cover the aggregate total request of `offerAmount`.
  * @author crispymangoes
  */
 contract AtomicQueue is ReentrancyGuard {
