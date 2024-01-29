@@ -253,6 +253,12 @@ contract MainnetAddresses {
     address public LusdCrvUsdPool = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
     address public LusdCrvUsdToken = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
     address public LusdCrvUsdGauge = 0x66F65323bdE835B109A92045Aa7c655559dbf863;
+    address public WstethEthXPool = 0x14756A5eD229265F86990e749285bDD39Fe0334F;
+    address public WstethEthXToken = 0xfffAE954601cFF1195a8E20342db7EE66d56436B;
+    address public WstethEthXGauge = 0xc1394d6c89cf8F553da8c8256674C778ccFf3E80;
+    address public EthEthXPool = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthXToken = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthXGauge = 0x7671299eA7B4bbE4f3fD305A994e6443b4be680E;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
@@ -268,6 +274,7 @@ contract MainnetAddresses {
     address public crvUsdSFraxBaseRewardPool = 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2;
     address public usdtCrvUsdBaseRewardPool = 0xD1DdB0a0815fD28932fBb194C84003683AF8a824;
     address public lusdCrvUsdBaseRewardPool = 0x633D3B227696B3FacF628a197f982eF68d26c7b5;
+    address public wstethEthxBaseRewardPool = 0x85b118e0Fa5706d99b270be43d782FBE429aD409;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
