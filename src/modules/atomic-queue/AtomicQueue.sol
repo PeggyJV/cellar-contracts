@@ -30,7 +30,7 @@ contract AtomicQueue is ReentrancyGuard {
         uint64 deadline; // deadline to fulfill request
         uint88 atomicPrice; // In terms of want asset decimals
         uint96 offerAmount; // The amount of offer asset the user wants to sell.
-        bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
+        bool inSolve; // Indicates whether this user is currently having their request fulfilled.
     }
 
     /**
