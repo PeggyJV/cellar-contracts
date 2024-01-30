@@ -78,10 +78,6 @@ contract AtomicQueueTest is MainnetStarterTest, AdaptorHelperFunctions, IAtomicS
         cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
     }
 
-    // TODO test where we take a users oETH and deposit into RYE, I dont think RYE deposits would work since it has a timelock...
-
-    // so maybe deposit into turbo steth?
-
     function testQueueForWithdraws(uint8 numberOfUsers, uint256 baseAssets, uint256 atomicPrice) external {
         numberOfUsers = uint8(bound(numberOfUsers, 1, 100));
         baseAssets = bound(baseAssets, 1e6, 1_000_000e6);

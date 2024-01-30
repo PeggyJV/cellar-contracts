@@ -49,7 +49,7 @@ contract AtomicQueue is ReentrancyGuard {
      *              From right to left
      *              - 0: indicates user deadline has passed.
      *              - 1: indicates user request has zero offer amount.
-     *              - 2: indicates user does not have enough shares in wallet.
+     *              - 2: indicates user does not have enough offer asset in wallet.
      *              - 3: indicates user has not given AtomicQueue approval.
      * @param offerToSolve the amount of offer asset to solve
      * @param assetsForWant the amount of assets users want for their offer assets
@@ -82,8 +82,8 @@ contract AtomicQueue is ReentrancyGuard {
      */
     event AtomicRequestUpdated(
         address user,
-        address offer,
-        address want,
+        address offerToken,
+        address wantToken,
         uint256 amount,
         uint256 deadline,
         uint256 minPrice,
@@ -95,8 +95,8 @@ contract AtomicQueue is ReentrancyGuard {
      */
     event AtomicRequestFulfilled(
         address user,
-        address offer,
-        address want,
+        address offerToken,
+        address wantToken,
         uint256 sharesSpent,
         uint256 assetsReceived,
         uint256 timestamp
@@ -105,7 +105,10 @@ contract AtomicQueue is ReentrancyGuard {
     //============================== USER FUNCTIONS ===============================
 
     /**
-     * @notice Get a users Withdraw Request.
+     * @notice Get a users Atomic Request.
+     * @param user the address of the user to get the request for
+     * @param offer the ERC0 token they want to exchange for the want
+     * @param want the ERC20 token they want in exchange for the offer
      */
     function getUserAtomicRequest(address user, ERC20 offer, ERC20 want) external view returns (AtomicRequest memory) {
         return userAtomicRequest[user][offer][want];
@@ -118,6 +121,9 @@ contract AtomicQueue is ReentrancyGuard {
      * @dev It is possible for a withdraw request to return false from this function, but using the
      *      request in `updateAtomicRequest` will succeed, but solvers will not be able to include
      *      the user in `solve` unless some other state is changed.
+     * @param offer the ERC0 token they want to exchange for the want
+     * @param user the address of the user making the request
+     * @param userRequest the request struct to validate
      */
     function isAtomicRequestValid(
         ERC20 offer,
@@ -144,6 +150,9 @@ contract AtomicQueue is ReentrancyGuard {
      *         If this happens, users will be selling their shares for no assets in return.
      *         To determine a safe atomicPrice, share.previewRedeem should be used to get
      *         a good share price, then the user can lower it from there to make their request fill faster.
+     * @param offer the ERC20 token the user is offering in exchange for the want
+     * @param want the ERC20 token the user wants in exchange for offer
+     * @param userRequest the users request
      */
     function updateAtomicRequest(ERC20 offer, ERC20 want, AtomicRequest calldata userRequest) external nonReentrant {
         AtomicRequest storage request = userAtomicRequest[msg.sender][offer][want];
@@ -169,9 +178,14 @@ contract AtomicQueue is ReentrancyGuard {
     /**
      * @notice Called by solvers in order to exchange offer asset for want asset.
      * @notice Solvers are optimistically transferred the offer asset, then are required to
-     *         approve this contrac to spend enough of want assets to cover all requests.
+     *         approve this contract to spend enough of want assets to cover all requests.
      * @dev It is very likely `solve` TXs will be front run if broadcasted to public mem pools,
      *      so solvers should use private mem pools.
+     * @param offer the ERC20 offer token to solve for
+     * @param want the ERC20 want token to solve for
+     * @param users an array of user addresses to solve for
+     * @param runData extra data that is passed back to solver when `finishSolve` is called
+     * @param solver the address to make `finishSolve` callback to
      */
     function solve(
         ERC20 offer,
@@ -192,7 +206,7 @@ contract AtomicQueue is ReentrancyGuard {
             if (block.timestamp > request.deadline) revert AtomicQueue__RequestDeadlineExceeded(users[i]);
             if (request.offerAmount == 0) revert AtomicQueue__ZeroOfferAmount(users[i]);
 
-            // User gets whatever their execution share price is.
+            // User gets whatever their atomic price * offerAmount is.
             assetsForWant += _calculateAssetAmount(request.offerAmount, request.atomicPrice, offerDecimals);
 
             // If all checks above passed, the users request is valid and should be fulfilled.
@@ -238,6 +252,9 @@ contract AtomicQueue is ReentrancyGuard {
      * @dev Since a user can have multiple requests with the same offer asset but different want asset, it is
      *      possible for `viewSolveMetaData` to report no errors, but for a solve to fail, if any solves were done
      *      between the time `viewSolveMetaData` and before `solve` is called.
+     * @param offer the ERC20 offer token to check for solvability
+     * @param want the ERC20 want token to check for solvability
+     * @param users an array of user addresses to check for solvability
      */
     function viewSolveMetaData(
         ERC20 offer,
