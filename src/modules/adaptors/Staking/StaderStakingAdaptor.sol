@@ -63,8 +63,8 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Stader using native asset.
      */
-    function _mint(uint256 amount) internal override {
-        stakePoolManager.deposit{ value: amount }(address(this));
+    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+        amountOut = stakePoolManager.deposit{ value: amount }(address(this));
     }
 
     /**

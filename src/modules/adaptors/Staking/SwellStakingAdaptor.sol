@@ -45,7 +45,10 @@ contract SwellStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Swell using native asset.
      */
-    function _mint(uint256 amount) internal override {
+    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+        ERC20 derivative = ERC20(address(swETH));
+        amountOut = derivative.balanceOf(address(this));
         swETH.deposit{ value: amount }();
+        amountOut = derivative.balanceOf(address(this)) - amountOut;
     }
 }

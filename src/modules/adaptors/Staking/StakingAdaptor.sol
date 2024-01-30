@@ -41,6 +41,7 @@ contract StakingAdaptor is BaseAdaptor {
     error StakingAdaptor__MaximumRequestsExceeded();
     error StakingAdaptor__NotSupported();
     error StakingAdaptor__ZeroAmount();
+    error StakingAdaptor__MinimumAmountNotMet(uint256 actual, uint256 minimum);
 
     /**
      * @notice Attempted to read `locked` from unstructured storage, but found uninitialized value.
@@ -220,13 +221,14 @@ contract StakingAdaptor is BaseAdaptor {
      * @dev Will automatically unwrap the native asset.
      * @param amount the amount of native asset to use for minting
      */
-    function mint(uint256 amount) external virtual {
+    function mint(uint256 amount, uint256 minAmountOut) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
         amount = _maxAvailable(ERC20(address(wrappedPrimitive)), amount);
         wrappedPrimitive.withdraw(amount);
 
-        _mint(amount);
+        uint256 amountMinted = _mint(amount);
+        if (amountMinted < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(amountMinted, minAmountOut);
     }
 
     /**
@@ -247,10 +249,11 @@ contract StakingAdaptor is BaseAdaptor {
      * @dev Will automatically wrap the native asset received from burn/withdraw.
      * @param id the request id
      */
-    function completeBurn(uint256 id) external virtual {
+    function completeBurn(uint256 id, uint256 minAmountOut) external virtual {
         uint256 primitiveDelta = address(this).balance;
         _completeBurn(id);
         primitiveDelta = address(this).balance - primitiveDelta;
+        if (primitiveDelta < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(primitiveDelta, minAmountOut);
         wrappedPrimitive.deposit{ value: primitiveDelta }();
         StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
@@ -268,20 +271,22 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice Allows a strategist to wrap a derivative asset.
      * @param amount the amount of derivative to wrap
      */
-    function wrap(uint256 amount) external virtual {
+    function wrap(uint256 amount, uint256 minAmountOut) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
-        _wrap(amount);
+        uint256 amountOut = _wrap(amount);
+        if (amountOut < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(amountOut, minAmountOut);
     }
 
     /**
      * @notice Allows a strategist to unwrap a wrapped derivative asset.
      * @param amount the amount of wrapped derivative to unwrap
      */
-    function unwrap(uint256 amount) external virtual {
+    function unwrap(uint256 amount, uint256 minAmountOut) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
-        _unwrap(amount);
+        uint256 amountOut = _unwrap(amount);
+        if (amountOut < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(amountOut, minAmountOut);
     }
 
     /**
@@ -293,7 +298,8 @@ contract StakingAdaptor is BaseAdaptor {
     function mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) external virtual {
         if (amount == 0) revert StakingAdaptor__ZeroAmount();
 
-        _mintERC20(depositAsset, amount, minAmountOut);
+        uint256 amountOut = _mintERC20(depositAsset, amount, minAmountOut);
+        if (amountOut < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(amountOut, minAmountOut);
     }
 
     //============================================ Interface Helper Functions ===========================================
@@ -327,24 +333,27 @@ contract StakingAdaptor is BaseAdaptor {
      * @notice An inheriting adaptor should implement `_mint` if they support staking with native.
      * @dev Uint256 is the amount of native to mint with.
      */
-    function _mint(uint256) internal virtual {
+    function _mint(uint256) internal virtual returns (uint256) {
         if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 
     /**
      * @notice An inheriting adaptor should implement `_wrap` if they support wrapping a derivative.
      * @dev Uint256 is the amount of derivative to wrap.
      */
-    function _wrap(uint256) internal virtual {
+    function _wrap(uint256) internal virtual returns (uint256) {
         if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 
     /**
      * @notice An inheriting adaptor should implement `_unwrap` if they support unwrapping a derivative.
      * @dev Uint256 is the amount of wrapped derivative to unwrap.
      */
-    function _unwrap(uint256) internal virtual {
+    function _unwrap(uint256) internal virtual returns (uint256) {
         if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 
     /**
@@ -380,7 +389,8 @@ contract StakingAdaptor is BaseAdaptor {
      * @dev Second arg is the amount of ERC20.
      * @dev Third arg is the minimum amount of derivative out from mint.
      */
-    function _mintERC20(ERC20, uint256, uint256) internal virtual {
+    function _mintERC20(ERC20, uint256, uint256) internal virtual returns (uint256) {
         if (true) revert StakingAdaptor__NotSupported();
+        return 0;
     }
 }

@@ -59,27 +59,27 @@ contract LidoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Lido using native asset.
      */
-    function _mint(uint256 amount) internal override {
-        stETH.submit{ value: amount }(address(0));
+    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+        amountOut = stETH.submit{ value: amount }(address(0));
     }
 
     /**
      * @notice Wrap stETH.
      */
-    function _wrap(uint256 amount) internal override {
+    function _wrap(uint256 amount) internal override returns (uint256 amountOut) {
         ERC20 derivative = ERC20(address(stETH));
         amount = _maxAvailable(derivative, amount);
         derivative.safeApprove(address(wstETH), amount);
-        wstETH.wrap(amount);
+        amountOut = wstETH.wrap(amount);
         _revokeExternalApproval(derivative, address(wstETH));
     }
 
     /**
      * @notice Unwrap wstETH.
      */
-    function _unwrap(uint256 amount) internal override {
+    function _unwrap(uint256 amount) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(ERC20(address(wstETH)), amount);
-        wstETH.unwrap(amount);
+        amountOut = wstETH.unwrap(amount);
     }
 
     // TODO so I dont really get the math in WithdrawQueueBase.sol Line 484
@@ -113,10 +113,6 @@ contract LidoStakingAdaptor is StakingAdaptor {
         id = ids[0];
     }
 
-    // TODO I could add a slippage check here? Like look at the delta balance of native transferred, and comapare it to the requests amountOfStETH?
-    // Then make sure they are within like 10 bps?
-
-    // TODO could allow strategist to provide a min value.
     /**
      * @notice Complete a withdraw.
      */

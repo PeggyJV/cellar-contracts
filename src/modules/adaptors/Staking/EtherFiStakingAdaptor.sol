@@ -66,26 +66,26 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into EtherFi using native asset.
      */
-    function _mint(uint256 amount) internal override {
-        liquidityPool.deposit{ value: amount }();
+    function _mint(uint256 amount) internal override returns (uint256 amountMinted) {
+        amountMinted = liquidityPool.deposit{ value: amount }();
     }
 
     /**
      * @notice Wraps derivative asset.
      */
-    function _wrap(uint256 amount) internal override {
+    function _wrap(uint256 amount) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(eETH, amount);
         eETH.safeApprove(address(weETH), amount);
-        weETH.wrap(amount);
+        amountOut = weETH.wrap(amount);
         _revokeExternalApproval(eETH, address(weETH));
     }
 
     /**
      * @notice Unwraps derivative asset.
      */
-    function _unwrap(uint256 amount) internal override {
+    function _unwrap(uint256 amount) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(ERC20(address(weETH)), amount);
-        weETH.unwrap(amount);
+        amountOut = weETH.unwrap(amount);
     }
 
     /**

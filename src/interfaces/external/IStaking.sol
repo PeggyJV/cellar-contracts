@@ -8,7 +8,7 @@ interface ISWETH {
 
 // EtherFi
 interface ILiquidityPool {
-    function deposit() external payable;
+    function deposit() external payable returns (uint256);
 
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
 
@@ -39,9 +39,9 @@ interface IWithdrawRequestNft {
 }
 
 interface IWEETH {
-    function wrap(uint256 amount) external;
+    function wrap(uint256 amount) external returns (uint256);
 
-    function unwrap(uint256 amount) external;
+    function unwrap(uint256 amount) external returns (uint256);
 }
 
 // Kelp DAO
@@ -56,13 +56,13 @@ interface ILRTDepositPool {
 
 // Lido
 interface ISTETH {
-    function submit(address referral) external payable;
+    function submit(address referral) external payable returns (uint256);
 }
 
 interface IWSTETH {
-    function wrap(uint256 amount) external;
+    function wrap(uint256 amount) external returns (uint256);
 
-    function unwrap(uint256 amount) external;
+    function unwrap(uint256 amount) external returns (uint256);
 }
 
 interface IUNSTETH {

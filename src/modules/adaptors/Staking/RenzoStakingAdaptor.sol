@@ -21,12 +21,19 @@ contract RenzoStakingAdaptor is StakingAdaptor {
      */
     IRestakeManager public immutable restakeManager;
 
+    /**
+     * @notice The address of ezETH.
+     */
+    ERC20 public immutable ezETH;
+
     constructor(
         address _wrappedNative,
         uint8 _maxRequests,
-        address _restakeManager
+        address _restakeManager,
+        address _ezETH
     ) StakingAdaptor(_wrappedNative, _maxRequests) {
         restakeManager = IRestakeManager(_restakeManager);
+        ezETH = ERC20(_ezETH);
     }
 
     //============================================ Global Functions ===========================================
@@ -45,7 +52,9 @@ contract RenzoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Renzo using native asset.
      */
-    function _mint(uint256 amount) internal override {
+    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+        amountOut = ezETH.balanceOf(address(this));
         restakeManager.depositETH{ value: amount }();
+        amountOut = ezETH.balanceOf(address(this)) - amountOut;
     }
 }
