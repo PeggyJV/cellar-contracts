@@ -273,7 +273,7 @@ contract DebtFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified Fraxlend Pair
      */
     function _borrowAsset(uint256 _borrowAmount, IFToken _fraxlendPair) internal virtual {
-        _fraxlendPair.borrowAsset(_borrowAmount, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
+        _fraxlendPair.borrowAsset(_borrowAmount, 0, address(this)); // NOTE: explicitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
     }
 
     /**

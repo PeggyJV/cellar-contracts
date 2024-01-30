@@ -12,10 +12,14 @@ import { CompoundV2DebtAdaptor } from "src/modules/adaptors/Compound/CompoundV2D
 import { Math } from "src/utils/Math.sol";
 
 /**
+ * @dev Tests are purposely kept very single-scope in order to do better gas comparisons with gas-snapshots for typical functionalities.
  * TODO - Use this temporary test file to troubleshoot decimals and health factor tests until we resolve the CUSDC position error in `Compound.t.sol`. Once that is resolved we can copy over the tests from here if they are done.
  * TODO - troubleshoot decimals and health factor calcs
  * TODO - finish off happy path and reversion tests once health factor is figured out
  * TODO - test cTokens that are using native tokens (ETH, etc.)
+ * 
+ * TODO - EIN - OG compoundV2 tests already account for totalAssets, deposit, withdraw, so we'll have to test for each new functionality: enterMarket, exitMarket, borrowFromCompoundV2, repayCompoundV2Debt.
+
  */
 contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -31,20 +35,23 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
     Comptroller private comptroller = Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
     uint32 private daiPosition = 1;
-    uint32 private cDAIPosition = 4;
-    uint32 private usdcPosition = 3;
     uint32 private cUSDCPosition = 2;
+    uint32 private usdcPosition = 3;
+    uint32 private cDAIPosition = 4;
     uint32 private daiVestingPosition = 5;
     uint32 private cDAIDebtPosition = 6;
-    // uint32 private cUSDCDebtPosition = 7;
+    uint32 private cUSDCDebtPosition = 7;
     // TODO: add positions for ETH CTokens
+
+    // Collateral Positions are just regular CTokenAdaptor positions but after `enterMarket()` has been called.
+    // Debt Positions --> these need to be setup properly. Start with a debt position on a market that is easy.
 
     uint256 private minHealthFactor = 1.1e18;
 
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 18814032;
+        uint256 blockNumber = 16869780;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -85,13 +92,13 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // trust debtAdaptor positions
         registry.trustPosition(cDAIDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cDAI));
-        // registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
+        registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
 
         string memory cellarName = "Compound Cellar V0.0";
-        uint256 initialDeposit = 1e6;
+        uint256 initialDeposit = 1e18;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, USDC, cUSDCPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, DAI, cDAIPosition, abi.encode(0), initialDeposit, platformCut);
 
         cellar.setRebalanceDeviation(0.003e18);
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
@@ -101,26 +108,29 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         cellar.addPositionToCatalogue(daiPosition);
         cellar.addPositionToCatalogue(usdcPosition);
-        cellar.addPositionToCatalogue(cDAIPosition);
+        cellar.addPositionToCatalogue(cUSDCPosition);
         cellar.addPositionToCatalogue(daiVestingPosition);
         cellar.addPositionToCatalogue(cDAIDebtPosition);
-        // cellar.addPositionToCatalogue(cUSDCDebtPosition);
+        cellar.addPositionToCatalogue(cUSDCDebtPosition);
 
         cellar.addPosition(1, daiPosition, abi.encode(0), false);
         cellar.addPosition(2, usdcPosition, abi.encode(0), false);
-        cellar.addPosition(3, cDAIPosition, abi.encode(0), false);
+        cellar.addPosition(3, cUSDCPosition, abi.encode(0), false);
         cellar.addPosition(4, daiVestingPosition, abi.encode(0), false);
-        cellar.addPosition(5, cDAIDebtPosition, abi.encode(0), true);
-        // cellar.addPosition(6, cUSDCDebtPosition, abi.encode(0), true);
+        cellar.addPosition(0, cDAIDebtPosition, abi.encode(0), true);
+        cellar.addPosition(1, cUSDCDebtPosition, abi.encode(0), true);
 
-        USDC.safeApprove(address(cellar), type(uint256).max);
+        DAI.safeApprove(address(cellar), type(uint256).max);
     }
 
     /// Extra test for supporting providing collateral && open borrow positions
 
     // TODO repeat above tests but for positions that have marked their cToken positions as collateral provision
 
-    function testEnterMarket() external {
+    // TODO - EIN THIS IS WHERE YOU LEFT OFF: NEXT THING TO DO IS TO BORROW STUFF! BUT  READ THIS NOTE AFTERWARDS FOR CONTEXT --> setup() has cUSDC as the holdingPosition for the cellar. We've trusted cDAI for debt positions. So we just are going to test primarily with CUSDC as the collateral / supply side, and cDAI (and thus DAI) as the debt positions.
+
+    // Supply && EnterMarket
+    function testEnterMarket(uint256 assets) external {
         // TODO below checks AFTER entering the market
         // TODO check that totalAssets reports properly
         // TODO check that balanceOf reports properly
@@ -130,63 +140,387 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
         // TODO check that strategist function to enterMarket reverts if you're already in the market
         // TODO check that you can exit the market, then enter again
 
-        // uint256 initialAssets = cellar.totalAssets();
-        // assets = bound(assets, 0.1e6, 1_000_000e6);
-        uint256 assets = 100e6;
-        deal(address(USDC), address(this), assets);
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        // uint256 assets = 100e6;
+        deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
-
-        // TODO - MOVE BELOW BLOB ABOUT CHECKING IN MARKET TO ENTER MARKET TEST
-        // check that we aren't in market
-        bool inCTokenMarket = _checkInMarket(cUSDC);
-        assertEq(inCTokenMarket, false, "Should not be 'IN' the market yet");
 
         // enter market
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         {
-            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cUSDC);
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-        inCTokenMarket = _checkInMarket(cUSDC);
+        bool inCTokenMarket = _checkInMarket(cDAI);
         assertEq(inCTokenMarket, true, "Should be 'IN' the market");
     }
 
-    function testTotalAssets(uint256 assets) external {
-        // TODO focused test on totalAssets as cellar takes on lending, collateral provision, borrows, repayments, full withdrawals
+    // Supply && EnterMarket
+    function testDefaultCheckInMarket(uint256 assets) external {
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        // uint256 assets = 100e6;
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // check that we aren't in market
+        bool inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, false, "Should not be 'IN' the market yet");
     }
 
+    // Same as testTotalAssets in OG CompoundV2 tests but the supplied position is marked as `entered` in the market --> so it checks totalAssets with a position that has: lending, marking that as entered in the market, withdrawing, swaps, and lending more.
+    // TODO - reverts w/ STF on uniswap v3 swap. I switched the blockNumber to match that of the `Compound.t.sol` file but it still fails.
+    function testTotalAssetsWithJustEnterMarket() external {
+        uint256 initialAssets = cellar.totalAssets();
+        uint256 assets = 1_000e18;
+        deal(address(DAI), address(this), assets);
+        // deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            0.0002e18,
+            "Total assets should equal assets deposited."
+        );
+
+        // Swap from USDC to DAI and lend DAI on Compound.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](5);
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, assets / 2);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(DAI, USDC, 100, assets / 2);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendOnComnpoundV2(cUSDC, type(uint256).max);
+            data[3] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cUSDC);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        // Account for 0.1% Swap Fee.
+        assets = assets - assets.mulDivDown(0.001e18, 2e18);
+        // Make sure Total Assets is reasonable.
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            0.001e18,
+            "Total assets should equal assets deposited minus swap fees."
+        );
+    }
+
+    // checks that it reverts if the position is marked as `entered` - aka is collateral
+    // NOTE - without the `_checkMarketsEntered` withdrawals are possible with CompoundV2 markets even if the the position is marked as `entered` in the market.
+    // TODO - if we design it this way, doublecheck that entering market, as long as position is not in an open borrow, can be withdrawn without having to toggle `exitMarket`
+    function testWithdrawEnteredMarketPosition(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        deal(address(DAI), address(this), 0);
+        uint256 amountToWithdraw = cellar.maxWithdraw(address(this));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__AlreadyInMarket.selector, address(cDAI)))
+        );
+        cellar.withdraw(amountToWithdraw, address(this), address(this));
+    }
+
+    // TODO - test to check the following: I believe it won't allow withdrawals if below a certain LTV, but we prevent that anyways with our own HF calculations.
+
+    // check that exit market exits position from compoundV2 market collateral position
     function testExitMarket(uint256 assets) external {
-        // TODO below checks AFTER entering the market
-        // TODO check that totalAssets reports properly
-        // TODO check that balanceOf reports properly
-        // TODO check that withdrawableFrom reports properly
-        // TODO check that user deposits add to collateral position
-        // TODO check that user withdraws work when no debt-position is open
-        // TODO check that strategist function to enterMarket reverts if you're already in the market
-        // TODO check that you can exit the market, then enter again
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        // uint256 assets = 100e6;
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataToExitMarketWithCompoundV2(cDAI);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+        bool inCTokenMarket = _checkInMarket(cDAI);
+        assertEq(inCTokenMarket, false, "Should be 'NOT IN' the market");
     }
 
-    function testTakingOutLoans(uint256 assets) external {
-        // TODO Simply carry out borrows
-        // TODO assert that amount borrowed equates to how much compound has on record, and is in agreement with how much cellar wanted
+    // TODO - refactor because it uses repeititve code used elsewhere in tests (see testTotalAssetsWithJustEnterMarket)
+    function testTotalAssetsAfterExitMarket() external {
+        uint256 initialAssets = cellar.totalAssets();
+        uint256 assets = 1_000e18;
+        deal(address(DAI), address(this), assets);
+        // deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            0.0002e18,
+            "Total assets should equal assets deposited."
+        );
+
+        // Swap from USDC to DAI and lend DAI on Compound.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](6);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, assets / 2);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(DAI, USDC, 100, assets / 2);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataToLendOnComnpoundV2(cUSDC, type(uint256).max);
+            data[3] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cUSDC);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            adaptorCalls[0] = _createBytesDataToExitMarketWithCompoundV2(cDAI);
+            data[5] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        // Account for 0.1% Swap Fee.
+        assets = assets - assets.mulDivDown(0.001e18, 2e18);
+        // Make sure Total Assets is reasonable.
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            0.001e18,
+            "Total assets should equal assets deposited minus swap fees."
+        );
     }
 
+    // TODO- CTokenAdaptor__UnsuccessfulEnterMarket
+
+    // TODO - error code tests for checkMarketsEntered
+
+    // TODO - error code tests for enter market
+
+    // TODO - error code tests for exit market
+
+    //============================================ CompoundV2DebtAdaptor Tests ===========================================
+
+    // to assess the gas costs for the simplest function involving HF, I guess we'd just do a borrow.
+    function testGAS_Borrow(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // borrow from a different market, it should be fine because that is how compoundV2 works, it shares collateral amongst a bunch of different lending markets.
+
+        deal(address(USDC), address(cellar), 0);
+
+        uint256 amountToBorrow = priceRouter.getValue(DAI, assets / 2, USDC);
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cUSDC, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertEq(
+            USDC.balanceOf(address(cellar)),
+            amountToBorrow,
+            "Requested amountToBorrow should be met from borrow tx."
+        );
+        assertEq(
+            cUSDC.borrowBalanceStored(address(cellar)),
+            amountToBorrow,
+            "CompoundV2 market reflects total borrowed."
+        );
+        // TODO - Question: Does supply amount diminish as more cellar borrows more and thus truly switches more and more lent out supply as collateral? If yes, run a test checking that.
+    }
+
+    // This check stops strategists from taking on any debt in positions they do not set up properly.
     function testTakingOutLoanInUntrackedPositionV2(uint256 assets) external {
-        // TODO simply test taking out loans in untracked position
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // borrow
+        deal(address(USDC), address(this), 0);
+
+        uint256 amountToBorrow = priceRouter.getValue(DAI, assets / 2, USDC);
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cTUSD, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CompoundV2DebtAdaptor.CompoundV2DebtAdaptor__CompoundV2PositionsMustBeTracked.selector,
+                    address(cTUSD)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
     }
 
+    // simply test repaying and that balances make sense
     function testRepayingLoans(uint256 assets) external {
-        // TODO simply test repaying and that balances make sense
-        // TODO repay some
-        // TODO repay all
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // borrow
+        deal(address(USDC), address(this), 0);
+
+        uint256 amountToBorrow = priceRouter.getValue(DAI, assets / 2, USDC);
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cUSDC, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        {
+            adaptorCalls[0] = _createBytesDataToRepayWithCompoundV2(cUSDC, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertEq(
+            USDC.balanceOf(address(cellar)),
+            0,
+            "Cellar should have repaid USDC debt with all of its USDC balance."
+        );
+        assertEq(cUSDC.borrowBalanceStored(address(cellar)), 0, "CompoundV2 market reflects debt being repaid fully.");
     }
+
+    //  repay some
+    //  repay all
+    function testMultipleRepayments(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // borrow
+        deal(address(USDC), address(this), 0);
+
+        uint256 amountToBorrow = priceRouter.getValue(DAI, assets / 2, USDC);
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cUSDC, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        {
+            adaptorCalls[0] = _createBytesDataToRepayWithCompoundV2(cUSDC, amountToBorrow / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertEq(USDC.balanceOf(address(cellar)), amountToBorrow / 2, "Cellar should have repaid half of debt.");
+        assertEq(
+            cUSDC.borrowBalanceStored(address(cellar)),
+            amountToBorrow / 2,
+            "CompoundV2 market reflects debt being repaid partially."
+        );
+
+        // repay rest
+        {
+            adaptorCalls[0] = _createBytesDataToRepayWithCompoundV2(cUSDC, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+        assertEq(USDC.balanceOf(address(cellar)), 0, "Cellar should have repaid all of debt.");
+        assertEq(cUSDC.borrowBalanceStored(address(cellar)), 0, "CompoundV2 market reflects debt being repaid fully.");
+    }
+
+    // TODO - test multiple borrows up to the point that the HF is unhealthy.
+    // TODO - test borrowing from multiple markets up to the HF being unhealthy. Then test repaying some of it, and then try the last borrow that shows that the adaptor is working with the "one-big-pot" lending market of compoundV2 design.
 
     function testMultipleCompoundV2Positions() external {
         // TODO check that adaptor can handle multiple positions for a cellar
         // TODO
     }
+
+    //============================================ Collateral (CToken) and Debt Tests ===========================================
+
+    // TODO - testHFReverts --> should revert w/: 1. trying to withdraw when that lowers HF, 2. trying to borrow more, 3. exiting market when that lowers HF
+    // So this would test --> CTokenAdaptor__HealthFactorTooLow
+    // and test --> <debt error>
 
     function testRemoveCollateral(uint256 assets) external {
         // TODO test redeeming without calling `exitMarket`
@@ -216,8 +550,8 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
         // TODO test that it reverts if trying to call exitMarket w/ too much borrow position out that one cannot pull the collateral.
     }
 
-    // TODO - supply collateral in one asset, and then borrow another. So for these tests, supply USDC, borrow DAI.
-    // TODO - add testing within this to see if lossy-ness is a big deal. We will need to use CompoundV2HelperLogicVersionA, then CompoundV2HelperLogicVersionB to compare.
+    // TODO - EIN THIS IS WHERE YOU LEFT OFF
+    // tests the different scenarios that would revert if HFMinimum was not met, and then tests with values that would pass if HF assessments were working correctly.
     function testHF() external {
         // will have cUSDC to start from setup, taking out DAI ultimately. To figure out decimals for HF calc, I'll console log throughout the whole thing when borrowing. I need to have a stable start though.
         uint256 initialAssets = cellar.totalAssets();
@@ -282,17 +616,46 @@ contract CompoundTempHFTest is MainnetStarterTest, AdaptorHelperFunctions {
         // TODO decrease the borrow and then do the redeem successfully
     }
 
-    // TODO - is it possible for a position to have a collateral postiion and a borrow position in the same market?
+    // TODO - EIN - ASSESSING OPTIONS A AND OPTIONS B to further assess gas costs we can simply test that it reverts when HF is not respected.
+    function testGAS_HFRevert(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
 
-    function testRepayPartialDebt(uint256 assets) external {
-        // TODO test partial repayment and check that balances make sense within compound and outside of it (actual token balances)
+        // enter market
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        {
+            adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(cDAI);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // borrow
+        deal(address(USDC), address(cellar), 0);
+
+        uint256 amountToBorrow = priceRouter.getValue(DAI, assets, USDC);
+        {
+            adaptorCalls[0] = _createBytesDataToBorrowWithCompoundV2(cUSDC, amountToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(compoundV2DebtAdaptor), callData: adaptorCalls });
+        }
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CompoundV2DebtAdaptor.CompoundV2DebtAdaptor__HealthFactorTooLow.selector,
+                    address(cUSDC)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
     }
 
-    // This check stops strategists from taking on any debt in positions they do not set up properly.
-    function testLoanInUntrackedPosition(uint256 assets) external {
-        // TODO purposely do not trust a fraxlendDebtUNIPosition
-        // TODO then test borrowing from it
-    }
+    // TODO - EIN - ASSESSING OPTIONS A AND OPTIONS B --> Lossyness test. If there is any lossyness, we'd be able to see if with large numbers. So do fuzz tests with HUGE bounds. From there, I guess the assert test will make sure that the actual health factor and the reported health factor do not differ by a certain amount of bps.
+    // ACTUALLY we can just have helpers within this file that use the two possible implementations to calculate HFs. From there, we just compare against one another to see how far off they are from each other. If it is negligible then we are good.
+    // TODO - Consider this... NOTE: arguably, it is better to test against the actual reported HF from CompoundV2 versus doing relative testing with the two methods.
+
+    // TODO - is it possible for a position to have a collateral postiion and a borrow position in the same market?  
 
     function testRepayingDebtThatIsNotOwed(uint256 assets) external {
         // TODO
