@@ -89,7 +89,7 @@ contract RenzoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
         // Rebalance Cellar to mint derivative.
-        _mintDerivative(mintAmount);
+        _mintDerivative(mintAmount, 0);
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
             initialAssets,
@@ -105,11 +105,29 @@ contract RenzoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function _mintDerivative(uint256 mintAmount) internal {
+    function testMintMinAmount() external {
+        uint256 mintAmount = 10e18;
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+
+        // Try minting with an excessive minAmountOut.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    StakingAdaptor.StakingAdaptor__MinimumAmountNotMet.selector,
+                    9974724809485861084,
+                    type(uint256).max
+                )
+            )
+        );
+        _mintDerivative(mintAmount, type(uint256).max);
+    }
+
+    function _mintDerivative(uint256 mintAmount, uint256 minAmountOut) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(renzoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

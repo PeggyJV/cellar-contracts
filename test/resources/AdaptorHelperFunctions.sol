@@ -789,24 +789,24 @@ contract AdaptorHelperFunctions {
 
     // ========================================= MINTING/BURNING FUNCTIONS =========================================
 
-    function _createBytesDataToMint(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount, 0);
+    function _createBytesDataToMint(uint256 amount, uint256 minAmountOut) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount, minAmountOut);
     }
 
     function _createBytesDataToRequestBurn(uint256 amount) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(StakingAdaptor.requestBurn.selector, amount);
     }
 
-    function _createBytesDataToCompleteBurn(uint256 id) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id, 0);
+    function _createBytesDataToCompleteBurn(uint256 id, uint256 minAmountOut) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id, minAmountOut);
     }
 
-    function _createBytesDataToWrap(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount, 0);
+    function _createBytesDataToWrap(uint256 amount, uint256 minAmountOut) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount, minAmountOut);
     }
 
-    function _createBytesDataToUnwrap(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount, 0);
+    function _createBytesDataToUnwrap(uint256 amount, uint256 minAmountOut) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount, minAmountOut);
     }
 
     function _createBytesDataToCancelBurnRequest(uint256 id) internal pure returns (bytes memory) {
