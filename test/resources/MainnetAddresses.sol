@@ -152,6 +152,7 @@ contract MainnetAddresses {
     CErc20 public cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
     CErc20 public cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
     CErc20 public cTUSD = CErc20(0x12392F67bdf24faE0AF363c24aC620a2f67DAd86);
+    CErc20 public cWBTC = CErc20(0xccF4429DB6322D5C611ee964527D42E5d685DD6a);
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;

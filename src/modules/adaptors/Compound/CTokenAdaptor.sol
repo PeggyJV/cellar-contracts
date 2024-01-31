@@ -242,14 +242,14 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     function enterMarket(CErc20 market) public {
         _validateMarketInput(address(market));
-        if (_checkMarketsEntered(market)) revert CTokenAdaptor__AlreadyInMarket(address(market));
+        if (_checkMarketsEntered(market)) revert CTokenAdaptor__AlreadyInMarket(address(market)); // so as to not waste gas
 
         address[] memory cToken = new address[](1);
         uint256[] memory result = new uint256[](1);
         cToken[0] = address(market);
         result = comptroller.enterMarkets(cToken); // enter the market
 
-        if (result[0] > 0) revert CTokenAdaptor__UnsuccessfulEnterMarket(address(market));
+        if (result[0] > 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(address(market));
     }
 
     /**
@@ -280,6 +280,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
 
     /**
      * @notice Helper function that reverts if market is not listed in Comptroller.
+     * TODO - Confirm if this is needed, because iirc the comptroller checks to see if it is listed.
      */
     function _validateMarketInput(address input) internal view {
         (bool isListed, , ) = comptroller.markets(input);
