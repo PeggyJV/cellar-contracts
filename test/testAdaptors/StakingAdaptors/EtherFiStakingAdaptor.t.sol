@@ -244,6 +244,55 @@ contract EtherFiStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         );
     }
 
+    function testHandlingInvalidRequests(uint256 mintAmount) external {
+        mintAmount = bound(mintAmount, 0.1e18, 1_000e18);
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+        uint256 startingTotalAssets = cellar.totalAssets();
+        _mintDerivative(mintAmount);
+        // Rebalance cellar to start a burn request.
+        _startDerivativeBurnRequest(type(uint256).max);
+
+        assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 4, "totalAssets should not have changed.");
+
+        uint256 requestId = etherFiAdaptor.requestIds(address(cellar), 0);
+
+        _finalizeRequest(requestId, mintAmount);
+
+        assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 4, "totalAssets should not have changed.");
+
+        // Strategist accidentally tries removing the valid request.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotClaimed.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+
+        // Simulate a state where somehow the request is claimed without the strategist calling `completeBurn`
+        vm.startPrank(address(cellar));
+        etherFiAdaptor.withdrawRequestNft().claimWithdraw(requestId);
+        etherFiAdaptor.wrappedPrimitive().deposit{ value: address(cellar).balance }();
+        vm.stopPrank();
+
+        assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 4, "totalAssets should not have changed.");
+
+        // Strategist should now be able to remove the request.
+        _removeClaimedRequest(requestId);
+
+        // But if they try to remove it again it reverts.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+    }
+
+    function _removeClaimedRequest(uint256 requestId) internal {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(etherFiAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
     function _finalizeRequest(uint256 requestId, uint256 amount) internal {
         // Spoof unstEth contract into finalizing our request.
         IWithdrawRequestNft w = IWithdrawRequestNft(withdrawalRequestNft);

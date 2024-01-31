@@ -790,7 +790,7 @@ contract AdaptorHelperFunctions {
     // ========================================= MINTING/BURNING FUNCTIONS =========================================
 
     function _createBytesDataToMint(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount);
+        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount, 0);
     }
 
     function _createBytesDataToRequestBurn(uint256 amount) internal pure returns (bytes memory) {
@@ -798,15 +798,15 @@ contract AdaptorHelperFunctions {
     }
 
     function _createBytesDataToCompleteBurn(uint256 id) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id);
+        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id, 0);
     }
 
     function _createBytesDataToWrap(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount);
+        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount, 0);
     }
 
     function _createBytesDataToUnwrap(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount);
+        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount, 0);
     }
 
     function _createBytesDataToCancelBurnRequest(uint256 id) internal pure returns (bytes memory) {
@@ -819,6 +819,10 @@ contract AdaptorHelperFunctions {
         uint256 minAmountOut
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(StakingAdaptor.mintERC20.selector, depositAsset, amount, minAmountOut);
+    }
+
+    function _createBytesDataToRemoveClaimedRequest(uint256 id) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.removeClaimedRequest.selector, id);
     }
 
     // ========================================= Compound V3 FUNCTIONS =========================================

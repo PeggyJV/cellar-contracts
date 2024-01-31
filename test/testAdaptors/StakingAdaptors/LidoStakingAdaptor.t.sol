@@ -11,6 +11,7 @@ import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
+// TODO add minAmount tests
 contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -244,6 +245,60 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             2,
             "Should have expected derivative amount."
         );
+    }
+
+    function testHandlingInvalidRequests(uint256 mintAmount) external {
+        mintAmount = bound(mintAmount, 0.0001e18, 1_000e18);
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+
+        uint256 startingTotalAssets = cellar.totalAssets();
+
+        _mintDerivative(mintAmount);
+
+        uint256 burnAmount = derivative.balanceOf(address(cellar));
+
+        // Rebalance cellar to start a burn request.
+        _startDerivativeBurnRequest(burnAmount);
+
+        uint256 requestId = lidoAdaptor.requestIds(address(cellar), 0);
+
+        _finalizeRequest(requestId, mintAmount);
+
+        assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
+
+        // Strategist accidentally tries removing the valid request.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotClaimed.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+
+        // Simulate a state where somehow the request is claimed without the strategist calling `completeBurn`
+        vm.startPrank(address(cellar));
+        lidoAdaptor.unstETH().claimWithdrawal(requestId);
+        lidoAdaptor.wrappedPrimitive().deposit{ value: address(cellar).balance }();
+        vm.stopPrank();
+
+        // TotalAssets should remain the unchanged since the withdrawn assets go into an ERC20 position.
+        // And staking adaptor does not account for value in request because it is not valid.
+        assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
+
+        // Strategist should now be able to remove the request.
+        _removeClaimedRequest(requestId);
+
+        // But if they try to remove it again it reverts.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+    }
+
+    function _removeClaimedRequest(uint256 requestId) internal {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
     }
 
     function _finalizeRequest(uint256 requestId, uint256 amount) internal {
