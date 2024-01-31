@@ -40,7 +40,7 @@ contract NativeAdaptor is BaseAdaptor {
     //========================================= IMMUTABLES ==========================================
 
     /**
-     * @notice The wrapper contract for the primitive/native asset.
+     * @notice The wrapper contract for the native asset.
      */
     IWETH9 public immutable nativeWrapper;
 
@@ -101,6 +101,10 @@ contract NativeAdaptor is BaseAdaptor {
     function wrap(uint256 amount) external virtual {
         if (amount == 0) revert NativeAdaptor__ZeroAmount();
 
+        if (amount == type(uint256).max) {
+            amount = address(this).balance;
+        }
+
         nativeWrapper.deposit{ value: amount }();
     }
 
@@ -110,6 +114,8 @@ contract NativeAdaptor is BaseAdaptor {
      */
     function unwrap(uint256 amount) external virtual {
         if (amount == 0) revert NativeAdaptor__ZeroAmount();
+
+        amount = _maxAvailable(ERC20(address(nativeWrapper)), amount);
 
         nativeWrapper.withdraw(amount);
     }

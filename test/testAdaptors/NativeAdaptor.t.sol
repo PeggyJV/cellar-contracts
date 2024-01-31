@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { NativeAdaptor } from "src/modules/adaptors/NativeAdaptor.sol";
+import { CellarWithNativeSupport } from "src/base/permutations/CellarWithNativeSupport.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -15,11 +16,12 @@ contract NativeAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using stdStorage for StdStorage;
     using Address for address;
 
-    Cellar private cellar;
+    CellarWithNativeSupport private cellar;
 
     NativeAdaptor private nativeAdaptor;
 
     uint32 private wethPosition = 1;
+    uint32 private nativePosition = 2;
 
     uint256 initialAssets;
 
@@ -32,7 +34,7 @@ contract NativeAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Run Starter setUp code.
         _setUp();
 
-        nativeAdaptor = NativeAdaptor(address(WETH));
+        nativeAdaptor = new NativeAdaptor(address(WETH));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -43,16 +45,27 @@ contract NativeAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         // Setup Cellar:
-
+        registry.trustAdaptor(address(nativeAdaptor));
         registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(nativePosition, address(nativeAdaptor), hex"");
 
         string memory cellarName = "Native Cellar V0.0";
         uint256 initialDeposit = 0.01e18;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, WETH, wethPosition, abi.encode(true), initialDeposit, platformCut);
+        cellar = _createCellarWithNativeSupport(
+            cellarName,
+            WETH,
+            wethPosition,
+            abi.encode(true),
+            initialDeposit,
+            platformCut
+        );
 
-        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPositionToCatalogue(nativePosition);
+        cellar.addAdaptorToCatalogue(address(nativeAdaptor));
+
+        cellar.addPosition(1, nativePosition, abi.encode(0), false);
 
         cellar.setRebalanceDeviation(0.01e18);
 
@@ -62,15 +75,71 @@ contract NativeAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testLogic(uint256 assets) external {
-        assets = bound(assets, 1e6, 1_000_000e6);
+        assets = bound(assets, 0.0001e18, 1_000_000e18);
 
         // Have user deposit into cellar.
         deal(address(WETH), address(this), assets);
         cellar.deposit(assets, address(this));
 
+        uint256 startingAssets = assets + initialAssets;
+
         uint256 totalAssets = cellar.totalAssets();
-        assertEq(totalAssets, assets + initialAssets, "All assets should be accounted for.");
+        assertEq(totalAssets, startingAssets, "All assets should be accounted for.");
 
         // Strategist unwraps WETH for ETH.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToUnwrapNative(type(uint256).max);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(nativeAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        totalAssets = cellar.totalAssets();
+        assertEq(totalAssets, startingAssets, "All assets should be accounted for.");
+
+        assertEq(address(cellar).balance, startingAssets, "Cellar should have unwrapped all assets into Native.");
+
+        // Strategist wraps ETH for WETH.
+        adaptorCalls[0] = _createBytesDataToWrapNative(type(uint256).max);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(nativeAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        totalAssets = cellar.totalAssets();
+        assertEq(totalAssets, startingAssets, "All assets should be accounted for.");
+
+        assertEq(address(cellar).balance, 0, "Cellar should have wrapped all assets.");
+    }
+
+    function _createCellarWithNativeSupport(
+        string memory cellarName,
+        ERC20 holdingAsset,
+        uint32 holdingPosition,
+        bytes memory holdingPositionConfig,
+        uint256 initialDeposit,
+        uint64 platformCut
+    ) internal returns (CellarWithNativeSupport) {
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(holdingAsset), address(this), initialDeposit);
+        holdingAsset.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+        creationCode = type(CellarWithNativeSupport).creationCode;
+        constructorArgs = abi.encode(
+            address(this),
+            registry,
+            holdingAsset,
+            cellarName,
+            cellarName,
+            holdingPosition,
+            holdingPositionConfig,
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
+
+        return CellarWithNativeSupport(payable(deployer.deployContract(cellarName, creationCode, constructorArgs, 0)));
     }
 }

@@ -73,6 +73,8 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
 import { StakingAdaptor } from "src/modules/adaptors/Staking/StakingAdaptor.sol";
 
+import { NativeAdaptor } from "src/modules/adaptors/NativeAdaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -873,5 +875,15 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToClaimRewardsFromCompoundV3(IComet comet) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(RewardsAdaptor.claim.selector, comet);
+    }
+
+    // ========================================= NATIVE FUNCTIONS =========================================
+
+    function _createBytesDataToWrapNative(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(NativeAdaptor.wrap.selector, amount);
+    }
+
+    function _createBytesDataToUnwrapNative(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(NativeAdaptor.unwrap.selector, amount);
     }
 }
