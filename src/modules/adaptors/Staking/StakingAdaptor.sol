@@ -42,6 +42,7 @@ contract StakingAdaptor is BaseAdaptor {
     error StakingAdaptor__NotSupported();
     error StakingAdaptor__ZeroAmount();
     error StakingAdaptor__MinimumAmountNotMet(uint256 actual, uint256 minimum);
+    error StakingAdaptor__RequestNotClaimed(uint256 id);
 
     /**
      * @notice Attempted to read `locked` from unstructured storage, but found uninitialized value.
@@ -300,6 +301,15 @@ contract StakingAdaptor is BaseAdaptor {
 
         uint256 amountOut = _mintERC20(depositAsset, amount, minAmountOut);
         if (amountOut < minAmountOut) revert StakingAdaptor__MinimumAmountNotMet(amountOut, minAmountOut);
+    }
+
+    /**
+     * @notice Allows strategist to remove a request from `requestIds` if it has already been claimed.
+     *  @param id the request id to remove
+     */
+    function removeClaimedRequest(uint256 id) external virtual {
+        if (true) revert StakingAdaptor__NotSupported();
+        StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
 
     //============================================ Interface Helper Functions ===========================================

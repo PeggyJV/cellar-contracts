@@ -67,7 +67,9 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
      * @notice Stakes into EtherFi using native asset.
      */
     function _mint(uint256 amount) internal override returns (uint256 amountMinted) {
-        amountMinted = liquidityPool.deposit{ value: amount }();
+        amountMinted = eETH.balanceOf(address(this));
+        liquidityPool.deposit{ value: amount }();
+        amountMinted = eETH.balanceOf(address(this)) - amountMinted;
     }
 
     /**
@@ -98,16 +100,19 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
         uint256 requestsLength = requests.length;
         for (uint256 i; i < requestsLength; ++i) {
             IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(requests[i]);
-            // Take min between valuation at request creation, and current valuation.
-            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-            uint256 requestValueInPrimitive = (request.amountOfEEth < amountForShares)
-                ? request.amountOfEEth
-                : amountForShares;
+            // Only check for value if request is valid.
+            if (request.isValid) {
+                // Take min between valuation at request creation, and current valuation.
+                uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+                uint256 requestValueInPrimitive = (request.amountOfEEth < amountForShares)
+                    ? request.amountOfEEth
+                    : amountForShares;
 
-            // Remove fee
-            uint256 fee = uint256(request.feeGwei) * 1 gwei;
-            requestValueInPrimitive = requestValueInPrimitive - fee;
-            amount += requestValueInPrimitive;
+                // Remove fee
+                uint256 fee = uint256(request.feeGwei) * 1 gwei;
+                requestValueInPrimitive = requestValueInPrimitive - fee;
+                amount += requestValueInPrimitive;
+            }
         }
     }
 
@@ -126,5 +131,14 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
      */
     function _completeBurn(uint256 id) internal override {
         withdrawRequestNft.claimWithdraw(id);
+    }
+
+    /**
+     * @notice Remove a request from requestIds if it is already claimed.
+     */
+    function removeClaimedRequest(uint256 id) external override {
+        IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(id);
+        if (!request.isValid) StakingAdaptor(adaptorAddress).removeRequestId(id);
+        else revert StakingAdaptor__RequestNotClaimed(id);
     }
 }

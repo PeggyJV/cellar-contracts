@@ -60,7 +60,10 @@ contract LidoStakingAdaptor is StakingAdaptor {
      * @notice Stakes into Lido using native asset.
      */
     function _mint(uint256 amount) internal override returns (uint256 amountOut) {
-        amountOut = stETH.submit{ value: amount }(address(0));
+        ERC20 derivative = ERC20(address(stETH));
+        amountOut = derivative.balanceOf(address(this));
+        stETH.submit{ value: amount }(address(0));
+        amountOut = derivative.balanceOf(address(this)) - amountOut;
     }
 
     /**
@@ -95,6 +98,8 @@ contract LidoStakingAdaptor is StakingAdaptor {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
         IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
         for (uint256 i; i < statuses.length; ++i) {
+            // If request was already claimed continue.
+            if (statuses[i].isClaimed) continue;
             amount += statuses[i].amountOfStETH;
         }
     }
@@ -118,5 +123,16 @@ contract LidoStakingAdaptor is StakingAdaptor {
      */
     function _completeBurn(uint256 id) internal override {
         unstETH.claimWithdrawal(id);
+    }
+
+    /**
+     * @notice Remove a request from requestIds if it is already claimed.
+     */
+    function removeClaimedRequest(uint256 id) external override {
+        uint256[] memory requests = new uint256[](1);
+        requests[0] = id;
+        IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
+        if (statuses[0].isClaimed) StakingAdaptor(adaptorAddress).removeRequestId(id);
+        else revert StakingAdaptor__RequestNotClaimed(id);
     }
 }

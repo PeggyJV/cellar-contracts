@@ -64,7 +64,9 @@ contract StaderStakingAdaptor is StakingAdaptor {
      * @notice Stakes into Stader using native asset.
      */
     function _mint(uint256 amount) internal override returns (uint256 amountOut) {
-        amountOut = stakePoolManager.deposit{ value: amount }(address(this));
+        amountOut = ETHx.balanceOf(address(this));
+        stakePoolManager.deposit{ value: amount }(address(this));
+        amountOut = ETHx.balanceOf(address(this)) - amountOut;
     }
 
     /**
@@ -82,6 +84,7 @@ contract StaderStakingAdaptor is StakingAdaptor {
             IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
                 uint256(requests[i])
             );
+            if (request.owner != account) continue;
             uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
             amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
         }
@@ -102,5 +105,14 @@ contract StaderStakingAdaptor is StakingAdaptor {
      */
     function _completeBurn(uint256 id) internal override {
         userWithdrawManager.claim(id);
+    }
+
+    /**
+     * @notice Remove a request from requestIds if it is already claimed.
+     */
+    function removeClaimedRequest(uint256 id) external override {
+        IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(uint256(id));
+        if (request.owner != address(this)) StakingAdaptor(adaptorAddress).removeRequestId(id);
+        else revert StakingAdaptor__RequestNotClaimed(id);
     }
 }
