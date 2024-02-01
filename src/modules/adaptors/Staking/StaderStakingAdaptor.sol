@@ -85,8 +85,13 @@ contract StaderStakingAdaptor is StakingAdaptor {
                 uint256(requests[i])
             );
             if (request.owner != account) continue;
-            uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
-            amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
+            // If ethFinalized is set, use that value.
+            if (request.ethFinalized > 0) amount += request.ethFinalized;
+            else {
+                // Else calculate request value using current and past rates.
+                uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
+                amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
+            }
         }
     }
 
