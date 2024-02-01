@@ -108,7 +108,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.deposit(mintAmount, address(this));
 
         // Rebalance Cellar to mint derivative.
-        _mintDerivative(mintAmount, 0);
+        _mintDerivative(mintAmount, 0, hex"");
 
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
@@ -139,7 +139,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 )
             )
         );
-        _mintDerivative(mintAmount, type(uint256).max);
+        _mintDerivative(mintAmount, type(uint256).max, hex"");
     }
 
     // The max steth withdrawal amount is 1k.
@@ -148,14 +148,17 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
 
+        // Save the last checkpoint
+        uint256 lastCheckpoint = lidoAdaptor.unstETH().getLastCheckpointIndex();
+
         uint256 startingTotalAssets = cellar.totalAssets();
 
-        _mintDerivative(mintAmount, 0);
+        _mintDerivative(mintAmount, 0, hex"");
 
         uint256 burnAmount = derivative.balanceOf(address(cellar));
 
         // Rebalance cellar to start a burn request.
-        _startDerivativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount, hex"");
 
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
 
@@ -165,8 +168,8 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
 
-        // Rebalance cellar to finalize burn request.
-        _completeDerivativeBurnRequest(requestId, 0);
+        // Rebalance cellar to finalize burn request, specify a hint.
+        _completeDerivativeBurnRequest(requestId, 0, abi.encode(lastCheckpoint + 1));
 
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
 
@@ -183,12 +186,12 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
 
-        _mintDerivative(mintAmount, 0);
+        _mintDerivative(mintAmount, 0, hex"");
 
         uint256 burnAmount = derivative.balanceOf(address(cellar));
 
         // Rebalance cellar to start a burn request.
-        _startDerivativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount, hex"");
 
         uint256 requestId = lidoAdaptor.requestIds(address(cellar), 0);
 
@@ -203,7 +206,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 )
             )
         );
-        _completeDerivativeBurnRequest(requestId, type(uint256).max);
+        _completeDerivativeBurnRequest(requestId, type(uint256).max, hex"");
     }
 
     function testMultipleMintAndBurns(uint256 seed) external {
@@ -217,19 +220,19 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             deal(address(primitive), address(this), mintAmounts[i]);
             cellar.deposit(mintAmounts[i], address(this));
 
-            _mintDerivative(mintAmounts[i], 0);
+            _mintDerivative(mintAmounts[i], 0, hex"");
             burnAmount = derivative.balanceOf(address(cellar));
-            _startDerivativeBurnRequest(burnAmount);
+            _startDerivativeBurnRequest(burnAmount, hex"");
 
             requests = lidoAdaptor.getRequestIds(address(cellar));
             assertEq(requests.length, i + 1, "Should have i + 1 requests.");
         }
 
         // Making 1 more burn request should revert.
-        _mintDerivative(initialAssets, 0);
+        _mintDerivative(initialAssets, 0, hex"");
         burnAmount = derivative.balanceOf(address(cellar));
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
-        _startDerivativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount, hex"");
 
         // Finalize requests.
         for (uint256 i; i < maxRequests; ++i) {
@@ -241,7 +244,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Complete requests.
         for (uint256 i; i < maxRequests; ++i) {
             uint256 requestId = lidoAdaptor.requestIds(address(cellar), 0);
-            _completeDerivativeBurnRequest(requestId, 0);
+            _completeDerivativeBurnRequest(requestId, 0, hex"");
         }
         requests = lidoAdaptor.getRequestIds(address(cellar));
         assertEq(requests.length, 0, "Should have no burn requests left.");
@@ -272,16 +275,16 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), amount);
         cellar.deposit(amount, address(this));
 
-        _mintDerivative(amount, 0);
+        _mintDerivative(amount, 0, hex"");
 
         uint256 derivativeBalance = derivative.balanceOf(address(cellar));
 
-        _wrap(type(uint256).max, 0);
+        _wrap(type(uint256).max, 0, hex"");
 
         assertApproxEqAbs(derivative.balanceOf(address(cellar)), 0, 1, "All derivative should be wrapped.");
         assertGt(wrappedDerivative.balanceOf(address(cellar)), 0, "Should have non zero wrapped derivative amount.");
 
-        _unwrap(type(uint256).max, 0);
+        _unwrap(type(uint256).max, 0, hex"");
 
         assertEq(wrappedDerivative.balanceOf(address(cellar)), 0, "All wrapped derivative should be wrapped.");
         assertApproxEqAbs(
@@ -297,7 +300,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(primitive), address(this), amount);
         cellar.deposit(amount, address(this));
 
-        _mintDerivative(amount, 0);
+        _mintDerivative(amount, 0, hex"");
 
         uint256 derivativeBalance = derivative.balanceOf(address(cellar));
 
@@ -310,9 +313,9 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 )
             )
         );
-        _wrap(type(uint256).max, type(uint256).max);
+        _wrap(type(uint256).max, type(uint256).max, hex"");
 
-        _wrap(type(uint256).max, 0);
+        _wrap(type(uint256).max, 0, hex"");
 
         vm.expectRevert(
             bytes(
@@ -323,7 +326,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 )
             )
         );
-        _unwrap(type(uint256).max, type(uint256).max);
+        _unwrap(type(uint256).max, type(uint256).max, hex"");
     }
 
     function testHandlingInvalidRequests(uint256 mintAmount) external {
@@ -333,12 +336,12 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         uint256 startingTotalAssets = cellar.totalAssets();
 
-        _mintDerivative(mintAmount, 0);
+        _mintDerivative(mintAmount, 0, hex"");
 
         uint256 burnAmount = derivative.balanceOf(address(cellar));
 
         // Rebalance cellar to start a burn request.
-        _startDerivativeBurnRequest(burnAmount);
+        _startDerivativeBurnRequest(burnAmount, hex"");
 
         uint256 requestId = lidoAdaptor.requestIds(address(cellar), 0);
 
@@ -350,7 +353,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotClaimed.selector, requestId))
         );
-        _removeClaimedRequest(requestId);
+        _removeClaimedRequest(requestId, hex"");
 
         // Simulate a state where somehow the request is claimed without the strategist calling `completeBurn`
         vm.startPrank(address(cellar));
@@ -363,19 +366,19 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertApproxEqAbs(cellar.totalAssets(), startingTotalAssets, 2, "totalAssets should not have changed.");
 
         // Strategist should now be able to remove the request.
-        _removeClaimedRequest(requestId);
+        _removeClaimedRequest(requestId, hex"");
 
         // But if they try to remove it again it reverts.
         vm.expectRevert(
             bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
         );
-        _removeClaimedRequest(requestId);
+        _removeClaimedRequest(requestId, hex"");
     }
 
-    function _removeClaimedRequest(uint256 requestId) internal {
+    function _removeClaimedRequest(uint256 requestId, bytes memory wildcard) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId, wildcard);
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -389,54 +392,46 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.stopPrank();
     }
 
-    function _startDerivativeBurnRequest(uint256 burnAmount) internal {
+    function _startDerivativeBurnRequest(uint256 burnAmount, bytes memory wildcard) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
+        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount, wildcard);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _completeDerivativeBurnRequest(uint256 requestId, uint256 minAmountOut) internal {
+    function _completeDerivativeBurnRequest(uint256 requestId, uint256 minAmountOut, bytes memory wildcard) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, minAmountOut, wildcard);
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _cancelDerivativeBurnRequest(uint256 requestId) internal {
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-    }
-
-    function _mintDerivative(uint256 mintAmount, uint256 minAmountOut) internal {
+    function _mintDerivative(uint256 mintAmount, uint256 minAmountOut, bytes memory wildcard) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut, wildcard);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _wrap(uint256 amount, uint256 minAmountOut) internal {
+    function _wrap(uint256 amount, uint256 minAmountOut, bytes memory wildcard) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToWrap(amount, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToWrap(amount, minAmountOut, wildcard);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _unwrap(uint256 amount, uint256 minAmountOut) internal {
+    function _unwrap(uint256 amount, uint256 minAmountOut, bytes memory wildcard) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToUnwrap(amount, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToUnwrap(amount, minAmountOut, wildcard);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(lidoAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

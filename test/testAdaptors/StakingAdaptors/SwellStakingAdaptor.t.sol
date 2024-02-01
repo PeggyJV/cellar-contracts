@@ -133,7 +133,7 @@ contract SwellStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(swellAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

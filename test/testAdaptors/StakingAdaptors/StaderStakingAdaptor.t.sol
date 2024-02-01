@@ -348,7 +348,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _removeClaimedRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -364,7 +364,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
+        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -373,7 +373,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _completeDerivativeBurnRequest(uint256 requestId, uint256 minAmountOut) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, minAmountOut, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -381,7 +381,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _cancelDerivativeBurnRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -390,7 +390,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

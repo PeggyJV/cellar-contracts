@@ -60,7 +60,8 @@ contract KelpDAOStakingAdaptor is StakingAdaptor {
     function _mintERC20(
         ERC20 depositAsset,
         uint256 amount,
-        uint256 minAmountOut
+        uint256 minAmountOut,
+        bytes calldata
     ) internal override returns (uint256 valueOut) {
         depositAsset.safeApprove(address(lrtDepositPool), amount);
         valueOut = rsETH.balanceOf(address(this));

@@ -164,7 +164,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
+        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -173,7 +173,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _completeDerivativeBurnRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, 0);
+        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, 0, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -181,7 +181,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _cancelDerivativeBurnRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -189,7 +189,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _removeClaimedRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -198,7 +198,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount, 0);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, 0, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -207,7 +207,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _wrap(uint256 amount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToWrap(amount, 0);
+        adaptorCalls[0] = _createBytesDataToWrap(amount, 0, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -216,7 +216,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function _unwrap(uint256 amount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToUnwrap(amount, 0);
+        adaptorCalls[0] = _createBytesDataToUnwrap(amount, 0, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -226,7 +226,7 @@ contract StakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMintERC20(depositAsset, mintAmount, minMintAmountOut);
+        adaptorCalls[0] = _createBytesDataToMintERC20(depositAsset, mintAmount, minMintAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(stakingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

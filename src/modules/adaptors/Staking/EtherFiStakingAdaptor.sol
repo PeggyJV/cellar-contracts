@@ -66,7 +66,7 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into EtherFi using native asset.
      */
-    function _mint(uint256 amount) internal override returns (uint256 amountMinted) {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountMinted) {
         amountMinted = eETH.balanceOf(address(this));
         liquidityPool.deposit{ value: amount }();
         amountMinted = eETH.balanceOf(address(this)) - amountMinted;
@@ -75,7 +75,7 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Wraps derivative asset.
      */
-    function _wrap(uint256 amount) internal override returns (uint256 amountOut) {
+    function _wrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(eETH, amount);
         eETH.safeApprove(address(weETH), amount);
         amountOut = weETH.wrap(amount);
@@ -85,7 +85,7 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Unwraps derivative asset.
      */
-    function _unwrap(uint256 amount) internal override returns (uint256 amountOut) {
+    function _unwrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(ERC20(address(weETH)), amount);
         amountOut = weETH.unwrap(amount);
     }
@@ -119,7 +119,7 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Request a withdrawal from EtherFi.
      */
-    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+    function _requestBurn(uint256 amount, bytes calldata) internal override returns (uint256 id) {
         amount = _maxAvailable(eETH, amount);
         eETH.safeApprove(address(liquidityPool), amount);
         id = liquidityPool.requestWithdraw(address(this), amount);
@@ -129,14 +129,14 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Complete a withdrawal from EtherFi.
      */
-    function _completeBurn(uint256 id) internal override {
+    function _completeBurn(uint256 id, bytes calldata) internal override {
         withdrawRequestNft.claimWithdraw(id);
     }
 
     /**
      * @notice Remove a request from requestIds if it is already claimed.
      */
-    function removeClaimedRequest(uint256 id) external override {
+    function removeClaimedRequest(uint256 id, bytes calldata) external override {
         IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(id);
         if (!request.isValid) StakingAdaptor(adaptorAddress).removeRequestId(id);
         else revert StakingAdaptor__RequestNotClaimed(id);

@@ -63,7 +63,7 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Stader using native asset.
      */
-    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amountOut = ETHx.balanceOf(address(this));
         stakePoolManager.deposit{ value: amount }(address(this));
         amountOut = ETHx.balanceOf(address(this)) - amountOut;
@@ -93,7 +93,7 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Request to withdraw.
      */
-    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+    function _requestBurn(uint256 amount, bytes calldata) internal override returns (uint256 id) {
         amount = _maxAvailable(ETHx, amount);
         ETHx.safeApprove(address(userWithdrawManager), amount);
         id = userWithdrawManager.requestWithdraw(amount, address(this));
@@ -103,14 +103,14 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Complete a withdraw.
      */
-    function _completeBurn(uint256 id) internal override {
+    function _completeBurn(uint256 id, bytes calldata) internal override {
         userWithdrawManager.claim(id);
     }
 
     /**
      * @notice Remove a request from requestIds if it is already claimed.
      */
-    function removeClaimedRequest(uint256 id) external override {
+    function removeClaimedRequest(uint256 id, bytes calldata) external override {
         IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(uint256(id));
         if (request.owner != address(this)) StakingAdaptor(adaptorAddress).removeRequestId(id);
         else revert StakingAdaptor__RequestNotClaimed(id);

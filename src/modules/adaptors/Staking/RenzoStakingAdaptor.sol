@@ -52,7 +52,7 @@ contract RenzoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Renzo using native asset.
      */
-    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amountOut = ezETH.balanceOf(address(this));
         restakeManager.depositETH{ value: amount }();
         amountOut = ezETH.balanceOf(address(this)) - amountOut;

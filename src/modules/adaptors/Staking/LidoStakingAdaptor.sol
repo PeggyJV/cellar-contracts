@@ -66,7 +66,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Lido using native asset.
      */
-    function _mint(uint256 amount) internal override returns (uint256 amountOut) {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         ERC20 derivative = ERC20(address(stETH));
         amountOut = derivative.balanceOf(address(this));
         stETH.submit{ value: amount }(address(0));
@@ -76,7 +76,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Wrap stETH.
      */
-    function _wrap(uint256 amount) internal override returns (uint256 amountOut) {
+    function _wrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         ERC20 derivative = ERC20(address(stETH));
         amount = _maxAvailable(derivative, amount);
         derivative.safeApprove(address(wstETH), amount);
@@ -87,7 +87,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Unwrap wstETH.
      */
-    function _unwrap(uint256 amount) internal override returns (uint256 amountOut) {
+    function _unwrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(ERC20(address(wstETH)), amount);
         amountOut = wstETH.unwrap(amount);
     }
@@ -131,7 +131,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
     /**
      * @notice Request to withdraw.
      */
-    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+    function _requestBurn(uint256 amount, bytes calldata) internal override returns (uint256 id) {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         ERC20 derivative = ERC20(address(stETH));
@@ -144,15 +144,27 @@ contract LidoStakingAdaptor is StakingAdaptor {
 
     /**
      * @notice Complete a withdraw.
+     * @param wildcard the uint256 hint for the given id
+     *        Optionally leave this blank if not known, but call is more gas intensive.
      */
-    function _completeBurn(uint256 id) internal override {
-        unstETH.claimWithdrawal(id);
+    function _completeBurn(uint256 id, bytes calldata wildcard) internal override {
+        uint256 hint;
+        if (wildcard.length > 0) hint = abi.decode(wildcard, (uint256));
+
+        if (hint == 0) unstETH.claimWithdrawal(id);
+        else {
+            uint256[] memory ids = new uint256[](1);
+            ids[0] = id;
+            uint256[] memory hints = new uint256[](1);
+            hints[0] = hint;
+            unstETH.claimWithdrawals(ids, hints);
+        }
     }
 
     /**
      * @notice Remove a request from requestIds if it is already claimed.
      */
-    function removeClaimedRequest(uint256 id) external override {
+    function removeClaimedRequest(uint256 id, bytes calldata) external override {
         uint256[] memory requests = new uint256[](1);
         requests[0] = id;
         IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
