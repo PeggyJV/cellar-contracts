@@ -331,7 +331,7 @@ contract StakingAdaptor is BaseAdaptor {
     // This pattern has been generalized to the below interface helper functions.
     // Note inheriting adaptors do NOT need to implement all helper functions, rather they
     // should only implement the functions that they actually logically support.
-    // ie A lot of protocols do not suppoer unstaking, so the burn related functions should not be
+    // ie A lot of protocols do not support unstaking, so the burn related functions should not be
     // implemented. Some protocols do not have a wrapped asset, so the wrapping functions
     // should not be implemented.
 
@@ -413,7 +413,7 @@ contract StakingAdaptor is BaseAdaptor {
 
     /**
      * @notice An inheriting adaptor should implement `_mintERC20` if they support minting using ERC20 assets.
-     * @dev It is a could idea for interhiting adaptors to implement a value in vs value out check.
+     * @dev It is a good idea for inheriting adaptors to implement a value in vs value out check.
      * @dev First arg is the ERC20 to mint with.
      * @dev Second arg is the amount of ERC20.
      * @dev Third arg is the minimum amount of derivative out from mint.
