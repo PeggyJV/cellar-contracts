@@ -40,7 +40,7 @@ contract CompoundV3Helper {
                 // Check if we have a collateral balance.
                 (uint256 collateralBalance, ) = comet.userCollateral(account, info.asset);
 
-                // Get the value of collateral in USD.
+                // Get the value of collateral in virtual base.
                 uint256 collateralPriceInVirtualBase = comet.getPrice(info.priceFeed);
 
                 uint256 collateralValueInVirtualBase = collateralBalance.mulDivDown(
