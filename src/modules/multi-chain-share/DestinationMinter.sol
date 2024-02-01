@@ -50,11 +50,6 @@ contract DestinationMinter is ERC20, CCIPReceiver {
     uint64 public immutable sourceChainSelector;
 
     /**
-     * @notice The CCIP destination chain selector.
-     */
-    uint64 public immutable destinationChainSelector;
-
-    /**
      * @notice This networks LINK contract.
      */
     ERC20 public immutable LINK;
@@ -71,13 +66,11 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         string memory _symbol,
         uint8 _decimals,
         uint64 _sourceChainSelector,
-        uint64 _destinationChainSelector,
         address _link,
         uint256 _messageGasLimit
     ) ERC20(_name, _symbol, _decimals) CCIPReceiver(_router) {
         targetSource = _targetSource;
         sourceChainSelector = _sourceChainSelector;
-        destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
         messageGasLimit = _messageGasLimit;
     }

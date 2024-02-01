@@ -144,7 +144,6 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
             this.getRouter(),
             address(target),
             address(this),
-            sourceChainSelector,
             destinationChainSelector,
             address(LINK),
             lockerMessageGasLimit

@@ -215,7 +215,7 @@ contract MultiChainShareTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         locker.ccipReceive(badMessage);
 
-        badMessage.sourceChainSelector = locker.sourceChainSelector();
+        badMessage.sourceChainSelector = minter.sourceChainSelector();
 
         vm.expectRevert(
             bytes(

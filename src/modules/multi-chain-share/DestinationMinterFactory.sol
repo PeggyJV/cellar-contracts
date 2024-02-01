@@ -13,8 +13,8 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
 /**
  * @title DestinationMinterFactory
- * @notice Works with SourceLockerFactory to create pairs of Source Lockers & Destination Minters for new bridgeable ERC4626 Shares  
- * @dev Source Lockers lock up shares to bridge a mint request to paired Destination Minters, where the representation of the Source Network Shares is minted on Destination Network. 
+ * @notice Works with SourceLockerFactory to create pairs of Source Lockers & Destination Minters for new bridgeable ERC4626 Shares
+ * @dev Source Lockers lock up shares to bridge a mint request to paired Destination Minters, where the representation of the Source Network Shares is minted on Destination Network.
  * @author crispymangoes
  */
 contract DestinationMinterFactory is Owned, CCIPReceiver {
@@ -183,7 +183,6 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
                 symbol,
                 decimals,
                 sourceChainSelector,
-                destinationChainSelector,
                 address(LINK),
                 minterMessageGasLimit
             )
