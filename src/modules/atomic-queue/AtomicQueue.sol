@@ -97,8 +97,8 @@ contract AtomicQueue is ReentrancyGuard {
         address user,
         address offerToken,
         address wantToken,
-        uint256 sharesSpent,
-        uint256 assetsReceived,
+        uint256 offerAmountSpent,
+        uint256 wantAmountReceived,
         uint256 timestamp
     );
 
