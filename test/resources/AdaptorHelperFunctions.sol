@@ -27,10 +27,10 @@ import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolA
 // Compound
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-import { SupplyAdaptor, IComet } from "src/modules/adaptors/Compound/V3/SupplyAdaptor.sol";
-import { CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CollateralAdaptor.sol";
-import { BorrowAdaptor } from "src/modules/adaptors/Compound/V3/BorrowAdaptor.sol";
-import { RewardsAdaptor } from "src/modules/adaptors/Compound/V3/RewardsAdaptor.sol";
+import { CompoundV3SupplyAdaptor, IComet } from "src/modules/adaptors/Compound/V3/CompoundV3SupplyAdaptor.sol";
+import { CompoundV3CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3CollateralAdaptor.sol";
+import { CompoundV3BorrowAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3BorrowAdaptor.sol";
+import { CompoundV3RewardsAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3RewardsAdaptor.sol";
 
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -856,14 +856,14 @@ contract AdaptorHelperFunctions {
         IComet comet,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(SupplyAdaptor.supplyBase.selector, comet, assets);
+        return abi.encodeWithSelector(CompoundV3SupplyAdaptor.supplyBase.selector, comet, assets);
     }
 
     function _createBytesDataToWithdrawBaseFromCompoundV3(
         IComet comet,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(SupplyAdaptor.withdrawBase.selector, comet, assets);
+        return abi.encodeWithSelector(CompoundV3SupplyAdaptor.withdrawBase.selector, comet, assets);
     }
 
     function _createBytesDataToSupplyCollateralToCompoundV3(
@@ -871,7 +871,7 @@ contract AdaptorHelperFunctions {
         ERC20 asset,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CollateralAdaptor.supplyCollateral.selector, comet, asset, assets);
+        return abi.encodeWithSelector(CompoundV3CollateralAdaptor.supplyCollateral.selector, comet, asset, assets);
     }
 
     function _createBytesDataToWithdrawCollateralFromCompoundV3(
@@ -879,25 +879,25 @@ contract AdaptorHelperFunctions {
         ERC20 asset,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CollateralAdaptor.withdrawCollateral.selector, comet, asset, assets);
+        return abi.encodeWithSelector(CompoundV3CollateralAdaptor.withdrawCollateral.selector, comet, asset, assets);
     }
 
     function _createBytesDataToBorrowBaseFromCompoundV3(
         IComet comet,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(BorrowAdaptor.borrowBase.selector, comet, assets);
+        return abi.encodeWithSelector(CompoundV3BorrowAdaptor.borrowBase.selector, comet, assets);
     }
 
     function _createBytesDataToRepayBaseToCompoundV3(
         IComet comet,
         uint256 assets
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(BorrowAdaptor.repayBase.selector, comet, assets);
+        return abi.encodeWithSelector(CompoundV3BorrowAdaptor.repayBase.selector, comet, assets);
     }
 
     function _createBytesDataToClaimRewardsFromCompoundV3(IComet comet) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(RewardsAdaptor.claim.selector, comet);
+        return abi.encodeWithSelector(CompoundV3RewardsAdaptor.claim.selector, comet);
     }
 
     // ========================================= NATIVE FUNCTIONS =========================================

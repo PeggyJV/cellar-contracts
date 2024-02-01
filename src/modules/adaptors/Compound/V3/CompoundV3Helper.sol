@@ -9,7 +9,7 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
  * @notice Contains shared logic multiple Compound V3 Adaptors use.
  * @author crispymangoes
  */
-contract V3Helper {
+contract CompoundV3Helper {
     using Math for uint256;
 
     /**

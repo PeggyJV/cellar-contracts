@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { ICometRewards } from "src/interfaces/external/Compound/ICometRewards.sol";
 import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.sol";
 
-contract RewardsAdaptor is PositionlessAdaptor {
+contract CompoundV3RewardsAdaptor is PositionlessAdaptor {
     //==================== Adaptor Data Specification ====================
     // NOT USED
     //================= Configuration Data Specification =================
@@ -31,7 +31,7 @@ contract RewardsAdaptor is PositionlessAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Compound V3 Comet Rewards Adaptor V 0.0"));
+        return keccak256(abi.encode("Compound V3 Rewards Adaptor V 0.0"));
     }
 
     //============================================ Strategist Functions ===========================================

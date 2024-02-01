@@ -2,10 +2,10 @@
 pragma solidity 0.8.21;
 
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
-import { SupplyAdaptor } from "src/modules/adaptors/Compound/V3/SupplyAdaptor.sol";
-import { CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CollateralAdaptor.sol";
-import { BorrowAdaptor } from "src/modules/adaptors/Compound/V3/BorrowAdaptor.sol";
-import { RewardsAdaptor } from "src/modules/adaptors/Compound/V3/RewardsAdaptor.sol";
+import { CompoundV3SupplyAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3SupplyAdaptor.sol";
+import { CompoundV3CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3CollateralAdaptor.sol";
+import { CompoundV3BorrowAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3BorrowAdaptor.sol";
+import { CompoundV3RewardsAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3RewardsAdaptor.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CellarWithMultiAssetDeposit } from "src/base/permutations/CellarWithMultiAssetDeposit.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
@@ -22,10 +22,10 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
     using Address for address;
 
     CellarWithMultiAssetDeposit private cellar;
-    SupplyAdaptor private supplyAdaptor;
-    CollateralAdaptor private collateralAdaptor;
-    BorrowAdaptor private borrowAdaptor;
-    RewardsAdaptor private rewardsAdaptor;
+    CompoundV3SupplyAdaptor private supplyAdaptor;
+    CompoundV3CollateralAdaptor private collateralAdaptor;
+    CompoundV3BorrowAdaptor private borrowAdaptor;
+    CompoundV3RewardsAdaptor private rewardsAdaptor;
     WstEthExtension private wstethExtension;
 
     IComet private usdcComet = IComet(cUSDCV3);
@@ -70,10 +70,10 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         // Run Starter setUp code.
         _setUp();
 
-        supplyAdaptor = new SupplyAdaptor();
-        collateralAdaptor = new CollateralAdaptor(1.05e18, 5);
-        borrowAdaptor = new BorrowAdaptor(1.05e18, 5);
-        rewardsAdaptor = new RewardsAdaptor(cometRewards);
+        supplyAdaptor = new CompoundV3SupplyAdaptor();
+        collateralAdaptor = new CompoundV3CollateralAdaptor(1.05e18, 5);
+        borrowAdaptor = new CompoundV3BorrowAdaptor(1.05e18, 5);
+        rewardsAdaptor = new CompoundV3RewardsAdaptor(cometRewards);
         wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -597,7 +597,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(SupplyAdaptor.SupplyAdaptor___InvalidComet.selector, address(this)))
+            bytes(abi.encodeWithSelector(CompoundV3SupplyAdaptor.SupplyAdaptor___InvalidComet.selector, address(this)))
         );
         cellar.callOnAdaptor(data);
 
@@ -608,7 +608,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(SupplyAdaptor.SupplyAdaptor___InvalidComet.selector, address(this)))
+            bytes(abi.encodeWithSelector(CompoundV3SupplyAdaptor.SupplyAdaptor___InvalidComet.selector, address(this)))
         );
         cellar.callOnAdaptor(data);
 
@@ -620,7 +620,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(BorrowAdaptor.BorrowAdaptor___InvalidComet.selector, address(this)))
+            bytes(abi.encodeWithSelector(CompoundV3BorrowAdaptor.BorrowAdaptor___InvalidComet.selector, address(this)))
         );
         cellar.callOnAdaptor(data);
 
@@ -631,7 +631,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(BorrowAdaptor.BorrowAdaptor___InvalidComet.selector, address(this)))
+            bytes(abi.encodeWithSelector(CompoundV3BorrowAdaptor.BorrowAdaptor___InvalidComet.selector, address(this)))
         );
         cellar.callOnAdaptor(data);
 
@@ -645,7 +645,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    CollateralAdaptor.CollateralAdaptor___InvalidCometOrCollateral.selector,
+                    CompoundV3CollateralAdaptor.CollateralAdaptor___InvalidCometOrCollateral.selector,
                     address(this),
                     USDC
                 )
@@ -662,7 +662,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    CollateralAdaptor.CollateralAdaptor___InvalidCometOrCollateral.selector,
+                    CompoundV3CollateralAdaptor.CollateralAdaptor___InvalidCometOrCollateral.selector,
                     address(this),
                     USDC
                 )
@@ -753,7 +753,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.startPrank(address(cellar));
         bytes memory callData = abi.encodeWithSelector(
-            SupplyAdaptor.withdraw.selector,
+            CompoundV3SupplyAdaptor.withdraw.selector,
             0,
             address(1),
             abi.encode(0),
@@ -798,8 +798,8 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Instead of adding another asset to the comet, instead deploy a new adaptor with a max number of assets of 4.
         // That way the HF calc will return a zero.
-        collateralAdaptor = new CollateralAdaptor(1.05e18, 4);
-        borrowAdaptor = new BorrowAdaptor(1.05e18, 4);
+        collateralAdaptor = new CompoundV3CollateralAdaptor(1.05e18, 4);
+        borrowAdaptor = new CompoundV3BorrowAdaptor(1.05e18, 4);
         // Need to reset isIdentifierUsed in registry so we can call addAdaptorToCatalogue.
         stdstore
             .target(address(registry))
@@ -823,7 +823,9 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, 1);
             data[0] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
         }
-        vm.expectRevert(bytes(abi.encodeWithSelector(BorrowAdaptor.BorrowAdaptor__HealthFactorTooLow.selector)));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CompoundV3BorrowAdaptor.BorrowAdaptor__HealthFactorTooLow.selector))
+        );
         cellar.callOnAdaptor(data);
 
         // Try withdrawing 1 wei of collateral
@@ -833,7 +835,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
         }
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(CollateralAdaptor.CollateralAdaptor__HealthFactorTooLow.selector))
+            bytes(abi.encodeWithSelector(CompoundV3CollateralAdaptor.CollateralAdaptor__HealthFactorTooLow.selector))
         );
         cellar.callOnAdaptor(data);
 
@@ -867,8 +869,8 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(USDC), address(this), assets);
 
         // Setup new adaptors with a much higher minimum health factor.
-        collateralAdaptor = new CollateralAdaptor(1.50e18, 5);
-        borrowAdaptor = new BorrowAdaptor(1.50e18, 5);
+        collateralAdaptor = new CompoundV3CollateralAdaptor(1.50e18, 5);
+        borrowAdaptor = new CompoundV3BorrowAdaptor(1.50e18, 5);
         // Need to reset isIdentifierUsed in registry so we can call addAdaptorToCatalogue.
         stdstore
             .target(address(registry))
@@ -910,7 +912,9 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, assets.mulDivDown(80, 100));
             data[1] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
         }
-        vm.expectRevert(bytes(abi.encodeWithSelector(BorrowAdaptor.BorrowAdaptor__HealthFactorTooLow.selector)));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CompoundV3BorrowAdaptor.BorrowAdaptor__HealthFactorTooLow.selector))
+        );
         cellar.callOnAdaptor(data);
 
         // Add collateral and borrow assets.
@@ -935,7 +939,7 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
         }
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(CollateralAdaptor.CollateralAdaptor__HealthFactorTooLow.selector))
+            bytes(abi.encodeWithSelector(CompoundV3CollateralAdaptor.CollateralAdaptor__HealthFactorTooLow.selector))
         );
         cellar.callOnAdaptor(data);
     }
@@ -964,14 +968,14 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.startPrank(address(cellar));
         bytes memory callData = abi.encodeWithSelector(
-            SupplyAdaptor.withdraw.selector,
+            CompoundV3SupplyAdaptor.withdraw.selector,
             assets + 1,
             address(this),
             abi.encode(usdcComet),
             abi.encode(true)
         );
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(SupplyAdaptor.SupplyAdaptor___WithdrawWouldResultInDebt.selector))
+            bytes(abi.encodeWithSelector(CompoundV3SupplyAdaptor.SupplyAdaptor___WithdrawWouldResultInDebt.selector))
         );
         address(supplyAdaptor).functionDelegateCall(callData);
         vm.stopPrank();
