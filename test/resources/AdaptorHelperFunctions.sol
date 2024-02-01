@@ -27,6 +27,7 @@ import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolA
 // Compound
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+import { CompoundV2DebtAdaptor } from "src/modules/adaptors/Compound/CompoundV2DebtAdaptor.sol";
 
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -57,6 +58,12 @@ import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralF
 
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 
+import { MorphoBlueDebtAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueDebtAdaptor.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
+import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueCollateralAdaptor.sol";
+import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
+// import { MorphoBlueSupplyAdaptor2 } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor2.sol";
+import { Id, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
 
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
@@ -294,6 +301,70 @@ contract AdaptorHelperFunctions {
             );
     }
 
+    // ========================================= Morpho Blue FUNCTIONS =========================================
+
+    // MorphoBlueSupplyAdaptor Functions
+    function _createBytesDataToLendOnMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.lendToMorphoBlue.selector, _market, _assets);
+    }
+
+    function _createBytesDataToWithdrawFromMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _market, _assets);
+    }
+
+    function _createBytesDataToAccrueInterestToMorphoBlueSupplyAdaptor(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.accrueInterest.selector, _market);
+    }
+
+    // MorphoBlueCollateralAdaptor Functions
+
+    function _createBytesDataToAddCollateralToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _collateralToDeposit
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.addCollateral.selector, _market, _collateralToDeposit);
+    }
+
+    function _createBytesDataToRemoveCollateralToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _collateralAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _market, _collateralAmount);
+    }
+
+    function _createBytesDataToAccrueInterestToMorphoBlue(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueCollateralAdaptor.accrueInterest.selector, _market);
+    }
+
+    // MorphoBlueDebtAdaptor Functions
+
+    function _createBytesDataToBorrowFromMorphoBlue(
+        MarketParams memory _market,
+        uint256 _amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.borrowFromMorphoBlue.selector, _market, _amountToBorrow);
+    }
+
+    function _createBytesDataToRepayDebtToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _market, _debtTokenRepayAmount);
+    }
+
     // ========================================= Balancer FUNCTIONS =========================================
 
     /**
@@ -373,6 +444,28 @@ contract AdaptorHelperFunctions {
         uint256 amountToWithdraw
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
+    }
+
+    function _createBytesDataToEnterMarketWithCompoundV2(CErc20 market) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.enterMarket.selector, market);
+    }
+
+    function _createBytesDataToExitMarketWithCompoundV2(CErc20 market) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.exitMarket.selector, market);
+    }
+
+    function _createBytesDataToBorrowWithCompoundV2(
+        CErc20 market,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV2DebtAdaptor.borrowFromCompoundV2.selector, market, amountToBorrow);
+    }
+
+    function _createBytesDataToRepayWithCompoundV2(
+        CErc20 market,
+        uint256 debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV2DebtAdaptor.repayCompoundV2Debt.selector, market, debtTokenRepayAmount);
     }
 
     // ========================================= Fees And Reserves FUNCTIONS =========================================

@@ -2,6 +2,7 @@
 cache/
 out/
 broadcast/
+gnosisTxs/
 
 # Environment variables!
 .env

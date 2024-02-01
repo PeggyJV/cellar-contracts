@@ -3,21 +3,24 @@ pragma solidity 0.8.21;
 
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
-
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
-
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+import { CompoundV2DebtAdaptor } from "src/modules/adaptors/Compound/CompoundV2DebtAdaptor.sol";
+import { Math } from "src/utils/Math.sol";
 
+/**
+ * @dev TODO - Extra test for supporting providing collateral && open borrow positions have been ported over to CompoundTempHFTest.t.sol for now. This was due to an error arising when trying to add a CUSDC debt position here. Once that is resolved in this test file (Compound.t.sol) we can copy over the tests from CompoundTempHFTest.t.sol if they are done.
+ */
 contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
     CTokenAdaptor private cTokenAdaptor;
+    CompoundV2DebtAdaptor private compoundV2DebtAdaptor;
     VestingSimpleAdaptor private vestingAdaptor;
     VestingSimple private vesting;
     Cellar private cellar;
@@ -29,6 +32,10 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private usdcPosition = 3;
     uint32 private cUSDCPosition = 4;
     uint32 private daiVestingPosition = 5;
+    uint32 private cDAIDebtPosition = 6;
+    // uint32 private cUSDCDebtPosition = 7; // TODO - commented out as mentioned at the beginning of this file due to errors arising.
+
+    uint256 private minHealthFactor = 1.1e18;
 
     function setUp() external {
         // Setup forked environment.
@@ -40,7 +47,9 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         _setUp();
 
         vesting = new VestingSimple(USDC, 1 days / 4, 1e6);
-        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP));
+        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP), minHealthFactor);
+        compoundV2DebtAdaptor = new CompoundV2DebtAdaptor(false, address(comptroller), address(COMP), minHealthFactor);
+
         vestingAdaptor = new VestingSimpleAdaptor();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -62,12 +71,17 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(cTokenAdaptor));
         registry.trustAdaptor(address(vestingAdaptor));
+        registry.trustAdaptor(address(compoundV2DebtAdaptor));
 
         registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
         registry.trustPosition(cDAIPosition, address(cTokenAdaptor), abi.encode(cDAI));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
         registry.trustPosition(cUSDCPosition, address(cTokenAdaptor), abi.encode(cUSDC));
         registry.trustPosition(daiVestingPosition, address(vestingAdaptor), abi.encode(vesting));
+
+        // trust debtAdaptor positions
+        registry.trustPosition(cDAIDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cDAI));
+        // registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
 
         string memory cellarName = "Compound Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -79,16 +93,21 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(vestingAdaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        cellar.addAdaptorToCatalogue(address(compoundV2DebtAdaptor));
 
         cellar.addPositionToCatalogue(daiPosition);
         cellar.addPositionToCatalogue(usdcPosition);
         cellar.addPositionToCatalogue(cUSDCPosition);
         cellar.addPositionToCatalogue(daiVestingPosition);
+        cellar.addPositionToCatalogue(cDAIDebtPosition);
+        // cellar.addPositionToCatalogue(cUSDCDebtPosition);
 
         cellar.addPosition(1, daiPosition, abi.encode(0), false);
-        cellar.addPosition(1, usdcPosition, abi.encode(0), false);
-        cellar.addPosition(1, cUSDCPosition, abi.encode(0), false);
-        cellar.addPosition(1, daiVestingPosition, abi.encode(0), false);
+        cellar.addPosition(2, usdcPosition, abi.encode(0), false);
+        cellar.addPosition(3, cUSDCPosition, abi.encode(0), false);
+        cellar.addPosition(4, daiVestingPosition, abi.encode(0), false);
+        cellar.addPosition(5, cDAIDebtPosition, abi.encode(0), true);
+        // cellar.addPosition(6, cUSDCDebtPosition, abi.encode(0), true);
 
         DAI.safeApprove(address(cellar), type(uint256).max);
     }
