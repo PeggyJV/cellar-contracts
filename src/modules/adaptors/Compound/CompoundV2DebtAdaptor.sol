@@ -16,7 +16,7 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
     using Math for uint256;
 
     //============================================ Notice ===========================================
-    // TODO: pending interest - does it need to be kicked by strategist (or anyone) before calling balanceOf() such that a divergence from the Cellars share price, and its real value is not had? It would follow the same note as the FraxlendDebtAdaptor.sol
+    // NOTE - `accrueInterest()` seems to be very expensive, public tx. That said it is similar to other lending protocols where it is called for every mutative function call that the CompoundV2 adaptors are implementing. Thus we are leaving it up to the strategist to coordinate as needed in calling it similar to MorphoBlue adaptors and how they can diverge if the contract is not kicked.
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(CERC20 cToken)
@@ -123,12 +123,10 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
     /**
      * @notice Returns the cellar's amount owing (debt) to CompoundV2 market
      * @param adaptorData encoded CompoundV2 market (cToken) for this position
-     * NOTE: this queries `borrowBalanceCurrent(address account)` to get current borrow amount per compoundV2 market PLUS interest
-     * TODO `borrowBalanceCurrent` calls accrueInterest, so it changes state and thus might not be callable from balanceOf which is just a view function. Thus trying `borrowBalanceStored` for now.
+     * NOTE: this queries `borrowBalanceCurrent(address account)` to get current borrow amount per compoundV2 market WITHOUT interest. `borrowBalanceCurrent` calls accrueInterest, so it changes state and thus won't work for this view function. Thus we are using `borrowBalanceStored`. See NOTE at beginning about `accrueInterest()`
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        // return cToken.borrowBalanceCurrent(msg.sender);
         return cToken.borrowBalanceStored(msg.sender);
     }
 
