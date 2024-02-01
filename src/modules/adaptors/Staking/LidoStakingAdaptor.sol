@@ -31,6 +31,12 @@ contract LidoStakingAdaptor is StakingAdaptor {
      */
     IUNSTETH public immutable unstETH;
 
+    /**
+     * @notice On deployment, save the `getLastCheckpointIndex` so it can be used
+     *         as the starting index when calling `findCheckPointHints`
+     */
+    uint256 public immutable startingCheckPointIndex;
+
     constructor(
         address _wrappedNative,
         uint8 _maxRequests,
@@ -41,6 +47,7 @@ contract LidoStakingAdaptor is StakingAdaptor {
         stETH = ISTETH(_stETH);
         wstETH = IWSTETH(_wstETH);
         unstETH = IUNSTETH(_unstETH);
+        startingCheckPointIndex = unstETH.getLastCheckpointIndex();
     }
 
     //============================================ Global Functions ===========================================
@@ -85,11 +92,6 @@ contract LidoStakingAdaptor is StakingAdaptor {
         amountOut = wstETH.unwrap(amount);
     }
 
-    // TODO so I dont really get the math in WithdrawQueueBase.sol Line 484
-    // https://etherscan.deth.net/address/0xe42c659dc09109566720ea8b2de186c2be7d94d9
-    // It seems like a safe estimation to say 1 stETH is 1 ETH, but this logic is doing
-    // a whole bunch of stuff with check points and hints, which we really wouldn't be able to
-    // provide hints since this needs to be called in balance of.
     /**
      * @notice Returns balance in pending and finalized withdraw requests.
      * @dev This function assumes that the primitive and derivative asset are 1:1.
@@ -97,10 +99,32 @@ contract LidoStakingAdaptor is StakingAdaptor {
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
         IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
+        uint256 lastFinalizedRequestId = unstETH.getLastFinalizedRequestId();
+        uint256 lastCheckpointIndex = type(uint256).max;
         for (uint256 i; i < statuses.length; ++i) {
+            uint256 requestId = requests[i];
             // If request was already claimed continue.
             if (statuses[i].isClaimed) continue;
-            amount += statuses[i].amountOfStETH;
+            if (requestId > lastFinalizedRequestId) {
+                // Request has not been finalized, so report amount as `amountOfStETH`.
+                amount += statuses[i].amountOfStETH;
+            } else {
+                // Request has been finalized, and we need to call `getClaimableEther` to determine
+                // the amount of ETH request is worth.
+                // Save last checkpoint index if it has not been set.
+                if (lastCheckpointIndex == type(uint256).max) lastCheckpointIndex = unstETH.getLastCheckpointIndex();
+                // Start by determining what hint to use.
+                uint256[] memory rIds = new uint256[](1);
+                rIds[0] = requestId;
+                uint256[] memory hints = unstETH.findCheckpointHints(
+                    rIds,
+                    startingCheckPointIndex,
+                    lastCheckpointIndex
+                );
+                // Now call getClaimableEther to determine requests value.
+                uint256[] memory finalizedAmounts = unstETH.getClaimableEther(rIds, hints);
+                amount += finalizedAmounts[0];
+            }
         }
     }
 

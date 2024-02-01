@@ -32,7 +32,7 @@ contract LidoStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     uint256 public initialAssets;
 
-    uint8 public maxRequests = 8;
+    uint8 public maxRequests = 16;
 
     function setUp() external {
         // Setup forked environment.

@@ -97,6 +97,21 @@ interface IUNSTETH {
     function getRoleMember(bytes32 role, uint256 index) external view returns (address);
 
     function FINALIZE_ROLE() external view returns (bytes32);
+
+    function getLastFinalizedRequestId() external view returns (uint256);
+
+    function getLastCheckpointIndex() external view returns (uint256);
+
+    function findCheckpointHints(
+        uint256[] memory requestIds,
+        uint256 firstIndex,
+        uint256 lastIndex
+    ) external view returns (uint256[] memory);
+
+    function getClaimableEther(
+        uint256[] memory requestIds,
+        uint256[] memory hints
+    ) external view returns (uint256[] memory);
 }
 
 // Renzo
