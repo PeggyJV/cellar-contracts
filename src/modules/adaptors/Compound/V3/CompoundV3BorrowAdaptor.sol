@@ -43,7 +43,7 @@ contract CompoundV3BorrowAdaptor is BaseAdaptor, CompoundV3Helper {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(uint256 minHealthFactor, uint8 _maxNumberOfAssets) CompoundV3Helper(_maxNumberOfAssets) {
+    constructor(uint256 minHealthFactor) {
         _verifyConstructorMinimumHealthFactor(minHealthFactor);
         minimumHealthFactor = minHealthFactor;
     }

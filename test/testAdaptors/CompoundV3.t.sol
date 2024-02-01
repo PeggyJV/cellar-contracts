@@ -71,8 +71,8 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         _setUp();
 
         supplyAdaptor = new CompoundV3SupplyAdaptor();
-        collateralAdaptor = new CompoundV3CollateralAdaptor(1.05e18, 5);
-        borrowAdaptor = new CompoundV3BorrowAdaptor(1.05e18, 5);
+        collateralAdaptor = new CompoundV3CollateralAdaptor(1.05e18);
+        borrowAdaptor = new CompoundV3BorrowAdaptor(1.05e18);
         rewardsAdaptor = new CompoundV3RewardsAdaptor(cometRewards);
         wstethExtension = new WstEthExtension(priceRouter);
 
@@ -764,113 +764,14 @@ contract CellarCompoundV3Test is MainnetStarterTest, AdaptorHelperFunctions {
         vm.stopPrank();
     }
 
-    function testRecoveringFromTooManyCollateralsAddedToComet(uint256 assets) external {
-        // Use 200 for min assets because the minimum borrow is 100 USDC.
-        assets = bound(assets, 200e6, 1_000_000e6);
-        deal(address(USDC), address(this), assets);
-
-        // Deposit into Cellar.
-        cellar.deposit(assets, address(this));
-
-        // Add required positions.
-        cellar.addPosition(0, wethPosition, abi.encode(true), false);
-        cellar.addPosition(0, wethCompoundV3CollateralPosition, abi.encode(0), false);
-        cellar.addPosition(0, usdcCompoundV3DebtPosition, abi.encode(0), true);
-
-        // Simulate a swap by minting Cellar ERC20s.
-        uint256 assetsInWeth = priceRouter.getValue(USDC, assets, WETH);
-        deal(address(USDC), address(cellar), initialAssets);
-        deal(address(WETH), address(cellar), assetsInWeth);
-
-        // Add collateral and borrow assets.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSupplyCollateralToCompoundV3(usdcComet, WETH, assetsInWeth);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
-        }
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, assets / 2);
-            data[1] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
-        }
-        cellar.callOnAdaptor(data);
-
-        // Instead of adding another asset to the comet, instead deploy a new adaptor with a max number of assets of 4.
-        // That way the HF calc will return a zero.
-        collateralAdaptor = new CompoundV3CollateralAdaptor(1.05e18, 4);
-        borrowAdaptor = new CompoundV3BorrowAdaptor(1.05e18, 4);
-        // Need to reset isIdentifierUsed in registry so we can call addAdaptorToCatalogue.
-        stdstore
-            .target(address(registry))
-            .sig(registry.isIdentifierUsed.selector)
-            .with_key(collateralAdaptor.identifier())
-            .checked_write(false);
-        stdstore
-            .target(address(registry))
-            .sig(registry.isIdentifierUsed.selector)
-            .with_key(borrowAdaptor.identifier())
-            .checked_write(false);
-        registry.trustAdaptor(address(collateralAdaptor));
-        registry.trustAdaptor(address(borrowAdaptor));
-        cellar.addAdaptorToCatalogue(address(collateralAdaptor));
-        cellar.addAdaptorToCatalogue(address(borrowAdaptor));
-
-        // Try borrowing 1 wei more USDC to get HF check to revert
-        data = new Cellar.AdaptorCall[](1);
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToBorrowBaseFromCompoundV3(usdcComet, 1);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
-        }
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(CompoundV3BorrowAdaptor.BorrowAdaptor__HealthFactorTooLow.selector))
-        );
-        cellar.callOnAdaptor(data);
-
-        // Try withdrawing 1 wei of collateral
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawCollateralFromCompoundV3(usdcComet, WETH, 1);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
-        }
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(CompoundV3CollateralAdaptor.CollateralAdaptor__HealthFactorTooLow.selector))
-        );
-        cellar.callOnAdaptor(data);
-
-        // Recover from too many collaterals added to comet.
-        // Repay debt, and withdraw collateral.
-        data = new Cellar.AdaptorCall[](2);
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRepayBaseToCompoundV3(usdcComet, type(uint256).max);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(borrowAdaptor), callData: adaptorCalls });
-        }
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdrawCollateralFromCompoundV3(usdcComet, WETH, type(uint256).max);
-            data[1] = Cellar.AdaptorCall({ adaptor: address(collateralAdaptor), callData: adaptorCalls });
-        }
-        cellar.callOnAdaptor(data);
-
-        uint256 expectedWethBalance = assetsInWeth;
-        assertApproxEqAbs(
-            WETH.balanceOf(address(cellar)),
-            expectedWethBalance,
-            1,
-            "WETH Balance of cellar should equal assetsInWeth."
-        );
-    }
-
     function testBorrowingLoweringHealthFactor(uint256 assets) external {
         // Use 200 for min assets because the minimum borrow is 100 USDC.
         assets = bound(assets, 200e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
 
         // Setup new adaptors with a much higher minimum health factor.
-        collateralAdaptor = new CompoundV3CollateralAdaptor(1.50e18, 5);
-        borrowAdaptor = new CompoundV3BorrowAdaptor(1.50e18, 5);
+        collateralAdaptor = new CompoundV3CollateralAdaptor(1.50e18);
+        borrowAdaptor = new CompoundV3BorrowAdaptor(1.50e18);
         // Need to reset isIdentifierUsed in registry so we can call addAdaptorToCatalogue.
         stdstore
             .target(address(registry))
