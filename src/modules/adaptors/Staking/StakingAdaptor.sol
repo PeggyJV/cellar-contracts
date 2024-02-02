@@ -316,12 +316,11 @@ contract StakingAdaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategist to remove a request from `requestIds` if it has already been claimed.
-     *  @param id the request id to remove
+     * @dev id the request id to remove
      * @dev wildcard arbitrary abi encoded data that can be used by inheriting adaptors
      */
-    function removeClaimedRequest(uint256 id, bytes calldata) external virtual {
+    function removeClaimedRequest(uint256, bytes calldata) external virtual {
         if (true) revert StakingAdaptor__NotSupported();
-        StakingAdaptor(adaptorAddress).removeRequestId(id);
     }
 
     //============================================ Interface Helper Functions ===========================================
