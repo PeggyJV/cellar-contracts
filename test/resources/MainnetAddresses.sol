@@ -14,6 +14,8 @@ contract MainnetAddresses {
     address public ryusdRegistry = 0x2Cbd27E034FEE53f79b607430dA7771B22050741;
     address public ryusdRegistryOwner = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
+    address public dev0Address = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+
     address public priceRouterV1 = 0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA;
     address public priceRouterV2 = 0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92;
     address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
@@ -56,6 +58,11 @@ contract MainnetAddresses {
     ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
     ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
     ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
+    ERC20 public weETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
+    ERC20 public WEETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
+    ERC20 public EETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
+    ERC20 public EZETH = ERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
+    ERC20 public RSETH = ERC20(0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -83,6 +90,7 @@ contract MainnetAddresses {
     address public CVX_USD_FEED = 0xd962fC30A72A84cE50161031391756Bf2876Af5D;
     address public CVX_ETH_FEED = 0xC9CbF687f43176B302F03f5e58470b77D07c61c6;
     address public CRVUSD_USD_FEED = 0xEEf0C605546958c1f899b6fB336C20671f9cD49F;
+    address public LINK_USD_FEED = 0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -108,6 +116,8 @@ contract MainnetAddresses {
     ERC20 public aV3USDT = ERC20(0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a);
     ERC20 public dV3USDT = ERC20(0x6df1C1E379bC5a00a7b4C6e67A203333772f45A8);
     ERC20 public aV3sDAI = ERC20(0x4C612E3B15b96Ff9A6faED838F8d07d479a8dD4c);
+    ERC20 public aV3CrvUsd = ERC20(0xb82fa9f31612989525992FCfBB09AB22Eff5c85A);
+    ERC20 public dV3CrvUsd = ERC20(0x028f7886F3e937f8479efaD64f31B3fE1119857a);
 
     // Balancer V2 Addresses
     ERC20 public BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
@@ -119,6 +129,12 @@ contract MainnetAddresses {
     ERC20 public GHO_LUSD_BPT = ERC20(0x3FA8C89704e5d07565444009e5d9e624B40Be813);
     ERC20 public swETH_bbaWETH = ERC20(0xaE8535c23afeDdA9304B03c68a3563B75fc8f92b);
     ERC20 public swETH_wETH = ERC20(0x02D928E68D8F10C0358566152677Db51E1e2Dc8C);
+    ERC20 public rETH_weETH = ERC20(0x05ff47AFADa98a98982113758878F9A8B9FddA0a);
+    address public rETH_weETH_gauge = 0xC859BF9d7B8C557bBd229565124c2C09269F3aEF;
+    address public aura_reth_weeth = 0x07A319A023859BbD49CC9C38ee891c3EA9283Cc5;
+    ERC20 public rETH_wETH = ERC20(0x1E19CF2D73a72Ef1332C882F20534B6519Be0276);
+    address public rETH_wETH_gauge = 0x79eF6103A513951a3b25743DB509E267685726B7;
+    address public aura_reth_weth = 0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D;
 
     // Linear Pools.
     ERC20 public bb_a_dai = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
@@ -238,6 +254,15 @@ contract MainnetAddresses {
     address public CrvUsdSfraxPool = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxToken = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
     address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
+    address public LusdCrvUsdPool = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
+    address public LusdCrvUsdToken = 0x9978c6B08d28d3B74437c917c5dD7C026df9d55C;
+    address public LusdCrvUsdGauge = 0x66F65323bdE835B109A92045Aa7c655559dbf863;
+    address public WstethEthXPool = 0x14756A5eD229265F86990e749285bDD39Fe0334F;
+    address public WstethEthXToken = 0xfffAE954601cFF1195a8E20342db7EE66d56436B;
+    address public WstethEthXGauge = 0xc1394d6c89cf8F553da8c8256674C778ccFf3E80;
+    address public EthEthXPool = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthXToken = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthXGauge = 0x7671299eA7B4bbE4f3fD305A994e6443b4be680E;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
@@ -251,6 +276,9 @@ contract MainnetAddresses {
     address public wethYethBaseRewardPool = 0xB0867ADE998641Ab1Ff04cF5cA5e5773fA92AaE3;
     address public ethEthxBaseRewardPool = 0x399e111c7209a741B06F8F86Ef0Fdd88fC198D20;
     address public crvUsdSFraxBaseRewardPool = 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2;
+    address public usdtCrvUsdBaseRewardPool = 0xD1DdB0a0815fD28932fBb194C84003683AF8a824;
+    address public lusdCrvUsdBaseRewardPool = 0x633D3B227696B3FacF628a197f982eF68d26c7b5;
+    address public wstethEthxBaseRewardPool = 0x85b118e0Fa5706d99b270be43d782FBE429aD409;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
@@ -261,6 +289,17 @@ contract MainnetAddresses {
     address public swEthAdapter = 0x68ba9602B2AeE30847412109D2eE89063bf08Ec2;
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
     bytes32 public swEthEthDataFeedId = 0x53574554482f4554480000000000000000000000000000000000000000000000;
+
+    address public ethXEthAdapter = 0xc799194cAa24E2874Efa89b4Bf5c92a530B047FF;
+    bytes32 public ethXEthDataFeedId = 0x455448782f455448000000000000000000000000000000000000000000000000;
+
+    address public ethXAdapter = 0xF3eB387Ac1317fBc7E2EFD82214eE1E148f0Fe00;
+    bytes32 public ethXUsdDataFeedId = 0x4554487800000000000000000000000000000000000000000000000000000000;
+
+    address public weEthEthAdapter = 0x8751F736E94F6CD167e8C5B97E245680FbD9CC36;
+    bytes32 public weEthDataFeedId = 0x77654554482f4554480000000000000000000000000000000000000000000000;
+    address public weethAdapter = 0xdDb6F90fFb4d3257dd666b69178e5B3c5Bf41136;
+    bytes32 public weethUsdDataFeedId = 0x7765455448000000000000000000000000000000000000000000000000000000;
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 
@@ -273,4 +312,28 @@ contract MainnetAddresses {
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
+
+    // Lido
+    address public unstETH = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
+
+    // Stader
+    address public stakePoolManagerAddress = 0xcf5EA1b38380f6aF39068375516Daf40Ed70D299;
+    address public userWithdrawManagerAddress = 0x9F0491B32DBce587c50c4C43AB303b06478193A7;
+    address public staderConfig = 0x4ABEF2263d5A5ED582FC9A9789a41D85b68d69DB;
+
+    // Etherfi
+    address public liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
+    address public withdrawalRequestNft = 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c;
+
+    // Renzo
+    address public restakeManager = 0x74a09653A083691711cF8215a6ab074BB4e99ef5;
+
+    // Kelp DAO
+    address public lrtDepositPool = 0x036676389e48133B63a802f8635AD39E752D375D;
+    // Compound V3
+    address public cUSDCV3 = 0xc3d688B66703497DAA19211EEdff47f25384cdc3;
+    address public cWETHV3 = 0xA17581A9E3356d9A858b789D68B4d866e593aE94;
+    address public cometRewards = 0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
+    // Morpho Blue
+    address public _morphoBlue = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 }

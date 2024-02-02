@@ -27,6 +27,10 @@ import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolA
 // Compound
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+import { CompoundV3SupplyAdaptor, IComet } from "src/modules/adaptors/Compound/V3/CompoundV3SupplyAdaptor.sol";
+import { CompoundV3CollateralAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3CollateralAdaptor.sol";
+import { CompoundV3BorrowAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3BorrowAdaptor.sol";
+import { CompoundV3RewardsAdaptor } from "src/modules/adaptors/Compound/V3/CompoundV3RewardsAdaptor.sol";
 
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -57,9 +61,19 @@ import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralF
 
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 
+import { MorphoBlueDebtAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueDebtAdaptor.sol";
+import { MorphoBlueHelperLogic } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueHelperLogic.sol";
+import { MorphoBlueCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueCollateralAdaptor.sol";
+import { MorphoBlueSupplyAdaptor } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor.sol";
+// import { MorphoBlueSupplyAdaptor2 } from "src/modules/adaptors/Morpho/MorphoBlue/MorphoBlueSupplyAdaptor2.sol";
+import { Id, MarketParams, Market } from "src/interfaces/external/Morpho/MorphoBlue/interfaces/IMorpho.sol";
 import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
 
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+
+import { StakingAdaptor } from "src/modules/adaptors/Staking/StakingAdaptor.sol";
+
+import { NativeAdaptor } from "src/modules/adaptors/NativeAdaptor.sol";
 
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
@@ -292,6 +306,64 @@ contract AdaptorHelperFunctions {
                 tokenToRepay,
                 amountToRepay
             );
+    }
+
+    // ========================================= Morpho Blue FUNCTIONS =========================================
+
+    function _createBytesDataToAccrueInterestOnMorphoBlue(
+        MarketParams memory _market
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueHelperLogic.accrueInterest.selector, _market);
+    }
+
+    // MorphoBlueSupplyAdaptor Functions
+    function _createBytesDataToLendOnMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.lendToMorphoBlue.selector, _market, _assets);
+    }
+
+    function _createBytesDataToWithdrawFromMorphoBlue(
+        MarketParams memory _market,
+        uint256 _assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueSupplyAdaptor.withdrawFromMorphoBlue.selector, _market, _assets);
+    }
+
+    // MorphoBlueCollateralAdaptor Functions
+
+    function _createBytesDataToAddCollateralToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _collateralToDeposit
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.addCollateral.selector, _market, _collateralToDeposit);
+    }
+
+    function _createBytesDataToRemoveCollateralToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _collateralAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueCollateralAdaptor.removeCollateral.selector, _market, _collateralAmount);
+    }
+
+    // MorphoBlueDebtAdaptor Functions
+
+    function _createBytesDataToBorrowFromMorphoBlue(
+        MarketParams memory _market,
+        uint256 _amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MorphoBlueDebtAdaptor.borrowFromMorphoBlue.selector, _market, _amountToBorrow);
+    }
+
+    function _createBytesDataToRepayDebtToMorphoBlue(
+        MarketParams memory _market,
+        uint256 _debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(MorphoBlueDebtAdaptor.repayMorphoBlueDebt.selector, _market, _debtTokenRepayAmount);
     }
 
     // ========================================= Balancer FUNCTIONS =========================================
@@ -715,5 +787,126 @@ contract AdaptorHelperFunctions {
         bool _claimExtras
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _baseRewardPool, _claimExtras);
+    }
+
+    // ========================================= MINTING/BURNING FUNCTIONS =========================================
+
+    function _createBytesDataToMint(
+        uint256 amount,
+        uint256 minAmountOut,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mint.selector, amount, minAmountOut, wildcard);
+    }
+
+    function _createBytesDataToRequestBurn(uint256 amount, bytes memory wildcard) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.requestBurn.selector, amount, wildcard);
+    }
+
+    function _createBytesDataToCompleteBurn(
+        uint256 id,
+        uint256 minAmountOut,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.completeBurn.selector, id, minAmountOut, wildcard);
+    }
+
+    function _createBytesDataToWrap(
+        uint256 amount,
+        uint256 minAmountOut,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.wrap.selector, amount, minAmountOut, wildcard);
+    }
+
+    function _createBytesDataToUnwrap(
+        uint256 amount,
+        uint256 minAmountOut,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.unwrap.selector, amount, minAmountOut, wildcard);
+    }
+
+    function _createBytesDataToCancelBurnRequest(
+        uint256 id,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.cancelBurn.selector, id, wildcard);
+    }
+
+    function _createBytesDataToMintERC20(
+        ERC20 depositAsset,
+        uint256 amount,
+        uint256 minAmountOut,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.mintERC20.selector, depositAsset, amount, minAmountOut, wildcard);
+    }
+
+    function _createBytesDataToRemoveClaimedRequest(
+        uint256 id,
+        bytes memory wildcard
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(StakingAdaptor.removeClaimedRequest.selector, id, wildcard);
+    }
+
+    // ========================================= Compound V3 FUNCTIONS =========================================
+
+    function _createBytesDataToSupplyBaseToCompoundV3(
+        IComet comet,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3SupplyAdaptor.supplyBase.selector, comet, assets);
+    }
+
+    function _createBytesDataToWithdrawBaseFromCompoundV3(
+        IComet comet,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3SupplyAdaptor.withdrawBase.selector, comet, assets);
+    }
+
+    function _createBytesDataToSupplyCollateralToCompoundV3(
+        IComet comet,
+        ERC20 asset,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3CollateralAdaptor.supplyCollateral.selector, comet, asset, assets);
+    }
+
+    function _createBytesDataToWithdrawCollateralFromCompoundV3(
+        IComet comet,
+        ERC20 asset,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3CollateralAdaptor.withdrawCollateral.selector, comet, asset, assets);
+    }
+
+    function _createBytesDataToBorrowBaseFromCompoundV3(
+        IComet comet,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3BorrowAdaptor.borrowBase.selector, comet, assets);
+    }
+
+    function _createBytesDataToRepayBaseToCompoundV3(
+        IComet comet,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3BorrowAdaptor.repayBase.selector, comet, assets);
+    }
+
+    function _createBytesDataToClaimRewardsFromCompoundV3(IComet comet) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CompoundV3RewardsAdaptor.claim.selector, comet);
+    }
+
+    // ========================================= NATIVE FUNCTIONS =========================================
+
+    function _createBytesDataToWrapNative(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(NativeAdaptor.wrap.selector, amount);
+    }
+
+    function _createBytesDataToUnwrapNative(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(NativeAdaptor.unwrap.selector, amount);
     }
 }

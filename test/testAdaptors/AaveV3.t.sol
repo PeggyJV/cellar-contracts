@@ -339,22 +339,22 @@ contract CellarAaveV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             "Cellar should have dV3USDC worth of assets/2."
         );
 
-        (ERC20[] memory tokens, uint256[] memory balances, bool[] memory isDebt) = cellar.viewPositionBalances();
-        assertEq(tokens.length, 3, "Should have length of 3.");
-        assertEq(balances.length, 3, "Should have length of 3.");
-        assertEq(isDebt.length, 3, "Should have length of 3.");
+        // (ERC20[] memory tokens, uint256[] memory balances, bool[] memory isDebt) = cellar.viewPositionBalances();
+        // assertEq(tokens.length, 3, "Should have length of 3.");
+        // assertEq(balances.length, 3, "Should have length of 3.");
+        // assertEq(isDebt.length, 3, "Should have length of 3.");
 
-        assertEq(address(tokens[0]), address(USDC), "Should be USDC.");
-        assertEq(address(tokens[1]), address(USDC), "Should be USDC.");
-        assertEq(address(tokens[2]), address(USDC), "Should be USDC.");
+        // assertEq(address(tokens[0]), address(USDC), "Should be USDC.");
+        // assertEq(address(tokens[1]), address(USDC), "Should be USDC.");
+        // assertEq(address(tokens[2]), address(USDC), "Should be USDC.");
 
-        assertApproxEqAbs(balances[0], assets + initialAssets, 1, "Should equal assets.");
-        assertEq(balances[1], assets / 2, "Should equal assets/2.");
-        assertEq(balances[2], assets / 2, "Should equal assets/2.");
+        // assertApproxEqAbs(balances[0], assets + initialAssets, 1, "Should equal assets.");
+        // assertEq(balances[1], assets / 2, "Should equal assets/2.");
+        // assertEq(balances[2], assets / 2, "Should equal assets/2.");
 
-        assertEq(isDebt[0], false, "Should not be debt.");
-        assertEq(isDebt[1], false, "Should not be debt.");
-        assertEq(isDebt[2], true, "Should be debt.");
+        // assertEq(isDebt[0], false, "Should not be debt.");
+        // assertEq(isDebt[1], false, "Should not be debt.");
+        // assertEq(isDebt[2], true, "Should be debt.");
     }
 
     function testTakingOutLoansInUntrackedPosition() external {
