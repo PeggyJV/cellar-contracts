@@ -51,7 +51,7 @@ contract AtomicQueue is ReentrancyGuard {
      *              - 1: indicates user request has zero offer amount.
      *              - 2: indicates user does not have enough offer asset in wallet.
      *              - 3: indicates user has not given AtomicQueue approval.
-     * @param offerToSolve the amount of offer asset to solve
+     * @param assetsToOffer the amount of offer asset to solve
      * @param assetsForWant the amount of assets users want for their offer assets
      */
     struct SolveMetaData {
@@ -91,14 +91,14 @@ contract AtomicQueue is ReentrancyGuard {
     );
 
     /**
-     * @notice Emitted when `solve` exchanges a users shares for the underlying asset.
+     * @notice Emitted when `solve` exchanges a users offer asset for their want asset.
      */
     event AtomicRequestFulfilled(
         address user,
         address offerToken,
         address wantToken,
-        uint256 sharesSpent,
-        uint256 assetsReceived,
+        uint256 offerAmountSpent,
+        uint256 wantAmountReceived,
         uint256 timestamp
     );
 

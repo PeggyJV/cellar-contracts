@@ -9,6 +9,7 @@ import { ILRTDepositPool } from "src/interfaces/external/IStaking.sol";
 /**
  * @title Kelp DAO Staking Adaptor
  * @notice Allows Cellars to stake with Kelp.
+ * @dev Kelp DAO only supports minting.
  * @author crispymangoes
  */
 contract KelpDAOStakingAdaptor is StakingAdaptor {
@@ -57,9 +58,14 @@ contract KelpDAOStakingAdaptor is StakingAdaptor {
     /**
      * @notice Deposit into Kelp LRT pool to get rsETH.
      */
-    function _mintERC20(ERC20 depositAsset, uint256 amount, uint256 minAmountOut) internal override {
+    function _mintERC20(
+        ERC20 depositAsset,
+        uint256 amount,
+        uint256 minAmountOut,
+        bytes calldata
+    ) internal override returns (uint256 valueOut) {
         depositAsset.safeApprove(address(lrtDepositPool), amount);
-        uint256 valueOut = rsETH.balanceOf(address(this));
+        valueOut = rsETH.balanceOf(address(this));
         lrtDepositPool.depositAsset(address(depositAsset), amount, minAmountOut, "");
         valueOut = rsETH.balanceOf(address(this)) - valueOut;
         _revokeExternalApproval(depositAsset, address(lrtDepositPool));

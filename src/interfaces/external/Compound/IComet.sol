@@ -15,6 +15,17 @@ interface IComet {
         uint128 supplyCap;
     }
 
+    struct UserBasic {
+        int104 principal;
+        uint64 baseTrackingIndex;
+        uint64 baseTrackingAccrued;
+        uint16 assetsIn;
+    }
+
+    function userBasic(address user) external view returns (UserBasic memory);
+
+    function baseScale() external view returns (uint256);
+
     function getAssetInfo(uint8 i) external view returns (AssetInfo memory);
 
     function baseToken() external view returns (ERC20);

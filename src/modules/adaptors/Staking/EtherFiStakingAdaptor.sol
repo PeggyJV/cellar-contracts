@@ -9,6 +9,7 @@ import { ILiquidityPool, IWithdrawRequestNft, IWEETH } from "src/interfaces/exte
 /**
  * @title EtherFi Staking Adaptor
  * @notice Allows Cellars to stake with EtherFi.
+ * @dev EtherFi supports minting, burning, and wrapping.
  * @author crispymangoes
  */
 contract EtherFiStakingAdaptor is StakingAdaptor {
@@ -66,26 +67,28 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into EtherFi using native asset.
      */
-    function _mint(uint256 amount) internal override {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountMinted) {
+        amountMinted = eETH.balanceOf(address(this));
         liquidityPool.deposit{ value: amount }();
+        amountMinted = eETH.balanceOf(address(this)) - amountMinted;
     }
 
     /**
      * @notice Wraps derivative asset.
      */
-    function _wrap(uint256 amount) internal override {
+    function _wrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(eETH, amount);
         eETH.safeApprove(address(weETH), amount);
-        weETH.wrap(amount);
+        amountOut = weETH.wrap(amount);
         _revokeExternalApproval(eETH, address(weETH));
     }
 
     /**
      * @notice Unwraps derivative asset.
      */
-    function _unwrap(uint256 amount) internal override {
+    function _unwrap(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
         amount = _maxAvailable(ERC20(address(weETH)), amount);
-        weETH.unwrap(amount);
+        amountOut = weETH.unwrap(amount);
     }
 
     /**
@@ -98,23 +101,26 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
         uint256 requestsLength = requests.length;
         for (uint256 i; i < requestsLength; ++i) {
             IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(requests[i]);
-            // Take min between valuation at request creation, and current valuation.
-            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-            uint256 requestValueInPrimitive = (request.amountOfEEth < amountForShares)
-                ? request.amountOfEEth
-                : amountForShares;
+            // Only check for value if request is valid.
+            if (request.isValid) {
+                // Take min between valuation at request creation, and current valuation.
+                uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+                uint256 requestValueInPrimitive = (request.amountOfEEth < amountForShares)
+                    ? request.amountOfEEth
+                    : amountForShares;
 
-            // Remove fee
-            uint256 fee = uint256(request.feeGwei) * 1 gwei;
-            requestValueInPrimitive = requestValueInPrimitive - fee;
-            amount += requestValueInPrimitive;
+                // Remove fee
+                uint256 fee = uint256(request.feeGwei) * 1 gwei;
+                requestValueInPrimitive = requestValueInPrimitive - fee;
+                amount += requestValueInPrimitive;
+            }
         }
     }
 
     /**
      * @notice Request a withdrawal from EtherFi.
      */
-    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+    function _requestBurn(uint256 amount, bytes calldata) internal override returns (uint256 id) {
         amount = _maxAvailable(eETH, amount);
         eETH.safeApprove(address(liquidityPool), amount);
         id = liquidityPool.requestWithdraw(address(this), amount);
@@ -124,7 +130,16 @@ contract EtherFiStakingAdaptor is StakingAdaptor {
     /**
      * @notice Complete a withdrawal from EtherFi.
      */
-    function _completeBurn(uint256 id) internal override {
+    function _completeBurn(uint256 id, bytes calldata) internal override {
         withdrawRequestNft.claimWithdraw(id);
+    }
+
+    /**
+     * @notice Remove a request from requestIds if it is already claimed.
+     */
+    function removeClaimedRequest(uint256 id, bytes calldata) external override {
+        IWithdrawRequestNft.WithdrawRequest memory request = withdrawRequestNft.getRequest(id);
+        if (!request.isValid) StakingAdaptor(adaptorAddress).removeRequestId(id);
+        else revert StakingAdaptor__RequestNotClaimed(id);
     }
 }

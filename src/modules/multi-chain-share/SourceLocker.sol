@@ -34,7 +34,7 @@ contract SourceLocker is CCIPReceiver {
 
     //============================== EVENTS ===============================
 
-    event BridgeToDestination(uint256 amount, address to);
+    event BridgeToDestination(uint256 amount, address to, bytes32 messageId);
     event BridgeFromDestination(uint256 amount, address to);
 
     //============================== MODIFIERS ===============================
@@ -59,11 +59,6 @@ contract SourceLocker is CCIPReceiver {
     address public immutable factory;
 
     /**
-     * @notice The CCIP source chain selector.
-     */
-    uint64 public immutable sourceChainSelector;
-
-    /**
      * @notice The CCIP destination chain selector.
      */
     uint64 public immutable destinationChainSelector;
@@ -82,14 +77,12 @@ contract SourceLocker is CCIPReceiver {
         address _router,
         address _shareToken,
         address _factory,
-        uint64 _sourceChainSelector,
         uint64 _destinationChainSelector,
         address _link,
         uint256 _messageGasLimit
     ) CCIPReceiver(_router) {
         shareToken = ERC20(_shareToken);
         factory = _factory;
-        sourceChainSelector = _sourceChainSelector;
         destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
         messageGasLimit = _messageGasLimit;
@@ -139,7 +132,7 @@ contract SourceLocker is CCIPReceiver {
         LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
-        emit BridgeToDestination(amount, to);
+        emit BridgeToDestination(amount, to, messageId);
     }
 
     //============================== VIEW FUNCTIONS ===============================

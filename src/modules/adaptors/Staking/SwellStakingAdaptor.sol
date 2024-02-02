@@ -9,6 +9,7 @@ import { ISWETH } from "src/interfaces/external/IStaking.sol";
 /**
  * @title Swell Staking Adaptor
  * @notice Allows Cellars to stake with Swell.
+ * @dev Swell supports minting.
  * @author crispymangoes
  */
 contract SwellStakingAdaptor is StakingAdaptor {
@@ -45,7 +46,10 @@ contract SwellStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Swell using native asset.
      */
-    function _mint(uint256 amount) internal override {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
+        ERC20 derivative = ERC20(address(swETH));
+        amountOut = derivative.balanceOf(address(this));
         swETH.deposit{ value: amount }();
+        amountOut = derivative.balanceOf(address(this)) - amountOut;
     }
 }
