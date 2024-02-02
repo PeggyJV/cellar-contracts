@@ -111,8 +111,9 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         mintAmount = bound(mintAmount, 0.0001e18, 10_000e18);
         deal(address(primitive), address(this), mintAmount);
         cellar.deposit(mintAmount, address(this));
+
         // Rebalance Cellar to mint derivative.
-        _mintDerivative(mintAmount);
+        _mintDerivative(mintAmount, 0);
         assertApproxEqAbs(
             primitive.balanceOf(address(cellar)),
             initialAssets,
@@ -128,7 +129,24 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         );
     }
 
-    // The max steth withdrawal amount is 1k.
+    function testMintMinAmount() external {
+        uint256 mintAmount = 10e18;
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+
+        // Try minting with an excessive minAmountOut.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    StakingAdaptor.StakingAdaptor__MinimumAmountNotMet.selector,
+                    9805484752484587657,
+                    type(uint256).max
+                )
+            )
+        );
+        _mintDerivative(mintAmount, type(uint256).max);
+    }
+
     function testBurn(uint256 mintAmount) external {
         mintAmount = bound(mintAmount, 0.1e18, 1_000e18);
         deal(address(primitive), address(this), mintAmount);
@@ -136,7 +154,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         uint256 startingTotalAssets = cellar.totalAssets();
 
-        _mintDerivative(mintAmount);
+        _mintDerivative(mintAmount, 0);
 
         uint256 burnAmount = derivative.balanceOf(address(cellar));
 
@@ -162,7 +180,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         );
 
         // Rebalance cellar to finalize burn request.
-        _completeDerivativeBurnRequest(requestId);
+        _completeDerivativeBurnRequest(requestId, 0);
 
         assertApproxEqRel(
             cellar.totalAssets(),
@@ -179,6 +197,34 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         );
     }
 
+    function testBurnMinAmount() external {
+        uint256 mintAmount = 10e18;
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+
+        _mintDerivative(mintAmount, 0);
+
+        uint256 burnAmount = derivative.balanceOf(address(cellar));
+
+        // Rebalance cellar to start a burn request.
+        _startDerivativeBurnRequest(burnAmount);
+
+        uint256 requestId = staderAdaptor.requestIds(address(cellar), 0);
+
+        _finalizeRequests();
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    StakingAdaptor.StakingAdaptor__MinimumAmountNotMet.selector,
+                    mintAmount - 10,
+                    type(uint256).max
+                )
+            )
+        );
+        _completeDerivativeBurnRequest(requestId, type(uint256).max);
+    }
+
     function testMultipleMintAndBurns(uint256 seed) external {
         uint256[] memory mintAmounts = new uint256[](maxRequests);
         uint256 burnAmount;
@@ -190,7 +236,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
             deal(address(primitive), address(this), mintAmounts[i]);
             cellar.deposit(mintAmounts[i], address(this));
 
-            _mintDerivative(mintAmounts[i]);
+            _mintDerivative(mintAmounts[i], 0);
             burnAmount = derivative.balanceOf(address(cellar));
             _startDerivativeBurnRequest(burnAmount);
 
@@ -199,7 +245,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         }
 
         // Making 1 more burn request should revert.
-        _mintDerivative(initialAssets);
+        _mintDerivative(initialAssets, 0);
         burnAmount = derivative.balanceOf(address(cellar));
         vm.expectRevert(bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__MaximumRequestsExceeded.selector)));
         _startDerivativeBurnRequest(burnAmount);
@@ -210,7 +256,7 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Complete requests.
         for (uint256 i; i < maxRequests; ++i) {
             uint256 requestId = staderAdaptor.requestIds(address(cellar), 0);
-            _completeDerivativeBurnRequest(requestId);
+            _completeDerivativeBurnRequest(requestId, 0);
         }
         requests = staderAdaptor.getRequestIds(address(cellar));
         assertEq(requests.length, 0, "Should have no burn requests left.");
@@ -236,6 +282,77 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         );
     }
 
+    function testHandlingInvalidRequests(uint256 mintAmount) external {
+        mintAmount = bound(mintAmount, 0.1e18, 1_000e18);
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
+
+        uint256 startingTotalAssets = cellar.totalAssets();
+
+        _mintDerivative(mintAmount, 0);
+
+        uint256 burnAmount = derivative.balanceOf(address(cellar));
+
+        // Rebalance cellar to start a burn request.
+        _startDerivativeBurnRequest(burnAmount);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            startingTotalAssets,
+            0.00000001e18,
+            "totalAssets should not have changed."
+        );
+
+        uint256 requestId = staderAdaptor.requestIds(address(cellar), 0);
+
+        _finalizeRequests();
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            startingTotalAssets,
+            0.00000001e18,
+            "totalAssets should not have changed."
+        );
+
+        // Strategist accidentally tries removing the valid request.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotClaimed.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+
+        // Simulate a state where somehow the request is claimed without the strategist calling `completeBurn`
+        vm.startPrank(address(cellar));
+        staderAdaptor.userWithdrawManager().claim(requestId);
+        staderAdaptor.wrappedPrimitive().deposit{ value: address(cellar).balance }();
+        vm.stopPrank();
+
+        // TotalAssets should remain the unchanged since the withdrawn assets go into an ERC20 position.
+        // And staking adaptor does not account for value in request because it is not valid.
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            startingTotalAssets,
+            0.00000001e18,
+            "totalAssets should not have changed."
+        );
+
+        // Strategist should now be able to remove the request.
+        _removeClaimedRequest(requestId);
+
+        // But if they try to remove it again it reverts.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(StakingAdaptor.StakingAdaptor__RequestNotFound.selector, requestId))
+        );
+        _removeClaimedRequest(requestId);
+    }
+
+    function _removeClaimedRequest(uint256 requestId) internal {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRemoveClaimedRequest(requestId, hex"");
+        data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
     function _finalizeRequests() internal {
         // Spoof unstEth contract into finalizing our request.
         // Stader has a minimum block amount for withdraws to become valid.
@@ -247,16 +364,16 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _startDerivativeBurnRequest(uint256 burnAmount) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount);
+        adaptorCalls[0] = _createBytesDataToRequestBurn(burnAmount, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _completeDerivativeBurnRequest(uint256 requestId) internal {
+    function _completeDerivativeBurnRequest(uint256 requestId, uint256 minAmountOut) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId);
+        adaptorCalls[0] = _createBytesDataToCompleteBurn(requestId, minAmountOut, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -264,34 +381,16 @@ contract StaderStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     function _cancelDerivativeBurnRequest(uint256 requestId) internal {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId);
+        adaptorCalls[0] = _createBytesDataToCancelBurnRequest(requestId, hex"");
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
 
-    function _mintDerivative(uint256 mintAmount) internal {
+    function _mintDerivative(uint256 mintAmount, uint256 minAmountOut) internal {
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-    }
-
-    function _wrap(uint256 amount) internal {
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToWrap(amount);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-    }
-
-    function _unwrap(uint256 amount) internal {
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToUnwrap(amount);
+        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(staderAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

@@ -9,7 +9,7 @@ import { IComet } from "src/interfaces/external/Compound/IComet.sol";
  * @notice Allows Cellars to supply base token to Compound V3.
  * @author crispymangoes
  */
-contract SupplyAdaptor is BaseAdaptor {
+contract CompoundV3SupplyAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -40,7 +40,7 @@ contract SupplyAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Supply Adaptor V 0.0"));
+        return keccak256(abi.encode("Compound V3 Supply Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================

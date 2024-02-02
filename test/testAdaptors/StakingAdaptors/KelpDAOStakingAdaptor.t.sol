@@ -166,7 +166,7 @@ contract KelpDAOStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMintERC20(depositAsset, mintAmount, minMintAmountOut);
+        adaptorCalls[0] = _createBytesDataToMintERC20(depositAsset, mintAmount, minMintAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(kelpDAOAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

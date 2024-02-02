@@ -25,7 +25,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     //============================== EVENTS ===============================
 
-    event BridgeToSource(uint256 amount, address to);
+    event BridgeToSource(uint256 amount, address to, bytes32 messageId);
     event BridgeFromSource(uint256 amount, address to);
 
     //============================== MODIFIERS ===============================
@@ -50,11 +50,6 @@ contract DestinationMinter is ERC20, CCIPReceiver {
     uint64 public immutable sourceChainSelector;
 
     /**
-     * @notice The CCIP destination chain selector.
-     */
-    uint64 public immutable destinationChainSelector;
-
-    /**
      * @notice This networks LINK contract.
      */
     ERC20 public immutable LINK;
@@ -71,13 +66,11 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         string memory _symbol,
         uint8 _decimals,
         uint64 _sourceChainSelector,
-        uint64 _destinationChainSelector,
         address _link,
         uint256 _messageGasLimit
     ) ERC20(_name, _symbol, _decimals) CCIPReceiver(_router) {
         targetSource = _targetSource;
         sourceChainSelector = _sourceChainSelector;
-        destinationChainSelector = _destinationChainSelector;
         LINK = ERC20(_link);
         messageGasLimit = _messageGasLimit;
     }
@@ -88,7 +81,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
      * @notice Bridge shares back to source chain.
      * @dev Caller should approve LINK to be spent by this contract.
      * @param amount Number of shares to burn on destination network and unlock/transfer on source network.
-     * @param to Specified address to burn destination network `share` tokens, and receive unlocked `share` tokens on source network.
+     * @param to The address to send unlocked share tokens to on the source chain.
      * @param maxLinkToPay Specified max amount of LINK fees to pay as per this contract.
      * @return messageId Resultant CCIP messageId.
      */
@@ -109,7 +102,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(sourceChainSelector, message);
-        emit BridgeToSource(amount, to);
+        emit BridgeToSource(amount, to, messageId);
     }
 
     //============================== VIEW FUNCTIONS ===============================

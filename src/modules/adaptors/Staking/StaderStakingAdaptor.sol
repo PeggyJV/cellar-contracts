@@ -9,6 +9,7 @@ import { IStakePoolManager, IUserWithdrawManager, IStaderConfig } from "src/inte
 /**
  * @title Stader Staking Adaptor
  * @notice Allows Cellars to stake with Stader.
+ * @dev Stader supports minting, and burning.
  * @author crispymangoes
  */
 contract StaderStakingAdaptor is StakingAdaptor {
@@ -63,8 +64,10 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Stakes into Stader using native asset.
      */
-    function _mint(uint256 amount) internal override {
+    function _mint(uint256 amount, bytes calldata) internal override returns (uint256 amountOut) {
+        amountOut = ETHx.balanceOf(address(this));
         stakePoolManager.deposit{ value: amount }(address(this));
+        amountOut = ETHx.balanceOf(address(this)) - amountOut;
     }
 
     /**
@@ -82,15 +85,21 @@ contract StaderStakingAdaptor is StakingAdaptor {
             IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(
                 uint256(requests[i])
             );
-            uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
-            amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
+            if (request.owner != account) continue;
+            // If ethFinalized is set, use that value.
+            if (request.ethFinalized > 0) amount += request.ethFinalized;
+            else {
+                // Else calculate request value using current and past rates.
+                uint256 ethXValueUsingCurrentExchangeRate = request.ethXAmount.mulDivDown(exchangeRate, DECIMALS);
+                amount += request.ethExpected.min(ethXValueUsingCurrentExchangeRate);
+            }
         }
     }
 
     /**
      * @notice Request to withdraw.
      */
-    function _requestBurn(uint256 amount) internal override returns (uint256 id) {
+    function _requestBurn(uint256 amount, bytes calldata) internal override returns (uint256 id) {
         amount = _maxAvailable(ETHx, amount);
         ETHx.safeApprove(address(userWithdrawManager), amount);
         id = userWithdrawManager.requestWithdraw(amount, address(this));
@@ -100,7 +109,16 @@ contract StaderStakingAdaptor is StakingAdaptor {
     /**
      * @notice Complete a withdraw.
      */
-    function _completeBurn(uint256 id) internal override {
+    function _completeBurn(uint256 id, bytes calldata) internal override {
         userWithdrawManager.claim(id);
+    }
+
+    /**
+     * @notice Remove a request from requestIds if it is already claimed.
+     */
+    function removeClaimedRequest(uint256 id, bytes calldata) external override {
+        IUserWithdrawManager.WithdrawRequest memory request = userWithdrawManager.userWithdrawRequests(uint256(id));
+        if (request.owner != address(this)) StakingAdaptor(adaptorAddress).removeRequestId(id);
+        else revert StakingAdaptor__RequestNotClaimed(id);
     }
 }

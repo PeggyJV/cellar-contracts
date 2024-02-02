@@ -3,14 +3,14 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math, Cellar, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IComet } from "src/interfaces/external/Compound/IComet.sol";
-import { V3Helper } from "src/modules/adaptors/Compound/V3/V3Helper.sol";
+import { CompoundV3Helper } from "src/modules/adaptors/Compound/V3/CompoundV3Helper.sol";
 
 /**
  * @title Compound V3 Collateral Adaptor
  * @notice Allows Cellars to interact with collateral on Compound V3.
  * @author crispymangoes
  */
-contract CollateralAdaptor is BaseAdaptor, V3Helper {
+contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundV3Helper {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -38,7 +38,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(uint256 minHealthFactor, uint8 _maxNumberOfAssets) V3Helper(_maxNumberOfAssets) {
+    constructor(uint256 minHealthFactor) {
         _verifyConstructorMinimumHealthFactor(minHealthFactor);
         minimumHealthFactor = minHealthFactor;
     }
@@ -51,7 +51,7 @@ contract CollateralAdaptor is BaseAdaptor, V3Helper {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Collateral Adaptor V 0.0"));
+        return keccak256(abi.encode("Compound V3 Collateral Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================

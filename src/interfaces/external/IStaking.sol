@@ -8,7 +8,7 @@ interface ISWETH {
 
 // EtherFi
 interface ILiquidityPool {
-    function deposit() external payable;
+    function deposit() external payable returns (uint256);
 
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
 
@@ -39,9 +39,9 @@ interface IWithdrawRequestNft {
 }
 
 interface IWEETH {
-    function wrap(uint256 amount) external;
+    function wrap(uint256 amount) external returns (uint256);
 
-    function unwrap(uint256 amount) external;
+    function unwrap(uint256 amount) external returns (uint256);
 }
 
 // Kelp DAO
@@ -56,13 +56,13 @@ interface ILRTDepositPool {
 
 // Lido
 interface ISTETH {
-    function submit(address referral) external payable;
+    function submit(address referral) external payable returns (uint256);
 }
 
 interface IWSTETH {
-    function wrap(uint256 amount) external;
+    function wrap(uint256 amount) external returns (uint256);
 
-    function unwrap(uint256 amount) external;
+    function unwrap(uint256 amount) external returns (uint256);
 }
 
 interface IUNSTETH {
@@ -92,11 +92,28 @@ interface IUNSTETH {
 
     function claimWithdrawal(uint256 _requestId) external;
 
+    function claimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external;
+
     function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
 
     function getRoleMember(bytes32 role, uint256 index) external view returns (address);
 
     function FINALIZE_ROLE() external view returns (bytes32);
+
+    function getLastFinalizedRequestId() external view returns (uint256);
+
+    function getLastCheckpointIndex() external view returns (uint256);
+
+    function findCheckpointHints(
+        uint256[] memory requestIds,
+        uint256 firstIndex,
+        uint256 lastIndex
+    ) external view returns (uint256[] memory);
+
+    function getClaimableEther(
+        uint256[] memory requestIds,
+        uint256[] memory hints
+    ) external view returns (uint256[] memory);
 }
 
 // Renzo
