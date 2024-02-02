@@ -47,6 +47,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
     //============================== EVENTS ===============================
 
     event DeploySuccess(address share, address locker, address minter);
+    event DeploymentInProgress(address share, address locker, bytes32 messageId);
 
     //============================== MODIFIERS ===============================
 
@@ -170,6 +171,8 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
 
         messageId = router.ccipSend(destinationChainSelector, message);
         newLocker = address(locker);
+
+        emit DeploymentInProgress(address(target), newLocker, messageId);
     }
 
     //============================== CCIP RECEIVER ===============================

@@ -34,7 +34,7 @@ contract SourceLocker is CCIPReceiver {
 
     //============================== EVENTS ===============================
 
-    event BridgeToDestination(uint256 amount, address to);
+    event BridgeToDestination(uint256 amount, address to, bytes32 messageId);
     event BridgeFromDestination(uint256 amount, address to);
 
     //============================== MODIFIERS ===============================
@@ -132,7 +132,7 @@ contract SourceLocker is CCIPReceiver {
         LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
-        emit BridgeToDestination(amount, to);
+        emit BridgeToDestination(amount, to, messageId);
     }
 
     //============================== VIEW FUNCTIONS ===============================

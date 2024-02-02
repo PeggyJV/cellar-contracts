@@ -25,7 +25,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
 
     //============================== EVENTS ===============================
 
-    event BridgeToSource(uint256 amount, address to);
+    event BridgeToSource(uint256 amount, address to, bytes32 messageId);
     event BridgeFromSource(uint256 amount, address to);
 
     //============================== MODIFIERS ===============================
@@ -102,7 +102,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         LINK.safeApprove(address(router), fees);
 
         messageId = router.ccipSend(sourceChainSelector, message);
-        emit BridgeToSource(amount, to);
+        emit BridgeToSource(amount, to, messageId);
     }
 
     //============================== VIEW FUNCTIONS ===============================
