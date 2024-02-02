@@ -100,16 +100,12 @@ contract LidoStakingAdaptor is StakingAdaptor {
     function _balanceOf(address account) internal view override returns (uint256 amount) {
         uint256[] memory requests = StakingAdaptor(adaptorAddress).getRequestIds(account);
         IUNSTETH.WithdrawalRequestStatus[] memory statuses = unstETH.getWithdrawalStatus(requests);
-        uint256 lastFinalizedRequestId = unstETH.getLastFinalizedRequestId();
         uint256 lastCheckpointIndex = type(uint256).max;
         for (uint256 i; i < statuses.length; ++i) {
             uint256 requestId = requests[i];
             // If request was already claimed continue.
             if (statuses[i].isClaimed) continue;
-            if (requestId > lastFinalizedRequestId) {
-                // Request has not been finalized, so report amount as `amountOfStETH`.
-                amount += statuses[i].amountOfStETH;
-            } else {
+            if (statuses[i].isFinalized) {
                 // Request has been finalized, and we need to call `getClaimableEther` to determine
                 // the amount of ETH request is worth.
                 // Save last checkpoint index if it has not been set.
@@ -125,6 +121,9 @@ contract LidoStakingAdaptor is StakingAdaptor {
                 // Now call getClaimableEther to determine requests value.
                 uint256[] memory finalizedAmounts = unstETH.getClaimableEther(rIds, hints);
                 amount += finalizedAmounts[0];
+            } else {
+                // Request has not been finalized, so report amount as `amountOfStETH`.
+                amount += statuses[i].amountOfStETH;
             }
         }
     }
