@@ -26,12 +26,12 @@ import { IMorpho, MarketParams, Id, Market } from "src/interfaces/external/Morph
  * @dev For MorphoBlue specific details: go to `MorphoBlue` contract on mainnet, and query for marketParams using the marketId that you can get from their docs, respectively, or their UI for each market.
  * @dev Run
  *      `source .env && forge script script/Mainnet/production/Gnosis4.s.sol:Gnosis4Script --rpc-url $MAINNET_RPC_URL --sender $MULTI_SIG --with-gas-price 25000000000`
- * NOTE: 
+ * NOTE:
  * osETHWethMarketId = 0xd5211d0e3f4a30d5c98653d988585792bb7812221f04801be73a44ceecb11e89;
  * weethWethMarketId = 0x698fe98247a40c5771537b5786b2f3f9d78eb487b4ce4d75533cd0e94d88a115;
- * 
+ *
  * Extra NOTE: UniswapV3 - https://etherscan.io/address/0x96C3Acb0F3F523d7bec7dF43bdf8CCD8c05D0D3E#readContract
- * Balancer/Gauge details - https://app.aura.finance/#/1/pool/179 
+ * Balancer/Gauge details - https://app.aura.finance/#/1/pool/179
  */
 contract Gnosis4Script is Script, MainnetAddresses {
     using Math for uint256;
@@ -43,11 +43,10 @@ contract Gnosis4Script is Script, MainnetAddresses {
     address public morphoBlueSupplyAdaptor = 0xCE1d8694e8fcDD350B1d6EC23e61185660174882;
     address public morphoBlueCollateralAdaptor = 0x8a0eB443F1E9Baa4DfB62E6516E140950236c57A;
     address public morphoBlueDebtAdaptor = 0x7A8F53E15BCe9b546D38C28Ed4Fe4D131E0B73Ec;
-    address public uniswapV3Adaptor = ;
-    address public curveAdaptor = ;
-    address public convexCurveAdaptor = ;
-    address public balancerAdaptor = ;
-
+    // address public uniswapV3Adaptor = ;
+    // address public curveAdaptor = ;
+    // address public convexCurveAdaptor = ;
+    // address public balancerAdaptor = ;
 
     /// New positions
 
@@ -66,7 +65,7 @@ contract Gnosis4Script is Script, MainnetAddresses {
 
     /// UniswapV3Position details w/ weth/oseth: 0x96C3Acb0F3F523d7bec7dF43bdf8CCD8c05D0D3E
     uint32 public WETH_OSETH_UniswapV3Position = 11_000_0011;
-    
+
     /// Curve Position Details
     uint32 public OSETH_RETH_CurvePosition = 11_000_0012;
 
@@ -80,7 +79,6 @@ contract Gnosis4Script is Script, MainnetAddresses {
 
     function run() external {
         vm.startBroadcast();
-
 
         MarketParams memory osEthWethMarket = MarketParams(
             0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
@@ -123,7 +121,7 @@ contract Gnosis4Script is Script, MainnetAddresses {
             address(morphoBlueCollateralAdaptor),
             abi.encode(weEthWethMarket)
         );
-    
+
         // borrow positions
         registry.trustPosition(
             osETH_WETH_MorphoBlueBorrowPosition,
@@ -138,10 +136,10 @@ contract Gnosis4Script is Script, MainnetAddresses {
 
         /// Add new uniswap position
         // token0 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-        // ERC20 public OSETH = ERC20(0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38);       
-        // registry.trustPosition(WETH_OSETH_UniswapV3Position, address(uniswapV3Adaptor), abi.encode(WETH, OSETH)); // token 1 
+        // ERC20 public OSETH = ERC20(0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38);
+        // registry.trustPosition(WETH_OSETH_UniswapV3Position, address(uniswapV3Adaptor), abi.encode(WETH, OSETH)); // token 1
 
-        /// Add add balancer/aura oseth/weth position  
+        /// Add add balancer/aura oseth/weth position
         // adaptorData = abi.encode(ERC20 _bpt, address _liquidityGauge)
         // address public osETH_wETH_GAUGE_ADDRESS = 0xc592c33e51a764b94db0702d8baf4035ed577aed;
         // ERC20 public osETH_wETH = ERC20(0xDACf5Fa19b1f720111609043ac67A9818262850c);
