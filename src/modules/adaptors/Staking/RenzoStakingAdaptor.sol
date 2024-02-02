@@ -9,6 +9,7 @@ import { IRestakeManager } from "src/interfaces/external/IStaking.sol";
 /**
  * @title Renzo Staking Adaptor
  * @notice Allows Cellars to stake with Renzo.
+ * @dev Renzo only supports minting.
  * @author crispymangoes
  */
 contract RenzoStakingAdaptor is StakingAdaptor {

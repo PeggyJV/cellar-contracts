@@ -9,6 +9,7 @@ import { IStakePoolManager, IUserWithdrawManager, IStaderConfig } from "src/inte
 /**
  * @title Stader Staking Adaptor
  * @notice Allows Cellars to stake with Stader.
+ * @dev Stader supports minting, and burning.
  * @author crispymangoes
  */
 contract StaderStakingAdaptor is StakingAdaptor {

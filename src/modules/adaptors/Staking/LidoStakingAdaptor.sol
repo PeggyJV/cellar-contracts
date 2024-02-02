@@ -9,6 +9,7 @@ import { IUNSTETH, IWSTETH, ISTETH } from "src/interfaces/external/IStaking.sol"
 /**
  * @title Lido Staking Adaptor
  * @notice Allows Cellars to stake with Lido.
+ * @dev Lido supports minting, burning, and wrapping.
  * @author crispymangoes
  */
 contract LidoStakingAdaptor is StakingAdaptor {

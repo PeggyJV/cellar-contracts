@@ -9,6 +9,7 @@ import { ISWETH } from "src/interfaces/external/IStaking.sol";
 /**
  * @title Swell Staking Adaptor
  * @notice Allows Cellars to stake with Swell.
+ * @dev Swell supports minting.
  * @author crispymangoes
  */
 contract SwellStakingAdaptor is StakingAdaptor {

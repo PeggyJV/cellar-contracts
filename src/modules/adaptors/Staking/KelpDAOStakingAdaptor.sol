@@ -9,6 +9,7 @@ import { ILRTDepositPool } from "src/interfaces/external/IStaking.sol";
 /**
  * @title Kelp DAO Staking Adaptor
  * @notice Allows Cellars to stake with Kelp.
+ * @dev Kelp DAO only supports minting.
  * @author crispymangoes
  */
 contract KelpDAOStakingAdaptor is StakingAdaptor {

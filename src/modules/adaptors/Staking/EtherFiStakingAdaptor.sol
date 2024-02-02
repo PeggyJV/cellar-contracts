@@ -9,6 +9,7 @@ import { ILiquidityPool, IWithdrawRequestNft, IWEETH } from "src/interfaces/exte
 /**
  * @title EtherFi Staking Adaptor
  * @notice Allows Cellars to stake with EtherFi.
+ * @dev EtherFi supports minting, burning, and wrapping.
  * @author crispymangoes
  */
 contract EtherFiStakingAdaptor is StakingAdaptor {
