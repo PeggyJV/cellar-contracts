@@ -3,7 +3,8 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
+// import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
+import {CompoundV2HelperLogic} from "src/modules/adaptors/Compound/CompoundV2HelperLogicVersionB.sol";
 
 /**
  * @title CompoundV2 Debt Token Adaptor
@@ -160,10 +161,10 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
         uint256 errorCode = market.borrow(amountToBorrow);
         if (errorCode != 0) revert CompoundV2DebtAdaptor__NonZeroCompoundErrorCode(errorCode);
 
-        // // TODO - Check if borrower is insolvent after this borrow tx, revert if they are
-        // if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
-        //     revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(market));
-        // }
+        // TODO - Check if borrower is insolvent after this borrow tx, revert if they are
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(market));
+        }
     }
 
     // `repayDebt`

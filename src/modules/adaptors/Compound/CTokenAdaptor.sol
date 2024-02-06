@@ -221,10 +221,10 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         // Check for errors.
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
-        // // Check new HF from redemption
-        // if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
-        //     revert CTokenAdaptor__HealthFactorTooLow(address(this));
-        // }
+        // Check new HF from redemption
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     /**
@@ -254,9 +254,9 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // TODO - Check new HF from exiting the market
-        // if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
-        //     revert CTokenAdaptor__HealthFactorTooLow(address(this));
-        // }
+        if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
+            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+        }
     }
 
     /**

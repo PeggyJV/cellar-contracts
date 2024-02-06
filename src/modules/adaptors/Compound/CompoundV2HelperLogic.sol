@@ -57,7 +57,6 @@ contract CompoundV2HelperLogic is Test {
             if (oErr != 0) revert CompoundV2HelperLogic__NonZeroCompoundErrorCode(oErr);
             uint256 oraclePrice = oracle.getUnderlyingPrice(asset);
             if (oraclePrice == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
-            ERC20 underlyingAsset = ERC20(asset.underlying());
             // get collateral factor from markets
             (, uint256 collateralFactor, ) = comptroller.markets(address(asset)); // always scaled by 18 decimals
             uint256 actualCollateralBacking = cTokenBalance.mulDivDown(exchangeRate, 1e18); // NOTE - this is the 1st key difference usage of a different scaling factor than in OptionB and CompoundV2. This means less precision but it is possibly negligible.
