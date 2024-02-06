@@ -13,7 +13,6 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Tests are purposely kept very single-scope in order to do better gas comparisons with gas-snapshots for typical functionalities.
- * TODO - troubleshoot decimals and health factor calcs
  * TODO - finish off happy path and reversion tests once health factor is figured out
  * TODO - test cTokens that are using native tokens (ETH, etc.)
  * TODO - EIN - OG compoundV2 tests already account for totalAssets, deposit, withdraw w/ basic supplying and withdrawing, and claiming of comp token (see `CTokenAdaptor.sol`). So we'll have to test for each new functionality: enterMarket, exitMarket, borrowFromCompoundV2, repayCompoundV2Debt.
@@ -614,7 +613,6 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
     function testTakingOutLoanInUntrackedPositionV2(uint256 assets) external {
-        uint256 initialAssets = cellar.totalAssets();
         assets = bound(assets, 0.1e18, 1_000_000e18);
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
@@ -1006,12 +1004,8 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
     //     // TODO decrease the borrow and then do the redeem successfully
     // }
 
-    // TODO - EIN - ASSESSING OPTIONS A AND OPTIONS B --> Lossyness test. If there is any lossyness, we'd be able to see if with large numbers. So do fuzz tests with HUGE bounds. From there, I guess the assert test will make sure that the actual health factor and the reported health factor do not differ by a certain amount of bps.
-    // ACTUALLY we can just have helpers within this file that use the two possible implementations to calculate HFs. From there, we just compare against one another to see how far off they are from each other. If it is negligible then we are good.
-    // TODO - Consider this... NOTE: arguably, it is better to test against the actual reported HF from CompoundV2 versus doing relative testing with the two methods.
-    function testHFLossyness() external {
-        // assets = bound(assets, 0.1e18, 1_000_000e18);
-        uint256 assets = 1_000_000e18;
+    function testHFLossyness(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
 
@@ -1040,17 +1034,15 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         // get HF using method B
         uint256 healthFactorOptionB = _getHFOptionB(address(cellar));
 
-        // do this by having the helpers to calculate HF using method A and method B within this test file itself. Then, call these helpers within this test to compare the results.
-
-        // when comparing the results, I will... do a relative comparison using conditional logic to sort which hf is bigger than do a relative comparison.
+        // compare method results
         uint256 relativeDiff;
         if (healthFactorOptionA >= healthFactorOptionB) {
-            relativeDiff = (healthFactorOptionA - healthFactorOptionB) * 1e18 / healthFactorOptionA;
+            relativeDiff = ((healthFactorOptionA - healthFactorOptionB) * 1e18) / healthFactorOptionA;
         } else {
-            relativeDiff = (healthFactorOptionB - healthFactorOptionA) * 1e18  / healthFactorOptionB;
+            relativeDiff = ((healthFactorOptionB - healthFactorOptionA) * 1e18) / healthFactorOptionB;
         }
 
-        console.log("relativeDiff, %s", relativeDiff);
+        assertGt(1e16, relativeDiff, "relativeDiff cannot exceed 1bps."); // ensure that relativeDiff !> 1bps (1e16)
     }
 
     // TODO - is it possible for a position to have a collateral postiion and a borrow position in the same market?
