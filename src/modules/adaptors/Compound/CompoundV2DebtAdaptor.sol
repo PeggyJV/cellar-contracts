@@ -3,8 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-// import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
-import {CompoundV2HelperLogic} from "src/modules/adaptors/Compound/CompoundV2HelperLogicVersionB.sol";
+import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
 /**
  * @title CompoundV2 Debt Token Adaptor
@@ -161,7 +160,6 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
         uint256 errorCode = market.borrow(amountToBorrow);
         if (errorCode != 0) revert CompoundV2DebtAdaptor__NonZeroCompoundErrorCode(errorCode);
 
-        // TODO - Check if borrower is insolvent after this borrow tx, revert if they are
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
             revert CompoundV2DebtAdaptor__HealthFactorTooLow(address(market));
         }
@@ -170,7 +168,7 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
     // `repayDebt`
 
     /**
-     * @notice Allows strategists to repay loan debt on CompoundV2 market. TODO: not sure if I need to call addInterest() beforehand to ensure we are repaying what is required.
+     * @notice Allows strategists to repay loan debt on CompoundV2 market.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
      * @param _market the CompoundV2 market to borrow from underlying assets from
      * @param _debtTokenRepayAmount the amount of `debtToken` to repay with.

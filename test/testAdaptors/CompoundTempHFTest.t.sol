@@ -1135,10 +1135,6 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         borrowAmountNeeded =
             (sumCollateral.mulDivDown(1e18, _hfRequested) - sumBorrow) /
             (10 ** (18 - _borrowDecimals)); // recall: sumBorrow = sumCollateral / healthFactor --> because specific market collateral factors are already accounted for within calcs above
-
-        console.log("_hfRequested: %s", _hfRequested);
-        console.log("borrowAmountNeeded: %s", borrowAmountNeeded);
-        console.log("sumBorrow: %s", sumBorrow);
     }
 
     function _getHFOptionA(address _account) internal view returns (uint256 healthFactor) {
@@ -1255,31 +1251,14 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
             {
                 (, uint256 collateralFactor, ) = comptroller.markets(address(asset)); // get collateral factor from markets
                 uint256 oraclePriceScalingFactor = 10 ** (36 - underlyingDecimals);
-                uint256 exchangeRateScalingFactor = 10 ** (18 - 8 + underlyingDecimals); //18 - 8 + underlyingDecimals
-                uint256 actualCollateralBacking = cTokenBalance.mulDivDown(exchangeRate, exchangeRateScalingFactor); // Now in terms of underlying asset decimals. --> 8 + 30 - 16 = 22 decimals --> for usdc we need it to be 6... let's see. 8 + 16 - 16. OK so that would get us 8 decimals. oh that's not right.
-                // 8 + 16 - 16 --> ends up w/ 8 decimals. hmm.
-                // okay, for dai, you'd end up with: 8 + 28 - 28... yeah so it just stays as 8
-                console.log(
-                    "oraclePrice: %s, oraclePriceScalingFactor, %s, collateralFactor: %s",
-                    oraclePrice,
-                    oraclePriceScalingFactor,
-                    collateralFactor
-                );
-                console.log(
-                    "actualCollateralBacking1 - before oraclePrice, oracleFactor, collateralFactor: %s",
-                    actualCollateralBacking
-                );
+                uint256 exchangeRateScalingFactor = 10 ** (18 - 8 + underlyingDecimals); // 18 - 8 + underlyingDecimals
+                uint256 actualCollateralBacking = cTokenBalance.mulDivDown(exchangeRate, exchangeRateScalingFactor); // okay, for dai, you'd end up with: 8 + 28 - 28... yeah so it just stays as 8
 
                 // convert to USD values
-                console.log("actualCollateralBacking_BeforeOraclePrice: %s", actualCollateralBacking);
-
                 actualCollateralBacking = actualCollateralBacking.mulDivDown(oraclePrice, oraclePriceScalingFactor); // converts it to USD but it is in the decimals of the underlying --> it's still in decimals of 8 (so ctoken decimals)
-                console.log("actualCollateralBacking_AfterOraclePrice: %s", actualCollateralBacking);
 
                 // Apply collateral factor to collateral backing
                 actualCollateralBacking = actualCollateralBacking.mulDivDown(collateralFactor, 1e18); // scaling factor for collateral factor is always 1e18.
-
-                console.log("actualCollateralBacking_BeforeRefactor: %s", actualCollateralBacking);
 
                 // refactor as needed for decimals
                 actualCollateralBacking = _refactorCollateralBalance(actualCollateralBacking, underlyingDecimals); // scale up additionalBorrowBalance to 1e18 if it isn't already.
@@ -1287,30 +1266,21 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
                 // borrow balances
                 // NOTE - below is scoped for stack too deep errors
                 {
-                    console.log("additionalBorrowBalanceA: %s", borrowBalance);
-
                     uint256 additionalBorrowBalance = borrowBalance.mulDivDown(oraclePrice, oraclePriceScalingFactor); // converts cToken underlying borrow to USD but it's in decimals of underlyingAsset
-                    console.log("additionalBorrowBalanceBeforeRefactor: %s", additionalBorrowBalance);
 
                     // refactor as needed for decimals
                     additionalBorrowBalance = _refactorBorrowBalance(additionalBorrowBalance, underlyingDecimals);
 
                     sumBorrow = sumBorrow + additionalBorrowBalance;
-                    console.log("additionalBorrowBalanceAfterRefactor: %s", additionalBorrowBalance);
                 }
 
                 sumCollateral = sumCollateral + actualCollateralBacking;
-                console.log("actualCollateralBacking_AfterRefactor: %s", actualCollateralBacking);
             }
         }
 
         borrowAmountNeeded =
             (sumCollateral.mulDivDown(1e18, _hfRequested) - sumBorrow) /
             (10 ** (18 - _borrowDecimals)); // recall: sumBorrow = sumCollateral / healthFactor --> because specific market collateral factors are already accounted for within calcs above
-
-        console.log("_hfRequested_OptionB: %s", _hfRequested);
-        console.log("borrowAmountNeeded_OptionB: %s", borrowAmountNeeded);
-        console.log("sumBorrow_OptionB: %s", sumBorrow);
     }
 
     // helper that scales passed in param _balance to 18 decimals. This is needed to make it easier for health factor calculations
@@ -1330,7 +1300,6 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         } else if (_decimals > 8) {
             balance = _balance * (10 ** (_decimals - 8));
         }
-        console.log("EIN THIS IS THE FIRST REFACTORED COLLAT BALANCE: %s", balance);
         if (_decimals != 18) {
             balance = balance * (10 ** (18 - _decimals)); // if _balance is 8 decimals, it'll convert balance to 18 decimals. Ah.
         }

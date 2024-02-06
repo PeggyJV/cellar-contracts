@@ -3,11 +3,9 @@ pragma solidity 0.8.21;
 
 import { Math } from "src/utils/Math.sol";
 import { ComptrollerG7 as Comptroller, CErc20, PriceOracle } from "src/interfaces/external/ICompound.sol";
-import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/src/Test.sol";
+import { Test, stdStorage, StdStorage, stdError } from "lib/forge-std/src/Test.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
-
-// import { console } from "lib/forge-std/src/Test.sol";
 
 /**
  * @title CompoundV2 Helper Logic Contract Option A.
@@ -36,7 +34,6 @@ contract CompoundV2HelperLogic is Test {
 
     /**
      * @notice The ```_getHealthFactor``` function returns the current health factor
-     * TODO: Decimals aspect is to be figured out in github PR #167 comments
      */
     function _getHealthFactor(address _account, Comptroller comptroller) public view returns (uint256 healthFactor) {
         // get the array of markets currently being used
@@ -68,7 +65,6 @@ contract CompoundV2HelperLogic is Test {
             sumBorrow = additionalBorrowBalance + sumBorrow;
         }
         // now we can calculate health factor with sumCollateral and sumBorrow
-        healthFactor = sumCollateral.mulDivDown(1e18, sumBorrow); // TODO: figure out the scaling factor for health factor
-        console.log("healthFactor: %s", healthFactor);
+        healthFactor = sumCollateral.mulDivDown(1e18, sumBorrow);
     }
 }

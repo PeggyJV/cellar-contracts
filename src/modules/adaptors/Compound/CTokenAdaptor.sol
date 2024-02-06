@@ -3,9 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
-// import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
-import {CompoundV2HelperLogic} from "src/modules/adaptors/Compound/CompoundV2HelperLogicVersionB.sol";
-
+import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
 
 // TODO to handle ETH based markets, do a similar setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
 /**
@@ -255,7 +253,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         uint256 errorCode = comptroller.exitMarket(address(market)); // exit the market as supplied collateral (still in lending position though)
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
-        // TODO - Check new HF from exiting the market
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
             revert CTokenAdaptor__HealthFactorTooLow(address(this));
         }
