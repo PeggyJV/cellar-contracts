@@ -66,7 +66,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(address v2Comptroller, address comp, uint256 _healthFactor) {
+    constructor(address v2Comptroller, address comp, uint256 _healthFactor) CompoundV2HelperLogic(_healthFactor) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         comptroller = Comptroller(v2Comptroller);
         COMP = ERC20(comp);
@@ -137,6 +137,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
 
     /**
      * @notice Returns balanceOf underlying assets for cToken, regardless of if they are used as supplied collateral or only as lent out assets.
+     * TODO - add isLiquid check and report back values that take into account whether or not compound lending market has enough liquid supply to withdraw atm
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
@@ -211,6 +212,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @param market the market to withdraw from.
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      * NOTE: `redeem()` is used for redeeming a specified amount of cToken, whereas `redeemUnderlying()` is used for obtaining a specified amount of underlying tokens no matter what amount of cTokens required.
+     * NOTE: Purposely allowed withdrawals even while 'IN' market for this strategist function.
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
 
@@ -255,7 +257,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
 
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
             revert CTokenAdaptor__HealthFactorTooLow(address(this));
-        }
+        } // when we exit the market, compound toggles the collateral off and thus checks it in the hypothetical liquidity check etc.
     }
 
     /**

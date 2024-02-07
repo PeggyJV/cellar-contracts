@@ -33,6 +33,16 @@ contract CompoundV2HelperLogic is Test {
     error CompoundV2HelperLogic__OracleCannotBeZero(CErc20 asset);
 
     /**
+     * @notice Default healthFactor value returned.
+     * @notice Specified by child contracts (see `CTokenAdaptor.sol`, and `CompoundV2DebtAdaptor.sol`))
+     */
+    uint256 public immutable defaultHealthFactor;
+
+    constructor(uint256 _healthFactor) {
+        defaultHealthFactor = _healthFactor;
+    }
+
+    /**
      * @notice The ```_getHealthFactor``` function returns the current health factor
      */
     function _getHealthFactor(address _account, Comptroller comptroller) public view returns (uint256 healthFactor) {
@@ -65,6 +75,9 @@ contract CompoundV2HelperLogic is Test {
             sumBorrow = additionalBorrowBalance + sumBorrow;
         }
         // now we can calculate health factor with sumCollateral and sumBorrow
+        if (sumBorrow == 0) {
+            return defaultHealthFactor;
+        }
         healthFactor = sumCollateral.mulDivDown(1e18, sumBorrow);
     }
 }

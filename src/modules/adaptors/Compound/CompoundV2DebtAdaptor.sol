@@ -77,7 +77,12 @@ contract CompoundV2DebtAdaptor is BaseAdaptor, CompoundV2HelperLogic {
     uint256 public immutable minimumHealthFactor;
 
     // NOTE: comptroller is a proxy so there may be times that the implementation is updated, although it is rare and would come up for governance vote.
-    constructor(bool _accountForInterest, address _v2Comptroller, address _comp, uint256 _healthFactor) {
+    constructor(
+        bool _accountForInterest,
+        address _v2Comptroller,
+        address _comp,
+        uint256 _healthFactor
+    ) CompoundV2HelperLogic(_healthFactor) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         comptroller = Comptroller(_v2Comptroller);
