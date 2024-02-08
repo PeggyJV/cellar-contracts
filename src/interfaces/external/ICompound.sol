@@ -50,6 +50,11 @@ interface CErc20 {
      * @return (possible error, token balance, borrow balance, exchange rate mantissa)
      */
     function getAccountSnapshot(address account) external view returns (uint, uint, uint, uint);
+
+    /**
+     * @notice Get the liquidity within a specific CErc20 market
+     */
+    function getCash() external view returns (uint);
 }
 
 interface PriceOracle {

@@ -39,6 +39,8 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
     uint32 private cUSDCDebtPosition = 7;
     // TODO: add positions for ETH CTokens
 
+    address private whaleBorrower = vm.addr(777);
+
     // Collateral Positions are just regular CTokenAdaptor positions but after `enterMarket()` has been called.
     // Debt Positions --> these need to be setup properly. Start with a debt position on a market that is easy.
 
@@ -501,6 +503,17 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
     //     cellar.callOnAdaptor(data);
     // }
 
+    function testCellarWithdrawTooMuch(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        deal(address(DAI), address(this), 0);
+
+        vm.expectRevert();
+        cellar.withdraw(assets * 2, address(this), address(this));
+    }
+
     // if position is already in market, reverts to save on gas for unecessary call
     function testAlreadyInMarket(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000e18);
@@ -525,64 +538,69 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         cellar.callOnAdaptor(data);
     }
 
-    // Compound CTokens have a getter `getCash` which is used when doing a withdraw to ensure that the CToken has enough liquid underlyingAsset to support a withdraw. It seems that it can be in a situation where it doesn't have enough. Hmm. In those situations,
-    // TODO - add in isliquid details and then check it works with this test (see TODO in CTokenAdaptor)
-    // TODO - EIN REMAINING WORK - THE COMMENTED OUT CODE BELOW IS FROM MOREPHOBLUE
-    function testWithdrawableFrom() external {
-        // cellar.addPositionToCatalogue(morphoBlueSupplyWETHPosition);
-        // cellar.addPosition(4, morphoBlueSupplyWETHPosition, abi.encode(true), false);
-        // // Strategist rebalances to withdraw USDC, and lend in a different pair.
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
-        // // Withdraw USDC from Morpho Blue.
-        // {
-        //     bytes[] memory adaptorCalls = new bytes[](1);
-        //     adaptorCalls[0] = _createBytesDataToWithdrawFromMorphoBlue(usdcDaiMarket, type(uint256).max);
-        //     data[0] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
-        // }
-        // {
-        //     bytes[] memory adaptorCalls = new bytes[](1);
-        //     adaptorCalls[0] = _createBytesDataToLendOnMorphoBlue(wethUsdcMarket, type(uint256).max);
-        //     data[1] = Cellar.AdaptorCall({ adaptor: address(morphoBlueSupplyAdaptor), callData: adaptorCalls });
-        // }
-        // cellar.callOnAdaptor(data);
-        // // Make cellar deposits lend USDC into WETH Pair by default
-        // cellar.setHoldingPosition(morphoBlueSupplyWETHPosition);
-        // uint256 assets = 10_000e6;
-        // deal(address(USDC), address(this), assets);
-        // cellar.deposit(assets, address(this));
-        // // Figure out how much the whale must borrow to borrow all the loanToken.
-        // uint256 totalLoanTokenSupplied = uint256(morphoBlue.market(wethUsdcMarketId).totalSupplyAssets);
-        // uint256 totalLoanTokenBorrowed = uint256(morphoBlue.market(wethUsdcMarketId).totalBorrowAssets);
-        // uint256 assetsToBorrow = totalLoanTokenSupplied > totalLoanTokenBorrowed
-        //     ? totalLoanTokenSupplied - totalLoanTokenBorrowed
-        //     : 0;
-        // // Supply 2x the value we are trying to borrow in weth market collateral (WETH)
-        // uint256 collateralToProvide = priceRouter.getValue(USDC, 2 * assetsToBorrow, WETH);
-        // deal(address(WETH), whaleBorrower, collateralToProvide);
-        // vm.startPrank(whaleBorrower);
-        // WETH.approve(address(morphoBlue), collateralToProvide);
-        // MarketParams memory market = morphoBlue.idToMarketParams(wethUsdcMarketId);
-        // morphoBlue.supplyCollateral(market, collateralToProvide, whaleBorrower, hex"");
-        // // now borrow
-        // morphoBlue.borrow(market, assetsToBorrow, 0, whaleBorrower, whaleBorrower);
-        // vm.stopPrank();
-        // uint256 assetsWithdrawable = cellar.totalAssetsWithdrawable();
-        // assertEq(assetsWithdrawable, 0, "There should be no assets withdrawable.");
-        // // Whale repays half of their debt.
-        // uint256 sharesToRepay = (morphoBlue.position(wethUsdcMarketId, whaleBorrower).borrowShares) / 2;
-        // vm.startPrank(whaleBorrower);
-        // USDC.approve(address(morphoBlue), assetsToBorrow);
-        // morphoBlue.repay(market, 0, sharesToRepay, whaleBorrower, hex"");
-        // vm.stopPrank();
-        // uint256 totalLoanTokenSupplied2 = uint256(morphoBlue.market(wethUsdcMarketId).totalSupplyAssets);
-        // uint256 totalLoanTokenBorrowed2 = uint256(morphoBlue.market(wethUsdcMarketId).totalBorrowAssets);
-        // uint256 liquidLoanToken2 = totalLoanTokenSupplied2 - totalLoanTokenBorrowed2;
-        // assetsWithdrawable = cellar.totalAssetsWithdrawable();
-        // assertEq(assetsWithdrawable, liquidLoanToken2, "Should be able to withdraw liquid loanToken.");
+    // lend assets
+    // prank as whale
+    // whale supplies to a different market as collateral, then borrows from this market all of the assets.
+    // test address tries to do withdrawableFrom, it doesn't work
+    // test address tries to do a cellar.withdraw(), it doesn't work.
+    // prank as whale, have them repay half of their loan
+    // test address calls withdrawableFrom
+    // test address calls cellar.withdraw()
+    function testWithdrawableFromAndIlliquidWithdraws(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
+        deal(address(USDC), address(cellar), 0);
+
+        vm.startPrank(address(whaleBorrower));
+        uint256 liquidSupply = cDAI.getCash();
+        uint256 amountToBorrow = assets > liquidSupply ? assets : liquidSupply;
+        uint256 collateralToProvide = priceRouter.getValue(DAI, 2 * amountToBorrow, USDC);
+        deal(address(USDC), whaleBorrower, collateralToProvide);
+        USDC.approve(address(cUSDC), collateralToProvide);
+        cUSDC.mint(collateralToProvide);
+
+        address[] memory cToken = new address[](1);
+        uint256[] memory result = new uint256[](1);
+        cToken[0] = address(cUSDC);
+        result = comptroller.enterMarkets(cToken); // enter the market
+
+        if (result[0] > 0) revert();
+
+        // now borrow
+        cDAI.borrow(amountToBorrow);
+        vm.stopPrank();
+
+        uint256 assetsWithdrawable = cellar.totalAssetsWithdrawable();
+        liquidSupply = cDAI.getCash();
+
+        assertEq(assetsWithdrawable, 0, "There should be no assets withdrawable.");
+        assertEq(assetsWithdrawable, liquidSupply, "There should be no assets withdrawable.");
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        // try doing a strategist withdraw, it should revert because supplied assets are illiquid
+        {
+            adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        vm.expectRevert(); // TODO - figure out what specific revert error is coming
+        cellar.callOnAdaptor(data);
+
+        // Whale repays half of their debt.
+        vm.startPrank(whaleBorrower);
+        DAI.approve(address(cDAI), amountToBorrow);
+        cDAI.repayBorrow(amountToBorrow / 2);
+        vm.stopPrank();
+
+        liquidSupply = cDAI.getCash();
+        assetsWithdrawable = cellar.totalAssetsWithdrawable();
+        console.log("liquidSupply: %s, assetsWithdrawable: %s", liquidSupply, assetsWithdrawable);
+        assertEq(assetsWithdrawable, liquidSupply, "Should be able to withdraw liquid loanToken."); // TODO - troubleshoot why assetsWithdrawable is not reporting how much I thought it should. Compare to Morpho Blue
         // // Have user withdraw the loanToken.
-        // deal(address(USDC), address(this), 0);
-        // cellar.withdraw(liquidLoanToken2, address(this), address(this));
-        // assertEq(USDC.balanceOf(address(this)), liquidLoanToken2, "User should have received liquid loanToken.");
+        // deal(address(DAI), address(this), 0);
+        // cellar.withdraw(liquidSupply, address(this), address(this));
+        // assertEq(DAI.balanceOf(address(this)), liquidSupply, "User should have received liquid loanToken.");
     }
 
     //============================================ CompoundV2DebtAdaptor Tests ===========================================
@@ -1192,9 +1210,7 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
     }
 
     // TODO - EIN - is it possible for a position to have a collateral postiion and a borrow position in the same market?
-    function testBorrowInSameCollateralMarket() external {
-
-    }
+    function testBorrowInSameCollateralMarket() external {}
 
     function testRepayingDebtThatIsNotOwed(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000e18);

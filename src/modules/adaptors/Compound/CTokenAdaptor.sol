@@ -21,7 +21,15 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
     // Where:
     // `cToken` is the cToken position this adaptor is working with
     //================= Configuration Data Specification =================
-    // NOT USED
+    // configurationData = abi.encode(bool isLiquid)
+    // Where:
+    // `isLiquid` dictates whether the position is liquid or not
+    // If true:
+    //      position can support use withdraws
+    // else:
+    //      position can not support user withdraws
+    //
+    //
 
     /**
      @notice Compound action returned a non zero error code.
@@ -113,10 +121,18 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @param assets the amount of assets to withdraw from Compound
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containing the abi encoded cToken
-     * @dev configurationData is NOT used
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not.
      * @dev Conditional logic with`marketJoinCheck` ensures that any withdrawal does not affect health factor.
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public override {
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         // Run external receiver check.
         _externalReceiverCheck(receiver);
@@ -139,11 +155,22 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @notice Returns balanceOf underlying assets for cToken, regardless of if they are used as supplied collateral or only as lent out assets.
      * TODO - add isLiquid check and report back values that take into account whether or not compound lending market has enough liquid supply to withdraw atm
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        if (_checkMarketsEntered(cToken)) return 0;
-        uint256 cTokenBalance = cToken.balanceOf(msg.sender);
-        return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public view override returns (uint256 withdrawableSupply) {
+        bool isLiquid = abi.decode(configurationData, (bool));
+
+        if (isLiquid) {
+            CErc20 cToken = abi.decode(adaptorData, (CErc20));
+            if (_checkMarketsEntered(cToken)) return 0;
+            uint256 liquidSupply = cToken.getCash();
+            uint256 cellarSuppliedBalance = (cToken.balanceOf(msg.sender)).mulDivDown(
+                cToken.exchangeRateStored(),
+                1e18
+            );
+            withdrawableSupply = cellarSuppliedBalance > liquidSupply ? liquidSupply : cellarSuppliedBalance;
+        }
     }
 
     /**
@@ -194,7 +221,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Compound.
      */
     function depositToCompound(CErc20 market, uint256 amountToDeposit) public {
-
         ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(market), amountToDeposit);
@@ -215,7 +241,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * NOTE: Purposely allowed withdrawals even while 'IN' market for this strategist function.
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
-
         uint256 errorCode;
         if (amountToWithdraw == type(uint256).max) errorCode = market.redeem(market.balanceOf(address(this)));
         else errorCode = market.redeemUnderlying(amountToWithdraw);
@@ -251,7 +276,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      * @dev This function is not needed to be called if redeeming cTokens, but it is available if Strategists want to toggle a `CTokenAdaptor` position w/ a specific cToken as "not supporting an open-borrow position" for w/e reason.
      */
     function exitMarket(CErc20 market) public {
-
         uint256 errorCode = comptroller.exitMarket(address(market)); // exit the market as supplied collateral (still in lending position though)
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
