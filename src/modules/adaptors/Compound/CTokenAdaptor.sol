@@ -245,6 +245,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         if (amountToWithdraw == type(uint256).max) errorCode = market.redeem(market.balanceOf(address(this)));
         else errorCode = market.redeemUnderlying(amountToWithdraw);
 
+
         // Check for errors.
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
