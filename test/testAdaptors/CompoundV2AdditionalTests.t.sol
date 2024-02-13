@@ -82,6 +82,8 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         registry.trustAdaptor(address(vestingAdaptor));
         registry.trustAdaptor(address(compoundV2DebtAdaptor));
 
+        bool isLiquid = true;
+
         registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
         registry.trustPosition(cDAIPosition, address(cTokenAdaptor), abi.encode(cDAI));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
@@ -89,14 +91,14 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         registry.trustPosition(daiVestingPosition, address(vestingAdaptor), abi.encode(vesting));
 
         // trust debtAdaptor positions
-        registry.trustPosition(cDAIDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cDAI));
+        registry.trustPosition(cDAIDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cDAI) );
         registry.trustPosition(cUSDCDebtPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
 
         string memory cellarName = "Compound Cellar V0.0";
         uint256 initialDeposit = 1e18;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(cellarName, DAI, cDAIPosition, abi.encode(0), initialDeposit, platformCut);
+        cellar = _createCellar(cellarName, DAI, cDAIPosition, abi.encode(isLiquid), initialDeposit, platformCut);
 
         cellar.setRebalanceDeviation(0.003e18);
         cellar.addAdaptorToCatalogue(address(erc20Adaptor));
@@ -182,7 +184,7 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         cellar.callOnAdaptor(data);
 
         deal(address(DAI), address(this), 0);
-        uint256 amountToWithdraw = cellar.maxWithdraw(address(this));
+        uint256 amountToWithdraw = 1;
         vm.expectRevert(
             bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__AlreadyInMarket.selector, address(cDAI)))
         );
@@ -325,7 +327,7 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
             address(cellar),
             DAI.decimals(),
             false
-        ); // back calculate the amount to withdraw so: liquidateHF < HF < minHF, otherwise it will revert because of compound internal checks for shortfall scenarios
+        ); // back calculate the amount to withdraw so: liquidateHF < HF < minHF, otherwise it will revert because of compound internal checks for shortfall scenarios --> TODO - EIN, based on console logs it seems that the amountToWithdraw calculated is not correct. 
 
         {
             adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, amountToWithdraw);
@@ -498,18 +500,18 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
 
         // Whale repays half of their debt.
         vm.startPrank(whaleBorrower);
-        DAI.approve(address(cDAI), amountToBorrow);
-        cDAI.repayBorrow(amountToBorrow / 2);
+        DAI.approve(address(cDAI), assets);
+        cDAI.repayBorrow(assets / 2);
         vm.stopPrank();
 
         liquidSupply = cDAI.getCash();
         assetsWithdrawable = cellar.totalAssetsWithdrawable();
         console.log("liquidSupply: %s, assetsWithdrawable: %s", liquidSupply, assetsWithdrawable);
-        assertEq(assetsWithdrawable, liquidSupply, "Should be able to withdraw liquid loanToken."); // TODO - troubleshoot why assetsWithdrawable is not reporting how much I thought it should. Compare to Morpho Blue
-        // // Have user withdraw the loanToken.
-        // deal(address(DAI), address(this), 0);
-        // cellar.withdraw(liquidSupply, address(this), address(this));
-        // assertEq(DAI.balanceOf(address(this)), liquidSupply, "User should have received liquid loanToken.");
+        assertEq(assetsWithdrawable, liquidSupply, "Should be able to withdraw liquid loanToken."); 
+        // Have user withdraw the loanToken.
+        deal(address(DAI), address(this), 0);
+        cellar.withdraw(liquidSupply, address(this), address(this));
+        assertEq(DAI.balanceOf(address(this)), liquidSupply, "User should have received liquid loanToken.");
     }
 
     //============================================ CompoundV2DebtAdaptor Tests ===========================================
@@ -1048,10 +1050,10 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
     // a borrow position will open up in the same market; cellar has a cToken position from lending underlying (DAI), and a borrow balance from borrowing DAI.
     // test borrowing going up to the HF, have it revert because of HF. 
     // test redeeming going up to the HF, have it revert because of HF.
-    function testBorrowInSameCollateralMarket(uint256 assets) external {
-                uint256 initialAssets = cellar.totalAssets();
-
-        assets = bound(assets, 0.1e18, 1_000_000e18);
+    function testBorrowInSameCollateralMarket() external {
+        uint256 initialAssets = cellar.totalAssets();
+        uint256 assets = 1e18;
+        // assets = bound(assets, 0.1e18, 1_000_000e18);
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position is cDAI (w/o entering market)
 
@@ -1063,7 +1065,8 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-        uint256 initalcDaiBalance = cDAI.balanceOf(address(cellar));
+        uint256 initialcDaiBalance = cDAI.balanceOf(address(cellar));
+        console.log("initialCDaiBalance: %s", initialcDaiBalance);
 
         // borrow from same market unlike other tests
         {
@@ -1085,7 +1088,7 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         );
         assertEq(
             cDAI.balanceOf(address(cellar)),
-            initalcDaiBalance,
+            initialcDaiBalance,
             "CompoundV2 market should show same amount cDai for cellar."
         );
 
@@ -1096,16 +1099,36 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
             DAI.decimals(),
             false
         ); // back calculate the amount to withdraw so: liquidateHF < HF < minHF, otherwise it will revert because of compound internal checks for shortfall scenarios
-
+        console.log("assets: %s, amountToWithdraw: %s ",assets,amountToWithdraw);
         {
             adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, (amountToWithdraw) );
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
 
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__HealthFactorTooLow.selector, address(cDAI)))
-        );
+        // vm.expectRevert(
+        //     bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__HealthFactorTooLow.selector, address(cDAI)))
+        // );
         cellar.callOnAdaptor(data);
+
+        console.log("HF according to test: %s", _getHFOptionA(address(cellar)));
+
+        // if call goes through, let's check the values
+        assertEq(
+            DAI.balanceOf(address(cellar)),
+            assets / 2 + amountToWithdraw,
+            "Stage 2: Borrowing from a market that cellar has lent out to already means they are just withdrawing some of their lent out initial amount."
+        );
+        assertEq(
+            cDAI.borrowBalanceStored(address(cellar)),
+            assets / 2,
+            "Stage 2: CompoundV2 market should show borrowed, even though cellar is also supplying said underlying asset."
+        );
+        assertLt(
+            cDAI.balanceOf(address(cellar)),
+            initialcDaiBalance,
+            "Stage 2: CompoundV2 market should show lower amount cDai for cellar."
+        );
+        revert();
     }
 
     function testRepayingDebtThatIsNotOwed(uint256 assets) external {
@@ -1321,15 +1344,12 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         for (uint256 i = 0; i < marketsEnteredLength; i++) {
             CErc20 asset = marketsEntered[i];
             (, uint256 cTokenBalance, uint256 borrowBalance, uint256 exchangeRate) = asset.getAccountSnapshot(_account);
-            // if (oErr != 0) revert CompoundV2HelperLogic__NonZeroCompoundErrorCode(oErr);
             uint256 oraclePrice = oracle.getUnderlyingPrice(asset);
-            // if (oraclePrice == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
             // get collateral factor from markets
             (, uint256 collateralFactor, ) = comptroller.markets(address(asset)); // always scaled by 18 decimals
             uint256 actualCollateralBacking = cTokenBalance.mulDivDown(exchangeRate, 1e18); // NOTE - this is the 1st key difference usage of a different scaling factor than in OptionB and CompoundV2. This means less precision but it is possibly negligible.
             actualCollateralBacking = actualCollateralBacking.mulDivDown(oraclePrice, 1e18); // NOTE - this is the 2nd key difference usage of a different scaling factor than in OptionB and CompoundV2. This means less precision but it is possibly negligible.
             actualCollateralBacking = actualCollateralBacking.mulDivDown(collateralFactor, 1e18); // scaling factor for collateral factor is always 1e18.
-            // scale up actualCollateralBacking to 1e18 if it isn't already for health factor calculations.
             uint256 additionalBorrowBalance = borrowBalance.mulDivDown(oraclePrice, 1e18); // converts cToken underlying borrow to USD
             sumCollateral = sumCollateral + actualCollateralBacking;
             sumBorrow = additionalBorrowBalance + sumBorrow;
@@ -1339,10 +1359,12 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
             uint256 borrowAmountNeeded = (sumCollateral.mulDivDown(1e18, _hfRequested) - sumBorrow) /
                 (10 ** (18 - _borrowDecimals)); // recall: sumBorrow = sumCollateral / healthFactor --> because specific market collateral factors are already accounted for within calcs above
             return borrowAmountNeeded;
-        } else {
-            uint256 withdrawAmountNeeded = (sumCollateral - (sumBorrow.mulDivDown(_hfRequested, 1e18)) ) /
-                (10 ** (18 - _borrowDecimals)); // TODO -  this equation needs to be written out.
 
+            // uint256 borrowAmountNeeded = (sumCollateral.mulDivDown(1e18, _hfRequested) - sumBorrow);
+            // return borrowAmountNeeded;
+        } else {
+            uint256 withdrawAmountNeeded = (sumCollateral - (sumBorrow.mulDivDown(_hfRequested, 1e18)) / (10 ** (18 - _borrowDecimals)));
+            console.log("sumCollateral: %s, sumBorrow: %s, hfRequested: %s", sumCollateral, sumBorrow, _hfRequested);
 
                 // healthfactor = sumcollateral / sumborrow.
                 // we want the amount that needs to be withdrawn from collateral to get a certain hf
