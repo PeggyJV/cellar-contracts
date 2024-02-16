@@ -8,6 +8,7 @@ import { console } from "@forge-std/Test.sol";
 
 
 // TODO to handle ETH based markets, do a similar setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
+// So we want to be able to interact with the compound markets that work with native assets. 
 /**
  * @title Compound CToken Adaptor
  * @notice Allows Cellars to interact with CompoundV2 CToken positions AND enter compound markets such that the calling cellar has an active collateral position (enabling the cellar to borrow).
@@ -155,7 +156,6 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
 
     /**
      * @notice Returns balanceOf underlying assets for cToken, regardless of if they are used as supplied collateral or only as lent out assets.
-     * TODO - add isLiquid check and report back values that take into account whether or not compound lending market has enough liquid supply to withdraw atm
      */
     function withdrawableFrom(
         bytes memory adaptorData,
@@ -252,12 +252,12 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         uint256 hf = _getHealthFactor(address(this), comptroller);
-        console.log("HealthFactor: %s", hf);
+        console.log("HealthFactor_Withdraw: %s", hf);
         
         // Check new HF from redemption
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
             
-            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+            revert CTokenAdaptor__HealthFactorTooLow(address(market));
         }
     }
 
@@ -287,7 +287,7 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         if (minimumHealthFactor > (_getHealthFactor(address(this), comptroller))) {
-            revert CTokenAdaptor__HealthFactorTooLow(address(this));
+            revert CTokenAdaptor__HealthFactorTooLow(address(market));
         } // when we exit the market, compound toggles the collateral off and thus checks it in the hypothetical liquidity check etc.
     }
 

@@ -6,6 +6,7 @@ import { ComptrollerG7 as Comptroller, CErc20, PriceOracle } from "src/interface
 import { Test, stdStorage, StdStorage, stdError } from "lib/forge-std/src/Test.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title CompoundV2 Helper Logic Contract Option A.
@@ -64,6 +65,7 @@ contract CompoundV2HelperLogic is Test {
             if (oraclePrice == 0) revert CompoundV2HelperLogic__OracleCannotBeZero(asset);
             // get collateral factor from markets
             (, uint256 collateralFactor, ) = comptroller.markets(address(asset)); // always scaled by 18 decimals
+            console.log("collateralFactor: %s",collateralFactor);
             uint256 actualCollateralBacking = cTokenBalance.mulDivDown(exchangeRate, 1e18); // NOTE - this is the 1st key difference usage of a different scaling factor than in OptionB and CompoundV2. This means less precision but it is possibly negligible.
             actualCollateralBacking = actualCollateralBacking.mulDivDown(oraclePrice, 1e18); // NOTE - this is the 2nd key difference usage of a different scaling factor than in OptionB and CompoundV2. This means less precision but it is possibly negligible.
             actualCollateralBacking = actualCollateralBacking.mulDivDown(collateralFactor, 1e18); // scaling factor for collateral factor is always 1e18.
