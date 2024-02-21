@@ -4,11 +4,11 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { CompoundV2HelperLogic } from "src/modules/adaptors/Compound/CompoundV2HelperLogic.sol";
+import { IWETH9 } from "src/interfaces/external/IWETH9.sol";
 import { console } from "@forge-std/Test.sol";
 
 
-// TODO to handle ETH based markets, do a similar setup to the curve adaptor where we use the adaptor to act as a middle man to wrap and unwrap eth.
-// So we want to be able to interact with the compound markets that work with native assets. 
+// TODO to handle ETH based markets
 /**
  * @title Compound CToken Adaptor
  * @notice Allows Cellars to interact with CompoundV2 CToken positions AND enter compound markets such that the calling cellar has an active collateral position (enabling the cellar to borrow).
@@ -77,8 +77,15 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(address v2Comptroller, address comp, uint256 _healthFactor) CompoundV2HelperLogic(_healthFactor) {
+    /**
+     * @notice The wrapper contract for the primitive/native asset.
+     */
+    IWETH9 public immutable wrappedPrimitive;
+
+
+    constructor(address _wrappedPrimitive, address v2Comptroller, address comp, uint256 _healthFactor) CompoundV2HelperLogic(_healthFactor) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
+        wrappedPrimitive = IWETH9(_wrappedPrimitive);
         comptroller = Comptroller(v2Comptroller);
         COMP = ERC20(comp);
         minimumHealthFactor = _healthFactor;
@@ -108,6 +115,8 @@ contract CTokenAdaptor is CompoundV2HelperLogic, BaseAdaptor {
         // Deposit assets to Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         ERC20 token = ERC20(cToken.underlying());
+
+        // TODO - how to handle if underlying is ETH? 
         token.safeApprove(address(cToken), assets);
         uint256 errorCode = cToken.mint(assets);
 

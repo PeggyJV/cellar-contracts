@@ -378,40 +378,6 @@ contract CompoundV2AdditionalTests is MainnetStarterTest, AdaptorHelperFunctions
         _totalAssetsCheck(assets, initialAssets);
     }
 
-    // function testErrorCodesFromEnterAndExitMarket() external {
-    //     // trust fake market position (as if malicious governance & multisig)
-    //     uint32 cFakeMarketPosition = 8;
-    //     CErc20 fakeMarket = CErc20(FakeCErc20); // TODO NEW - figure out how to set up CErc20
-    //     registry.trustPosition(cFakeMarketPosition, address(compoundV2DebtAdaptor), abi.encode(cUSDC));
-    //     // add fake market position to cellar
-    //     cellar.addPositionToCatalogue(cFakeMarketPosition);
-    //     cellar.addPosition(5, cFakeMarketPosition, abi.encode(0), false);
-
-    //     // enter market
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     {
-    //         adaptorCalls[0] = _createBytesDataToEnterMarketWithCompoundV2(fakeMarket);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
-    //     }
-
-    //     // try entering fake market - should revert
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 9))
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // try exiting fake market - should revert
-    //     {
-    //         adaptorCalls[0] = _createBytesDataToExitMarketWithCompoundV2(fakeMarket);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
-    //     }
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 9))
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
-
     function testCellarWithdrawTooMuch(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000e18);
         deal(address(DAI), address(this), assets);
