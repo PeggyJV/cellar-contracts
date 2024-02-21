@@ -22,7 +22,7 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 19085018;
+        uint256 blockNumber = 19277858;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -41,13 +41,18 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Add eETH.
         uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
-        price = weEthToEEthConversion.mulDivDown(price, 10 ** WEETH.decimals());
+
+        price = price.mulDivDown(
+                10 ** weETH.decimals(),
+                IRateProvider(address(WEETH)).getRate()
+            );
+
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(eethExtension));
         priceRouter.addAsset(EETH, settings, abi.encode(0), price);
 
         // check getValue()
         assertApproxEqRel(
-            priceRouter.getValue(EETH, 1e18, WEETH), // should be [WEETH / EETH]
+            priceRouter.getValue(WEETH, 1e18, EETH), 
             weEthToEEthConversion,
             1e8,
             "WEETH value in EETH should approx equal conversion."
