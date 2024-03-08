@@ -93,7 +93,7 @@ contract SetUpArchitectureScript is Script, MainnetAddresses, ContractDeployment
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    uint256 expectedWeEthPriceInUsd8Decimals = 3_996e8;
+    uint256 expectedWeEthPriceInUsd8Decimals = 4_087e8;
     uint256 expectedEEthPriceInUsd8Decimals = 3_869e8;
     // uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_883e8;
     // uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_883e8;
