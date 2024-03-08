@@ -50,11 +50,10 @@ contract eEthExtension is Extension {
      * @return price of eETH in USD [USD/eETH]
      */
     function getPriceInUSD(ERC20) external view override returns (uint256) {
-        // get price: [USD/eETH] =  [weETH / eETH] * [USD/weETH]
         return
-            IRateProvider(address(weETH)).getRate().mulDivDown(
-                priceRouter.getPriceInUSD(weETH),
-                10 ** weETH.decimals()
+            priceRouter.getPriceInUSD(weETH).mulDivDown(
+                10 ** weETH.decimals(),
+                IRateProvider(address(weETH)).getRate()
             );
     }
 }
