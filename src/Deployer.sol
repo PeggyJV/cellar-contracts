@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Cellar, Owned, ERC20, SafeTransferLib, Address } from "src/base/Cellar.sol";
+import { Cellar, ERC20, SafeTransferLib, Address } from "src/base/Cellar.sol";
 import { CREATE3 } from "@solmate/utils/CREATE3.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
 
 contract Deployer is Owned {
     mapping(address => bool) public isDeployer;
