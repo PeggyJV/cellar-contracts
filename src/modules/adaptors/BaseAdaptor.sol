@@ -80,7 +80,7 @@ abstract contract BaseAdaptor {
      * @dev Adaptors can choose to override this if they need a different value.
      */
     function MINIMUM_CONSTRUCTOR_HEALTH_FACTOR() internal pure virtual returns (uint256) {
-        return 1.05e18;
+        return 1.01e18;
     }
 
     //============================================ Implement Base Functions ===========================================
