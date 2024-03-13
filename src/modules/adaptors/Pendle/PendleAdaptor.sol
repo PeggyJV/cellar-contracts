@@ -64,6 +64,9 @@ contract PendleAdaptor is PositionlessAdaptor {
     }
 
     // TODO add max available logic everywhere.
+    // TODO natspec
+    // TODO custom error messages
+    // TODO test reverts
 
     // mintSyFromToken
     function mintSyFromToken(IPendleMarket market, uint256 minSyOut, TokenInput calldata input) external {
