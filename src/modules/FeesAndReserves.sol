@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Cellar, Owned, ERC20, SafeTransferLib, Math, Address } from "src/base/Cellar.sol";
+import { Cellar, ERC20, SafeTransferLib, Math, Address } from "src/base/Cellar.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
 
 /**
  * @title Fees And Reserves

@@ -113,7 +113,7 @@ contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOr
         uint32 _alternativeHoldingPosition,
         uint32 _alternativeAssetFee
     ) external {
-        _onlyOwner();
+        _isAuthorized();
         if (!isPositionUsed[_alternativeHoldingPosition]) revert Cellar__PositionNotUsed(_alternativeHoldingPosition);
         if (_assetOf(_alternativeHoldingPosition) != _alternativeAsset)
             revert Cellar__AssetMismatch(address(_alternativeAsset), address(_assetOf(_alternativeHoldingPosition)));
@@ -137,7 +137,7 @@ contract CellarWithOracleWithAaveFlashLoansWithMultiAssetDeposit is CellarWithOr
      * @param _alternativeAsset the asset to not allow for alternative asset deposits anymore
      */
     function dropAlternativeAssetData(ERC20 _alternativeAsset) external {
-        _onlyOwner();
+        _isAuthorized();
         delete alternativeAssetData[_alternativeAsset];
 
         emit AlternativeAssetDropped(address(_alternativeAsset));

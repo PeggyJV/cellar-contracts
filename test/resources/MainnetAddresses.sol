@@ -336,4 +336,13 @@ contract MainnetAddresses {
     address public cometRewards = 0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
     // Morpho Blue
     address public _morphoBlue = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
+
+    address public uniswapV3PositionManager = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
+    address public uniswapV3Factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+
+    // 1Inch
+    address public oneInchTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
+
+    // 0x
+    address public zeroXTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 }

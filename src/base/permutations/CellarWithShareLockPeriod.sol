@@ -81,7 +81,7 @@ contract CellarWithShareLockPeriod is Cellar {
      * @param newLock the new lock period
      * @dev Callable by Sommelier Strategist.
      */
-    function setShareLockPeriod(uint256 newLock) external onlyOwner {
+    function setShareLockPeriod(uint256 newLock) external requiresAuth {
         if (newLock < MINIMUM_SHARE_LOCK_PERIOD || newLock > MAXIMUM_SHARE_LOCK_PERIOD)
             revert Cellar__InvalidShareLockPeriod();
         uint256 oldLockingPeriod = shareLockPeriod;
