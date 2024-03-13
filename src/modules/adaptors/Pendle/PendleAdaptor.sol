@@ -7,7 +7,7 @@ import {IMarketFactory, IPendleMarket, ISyToken} from "src/interfaces/external/P
 import {PositionlessAdaptor} from "src/modules/adaptors/PositionlessAdaptor.sol";
 import {IPAllActionV3} from "@pendle/contracts/interfaces/IPAllActionV3.sol";
 import {TokenInput, TokenOutput} from "@pendle/contracts/interfaces/IPAllActionTypeV3.sol";
-import {SwapData} from "@pendle/contracts/router/swap-aggregator/IPSwapAggregator.sol";
+import {SwapData, SwapType} from "@pendle/contracts/router/swap-aggregator/IPSwapAggregator.sol";
 import {ApproxParams} from "@pendle/contracts/router/base/MarketApproxLib.sol";
 
 contract PendleAdaptor is PositionlessAdaptor {
@@ -52,14 +52,14 @@ contract PendleAdaptor is PositionlessAdaptor {
     function _verifyDexAggregatorInputIsNotUsed(TokenInput calldata input) internal pure {
         if (
             input.tokenIn != input.tokenMintSy || input.pendleSwap != address(0)
-                || input.swapData.extRouter != address(0)
+                || input.swapData.extRouter != address(0) || input.swapData.swapType != SwapType.NONE
         ) revert("Use aggregator to swap");
     }
 
     function _verifyDexAggregatorOutputIsNotUsed(TokenOutput calldata output) internal pure {
         if (
             output.tokenOut != output.tokenRedeemSy || output.pendleSwap != address(0)
-                || output.swapData.extRouter != address(0)
+                || output.swapData.extRouter != address(0) || output.swapData.swapType != SwapType.NONE
         ) revert("Use aggregator to swap");
     }
 
