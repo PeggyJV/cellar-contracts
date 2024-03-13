@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { CErc20 } from "src/interfaces/external/ICompound.sol";
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {CErc20} from "src/interfaces/external/ICompound.sol";
 
 contract MainnetAddresses {
     // Sommelier
@@ -345,4 +345,14 @@ contract MainnetAddresses {
 
     // 0x
     address public zeroXTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+
+    // Pendle
+    address public pendleMarketFactory = 0x1A6fCc85557BC4fB7B534ed835a03EF056552D52;
+    address public pendleRouter = 0x00000000005BBB0EF59571E58418F9a4357b68A0;
+    address public pendleOracle = 0x66a1096C6366b2529274dF4f5D8247827fe4CEA8;
+
+    address public pendleWeETHMarket = 0xF32e58F92e60f4b0A37A69b95d642A471365EAe8;
+    address public pendleWeethSy = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPt = 0xc69Ad9baB1dEE23F4605a82b3354F8E40d1E5966;
+    address public pendleEethYt = 0xfb35Fd0095dD1096b1Ca49AD44d8C5812A201677;
 }
