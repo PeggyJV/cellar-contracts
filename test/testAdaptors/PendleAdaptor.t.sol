@@ -96,16 +96,16 @@ contract PendleAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(pendleExtension));
         PendleExtension.ExtensionStorage memory pstor =
-            PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.LP, pendleWeETHMarket, 300, EETH, 18);
+            PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.LP, pendleWeETHMarket, 300, EETH);
         priceRouter.addAsset(ERC20(pendleWeETHMarket), settings, abi.encode(pstor), lpPrice);
 
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.SY, pendleWeETHMarket, 300, EETH, 18);
+        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.SY, pendleWeETHMarket, 300, EETH);
         priceRouter.addAsset(ERC20(pendleWeethSy), settings, abi.encode(pstor), priceRouter.getPriceInUSD(WEETH));
 
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.PT, pendleWeETHMarket, 300, EETH, 18);
+        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.PT, pendleWeETHMarket, 300, EETH);
         priceRouter.addAsset(ERC20(pendleEethPt), settings, abi.encode(pstor), ptPrice);
 
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.YT, pendleWeETHMarket, 300, EETH, 18);
+        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.YT, pendleWeETHMarket, 300, EETH);
         priceRouter.addAsset(ERC20(pendleEethYt), settings, abi.encode(pstor), ytPrice);
         // Setup Cellar:
 

@@ -48,14 +48,12 @@ contract PendleExtension is Extension {
      * @param market the Pendle Market
      * @param duration the TWAP duration
      * @param underlying the underlying asset of the Pendle Asset Type
-     * @param underlyingDecimals the underlying asset decimals
      */
     struct ExtensionStorage {
         PendleAsset kind;
         address market;
         uint32 duration;
         ERC20 underlying;
-        uint8 underlyingDecimals;
     }
 
     /**
@@ -77,7 +75,6 @@ contract PendleExtension is Extension {
                 ptOracle.getOracleState(stor.market, stor.duration);
             if (increaseCardinalityRequired || !oldestObservationSatisfied) revert PendleExtension__ORACLE_NOT_READY();
         }
-        stor.underlyingDecimals = stor.underlying.decimals();
         extensionStorage[asset] = stor;
     }
 
@@ -96,10 +93,10 @@ contract PendleExtension is Extension {
             // Call Pendle oracle contract
             if (stor.kind == PendleAsset.LP) {
                 uint256 lpToAssetRate = ptOracle.getLpToAssetRate(stor.market, stor.duration);
-                return lpToAssetRate.mulDivDown(underlyingAssetInUsd, 10 ** stor.underlyingDecimals);
+                return lpToAssetRate.mulDivDown(underlyingAssetInUsd, 1e18);
             } else {
                 uint256 ptToAssetRate = ptOracle.getPtToAssetRate(stor.market, stor.duration);
-                uint256 ptPriceInUsd = ptToAssetRate.mulDivDown(underlyingAssetInUsd, 10 ** stor.underlyingDecimals);
+                uint256 ptPriceInUsd = ptToAssetRate.mulDivDown(underlyingAssetInUsd, 1e18);
                 if (stor.kind == PendleAsset.PT) {
                     // Use PT pricing logic
                     return ptPriceInUsd;
