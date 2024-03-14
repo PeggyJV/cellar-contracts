@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import {Extension, PriceRouter, ERC20, Math} from "src/modules/price-router/Extensions/Extension.sol";
 import {IRateProvider} from "src/interfaces/external/EtherFi/IRateProvider.sol";
 import {IPendleOracle} from "src/interfaces/external/Pendle/IPendleOracle.sol";
+import {ISyToken} from "src/interfaces/external/Pendle/IPendle.sol";
 
 contract PendleExtension is Extension {
     using Math for uint256;
@@ -88,7 +89,9 @@ contract PendleExtension is Extension {
         ExtensionStorage memory stor = extensionStorage[asset];
         uint256 underlyingAssetInUsd = priceRouter.getPriceInUSD(stor.underlying);
         if (stor.kind == PendleAsset.SY) {
-            return underlyingAssetInUsd;
+            uint256 exchangeRate = ISyToken(address(asset)).exchangeRate();
+            uint256 underlyingAssetMulExchangeRateInUsd = underlyingAssetInUsd.mulDivDown(exchangeRate, 1e18);
+            return underlyingAssetMulExchangeRateInUsd;
         } else {
             // Call Pendle oracle contract
             if (stor.kind == PendleAsset.LP) {

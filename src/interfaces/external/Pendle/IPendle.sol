@@ -11,4 +11,5 @@ interface IPendleMarket {
 
 interface ISyToken {
     function getTokensIn() external view returns (address[] memory);
+    function exchangeRate() external view returns (uint256);
 }

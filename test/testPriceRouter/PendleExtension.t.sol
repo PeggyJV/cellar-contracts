@@ -8,6 +8,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IRateProvider} from "src/interfaces/external/IRateProvider.sol";
 import {PendleAdaptor, TokenInput, TokenOutput} from "src/modules/adaptors/Pendle/PendleAdaptor.sol";
 import {SwapData, SwapType} from "@pendle/contracts/router/swap-aggregator/IPSwapAggregator.sol";
+import {ISyToken} from "src/interfaces/external/Pendle/IPendle.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -78,7 +79,7 @@ contract PendleExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
             PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.LP, pendleWeETHMarket, 300, EETH, 18);
         priceRouter.addAsset(ERC20(pendleWeETHMarket), settings, abi.encode(pstor), lpPrice);
 
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.SY, pendleWeETHMarket, 300, WEETH, 18);
+        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.SY, pendleWeETHMarket, 300, EETH, 18);
         priceRouter.addAsset(ERC20(pendleWeethSy), settings, abi.encode(pstor), priceRouter.getPriceInUSD(WEETH));
 
         pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.PT, pendleWeETHMarket, 300, EETH, 18);
@@ -93,7 +94,7 @@ contract PendleExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 underlyingPrice = priceRouter.getPriceInUSD(WEETH);
         uint256 syPrice = priceRouter.getPriceInUSD(ERC20(pendleWeethSy));
 
-        assertEq(syPrice, underlyingPrice, "SY price should equal underlying price");
+        assertApproxEqRel(syPrice, underlyingPrice, 0.002e18, "SY price should equal underlying price");
     }
 
     function testPyPricing(uint256 amount) external {
