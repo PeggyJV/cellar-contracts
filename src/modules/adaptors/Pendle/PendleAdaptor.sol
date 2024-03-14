@@ -45,31 +45,12 @@ contract PendleAdaptor is PositionlessAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    function _verifyMarket(IPendleMarket market) internal view {
-        if (!marketFactory.isValidMarket(address(market))) revert("Bad market");
-    }
-
-    function _verifyDexAggregatorInputIsNotUsed(TokenInput calldata input) internal pure {
-        if (
-            input.tokenIn != input.tokenMintSy || input.pendleSwap != address(0)
-                || input.swapData.extRouter != address(0) || input.swapData.swapType != SwapType.NONE
-        ) revert("Use aggregator to swap");
-    }
-
-    function _verifyDexAggregatorOutputIsNotUsed(TokenOutput calldata output) internal pure {
-        if (
-            output.tokenOut != output.tokenRedeemSy || output.pendleSwap != address(0)
-                || output.swapData.extRouter != address(0) || output.swapData.swapType != SwapType.NONE
-        ) revert("Use aggregator to swap");
-    }
-
-    // TODO add max available logic everywhere.
-    // TODO natspec
     // TODO custom error messages
+    // TODO natspec
     // TODO test reverts
 
     // mintSyFromToken
-    function mintSyFromToken(IPendleMarket market, uint256 minSyOut, TokenInput calldata input) external {
+    function mintSyFromToken(IPendleMarket market, uint256 minSyOut, TokenInput memory input) external {
         _verifyMarket(market);
         _verifyDexAggregatorInputIsNotUsed(input);
 
@@ -77,6 +58,7 @@ contract PendleAdaptor is PositionlessAdaptor {
 
         // Approve router to spend input token.
         ERC20 inputToken = ERC20(input.tokenIn);
+        input.netTokenIn = _maxAvailable(inputToken, input.netTokenIn);
         inputToken.safeApprove(address(router), input.netTokenIn);
         router.mintSyFromToken(address(this), sy, minSyOut, input);
         _revokeExternalApproval(inputToken, address(router));
@@ -87,9 +69,11 @@ contract PendleAdaptor is PositionlessAdaptor {
         _verifyMarket(market);
 
         (address sy,, address yt) = market.readTokens();
-        ERC20(sy).safeApprove(address(router), netSyIn);
+        ERC20 syIn = ERC20(sy);
+        netSyIn = _maxAvailable(syIn, netSyIn);
+        syIn.safeApprove(address(router), netSyIn);
         router.mintPyFromSy(address(this), yt, netSyIn, minPyOut);
-        _revokeExternalApproval(ERC20(sy), address(router));
+        _revokeExternalApproval(syIn, address(router));
     }
 
     // swapExactPtForYt
@@ -101,9 +85,11 @@ contract PendleAdaptor is PositionlessAdaptor {
     ) external {
         _verifyMarket(market);
         (, address pt,) = market.readTokens();
-        ERC20(pt).safeApprove(address(router), exactPtIn);
+        ERC20 ptIn = ERC20(pt);
+        exactPtIn = _maxAvailable(ptIn, exactPtIn);
+        ptIn.safeApprove(address(router), exactPtIn);
         router.swapExactPtForYt(address(this), address(market), exactPtIn, minYtOut, guessTotalYtToSwap);
-        _revokeExternalApproval(ERC20(pt), address(router));
+        _revokeExternalApproval(ptIn, address(router));
     }
 
     // swapExactYtForPt
@@ -115,9 +101,11 @@ contract PendleAdaptor is PositionlessAdaptor {
     ) external {
         _verifyMarket(market);
         (,, address yt) = market.readTokens();
-        ERC20(yt).safeApprove(address(router), exactYtIn);
+        ERC20 ytIn = ERC20(yt);
+        exactYtIn = _maxAvailable(ytIn, exactYtIn);
+        ytIn.safeApprove(address(router), exactYtIn);
         router.swapExactYtForPt(address(this), address(market), exactYtIn, minPtOut, guessTotalPtFromSwap);
-        _revokeExternalApproval(ERC20(yt), address(router));
+        _revokeExternalApproval(ytIn, address(router));
     }
 
     // addLiquidityDualSyAndPt
@@ -126,11 +114,15 @@ contract PendleAdaptor is PositionlessAdaptor {
     {
         _verifyMarket(market);
         (address sy, address pt,) = market.readTokens();
-        ERC20(sy).safeApprove(address(router), netSyDesired);
-        ERC20(pt).safeApprove(address(router), netPtDesired);
+        ERC20 syIn = ERC20(sy);
+        ERC20 ptIn = ERC20(pt);
+        netSyDesired = _maxAvailable(syIn, netSyDesired);
+        netPtDesired = _maxAvailable(ptIn, netPtDesired);
+        syIn.safeApprove(address(router), netSyDesired);
+        ptIn.safeApprove(address(router), netPtDesired);
         router.addLiquidityDualSyAndPt(address(this), address(market), netSyDesired, netPtDesired, minLpOut);
-        _revokeExternalApproval(ERC20(sy), address(router));
-        _revokeExternalApproval(ERC20(pt), address(router));
+        _revokeExternalApproval(syIn, address(router));
+        _revokeExternalApproval(ptIn, address(router));
     }
 
     // removeLiquidityDualSyAndPt
@@ -138,32 +130,61 @@ contract PendleAdaptor is PositionlessAdaptor {
         external
     {
         _verifyMarket(market);
-        ERC20(address(market)).safeApprove(address(router), netLpToRemove);
+        ERC20 lpIn = ERC20(address(market));
+        netLpToRemove = _maxAvailable(lpIn, netLpToRemove);
+        lpIn.safeApprove(address(router), netLpToRemove);
         router.removeLiquidityDualSyAndPt(address(this), address(market), netLpToRemove, minSyOut, minPtOut);
-        _revokeExternalApproval(ERC20(address(market)), address(router));
+        _revokeExternalApproval(lpIn, address(router));
     }
 
     // redeemPyToSy
     function redeemPyToSy(IPendleMarket market, uint256 netPyIn, uint256 minSyOut) external {
         _verifyMarket(market);
         (, address pt, address yt) = market.readTokens();
-        ERC20(pt).safeApprove(address(router), netPyIn);
-        ERC20(yt).safeApprove(address(router), netPyIn);
+        ERC20 ptIn = ERC20(pt);
+        ERC20 ytIn = ERC20(yt);
+        if (netPyIn == type(uint256).max) {
+            uint256 ptBalance = ptIn.balanceOf(address(this));
+            uint256 ytBalance = ytIn.balanceOf(address(this));
+            // Choose the smaller of the two balances.
+            netPyIn = ptBalance > ytBalance ? ytBalance : ptBalance;
+        }
+        ptIn.safeApprove(address(router), netPyIn);
+        ytIn.safeApprove(address(router), netPyIn);
         router.redeemPyToSy(address(this), yt, netPyIn, minSyOut);
-        _revokeExternalApproval(ERC20(pt), address(router));
-        _revokeExternalApproval(ERC20(yt), address(router));
+        _revokeExternalApproval(ptIn, address(router));
+        _revokeExternalApproval(ytIn, address(router));
     }
 
     // redeemSyToToken
-    function redeemSyToToken(IPendleMarket market, uint256 netSyIn, TokenOutput calldata output) external {
+    function redeemSyToToken(IPendleMarket market, uint256 netSyIn, TokenOutput memory output) external {
         _verifyMarket(market);
         _verifyDexAggregatorOutputIsNotUsed(output);
         (address sy,,) = market.readTokens();
-        ERC20(sy).safeApprove(address(router), netSyIn);
+        ERC20 syIn = ERC20(sy);
+        netSyIn = _maxAvailable(syIn, netSyIn);
+        syIn.safeApprove(address(router), netSyIn);
         router.redeemSyToToken(address(this), sy, netSyIn, output);
-        _revokeExternalApproval(ERC20(sy), address(router));
+        _revokeExternalApproval(syIn, address(router));
     }
-    // SY stands for Standardized Yield
-    // PT stands for Principal Token
-    // YT stands for Yield Token
+
+    //============================================ Internal Helper Functions ===========================================
+
+    function _verifyMarket(IPendleMarket market) internal view {
+        if (!marketFactory.isValidMarket(address(market))) revert("Bad market");
+    }
+
+    function _verifyDexAggregatorInputIsNotUsed(TokenInput memory input) internal pure {
+        if (
+            input.tokenIn != input.tokenMintSy || input.pendleSwap != address(0)
+                || input.swapData.extRouter != address(0) || input.swapData.swapType != SwapType.NONE
+        ) revert("Use aggregator to swap");
+    }
+
+    function _verifyDexAggregatorOutputIsNotUsed(TokenOutput memory output) internal pure {
+        if (
+            output.tokenOut != output.tokenRedeemSy || output.pendleSwap != address(0)
+                || output.swapData.extRouter != address(0) || output.swapData.swapType != SwapType.NONE
+        ) revert("Use aggregator to swap");
+    }
 }

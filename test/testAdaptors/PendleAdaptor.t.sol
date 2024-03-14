@@ -332,6 +332,182 @@ contract PendleAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertApproxEqAbs(WEETH.balanceOf(address(cellar)), amount, 10, "Should have received weETH tokens back");
     }
 
+    // Test max available logic.
+    function testMintSyFromTokenWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000e18);
+        // Mint some SY tokens from weETH.
+        deal(address(WEETH), address(cellar), amount);
+        SwapData memory swapData;
+        TokenInput memory input = TokenInput(address(WEETH), type(uint256).max, address(WEETH), address(0), swapData);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(pendleWeETHMarket, 0, input);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertEq(ERC20(pendleWeethSy).balanceOf(address(cellar)), amount, "Should have minted SY tokens to cellar");
+    }
+
+    function testMintPyFromSyWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000_000e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(type(uint256).max);
+
+        uint256 expectedAmount = IRateProvider(address(WEETH)).getRate().mulDivDown(amount, 1e18);
+
+        assertEq(
+            ERC20(pendleEethPt).balanceOf(address(cellar)), expectedAmount, "Should have minted PT tokens to cellar"
+        );
+        assertEq(
+            ERC20(pendleEethYt).balanceOf(address(cellar)), expectedAmount, "Should have minted YT tokens to cellar"
+        );
+    }
+
+    function testSwapExactPtForYtWithMaxAvailable(uint256 amount) external {
+        // Note lower max amount, I think this is do from slippage cuz we have to do ALOT of swapping in the pool.
+        amount = bound(amount, 0.01e18, 50e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount);
+
+        uint256 pyBalance = IRateProvider(address(WEETH)).getRate().mulDivDown(amount, 1e18);
+
+        ApproxParams memory approxParams = ApproxParams(0, type(uint256).max, 0, 256, 0.001e18);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToSwapExactPtForYt(pendleWeETHMarket, type(uint256).max, 0, approxParams);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertEq(ERC20(pendleEethPt).balanceOf(address(cellar)), 0, "Should have sold all PT tokens");
+        assertGt(ERC20(pendleEethYt).balanceOf(address(cellar)), pyBalance, "Should have more YT tokens than before");
+    }
+
+    function testSwapExactYtForPtWithMaxAvailable(uint256 amount) external {
+        // Note lower max amount, I think this is do from slippage cuz we have to do ALOT of swapping in the pool.
+        amount = bound(amount, 0.01e18, 100e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount);
+
+        uint256 pyBalance = IRateProvider(address(WEETH)).getRate().mulDivDown(amount, 1e18);
+
+        ApproxParams memory approxParams = ApproxParams(0, type(uint256).max, 0, 256, 0.001e18);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToSwapExactYtForPt(pendleWeETHMarket, type(uint256).max, 0, approxParams);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertEq(ERC20(pendleEethYt).balanceOf(address(cellar)), 0, "Should have sold all YT tokens");
+        assertGt(ERC20(pendleEethPt).balanceOf(address(cellar)), pyBalance, "Should have more PT tokens than before");
+    }
+
+    function testAddLiquidityWithSyAndPtWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000_000e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount / 2);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] =
+            _createBytesDataToAddLiquidityDualSyAndPt(pendleWeETHMarket, type(uint256).max, type(uint256).max, 0);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertGt(ERC20(pendleWeETHMarket).balanceOf(address(cellar)), 0, "Should have minted LP tokens");
+    }
+
+    function testRemoveLiquidityDualSyAndPtWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000_000e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount / 2);
+
+        uint256 pyBalance = IRateProvider(address(WEETH)).getRate().mulDivDown(amount / 2, 1e18);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddLiquidityDualSyAndPt(pendleWeETHMarket, amount / 2, pyBalance, 0);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToRemoveLiquidityDualSyAndPt(pendleWeETHMarket, type(uint256).max, 0, 0);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertEq(ERC20(pendleWeETHMarket).balanceOf(address(cellar)), 0, "Should have burned all LP tokens");
+        assertApproxEqAbs(
+            ERC20(pendleEethPt).balanceOf(address(cellar)), 10, pyBalance, "Should have received PT back."
+        );
+        assertApproxEqAbs(
+            ERC20(pendleWeethSy).balanceOf(address(cellar)), amount / 2, 10, "Should have received SY back."
+        );
+    }
+
+    function testRedeemPyToSyWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000_000e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRedeemPyToSy(pendleWeETHMarket, type(uint256).max, 0);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(ERC20(pendleWeethSy).balanceOf(address(cellar)), amount, 10, "Should have received SY tokens");
+    }
+
+    function testRedeemSyToTokenWithMaxAvailable(uint256 amount) external {
+        amount = bound(amount, 0.01e18, 1_000_000e18);
+        // Mint some SY tokens from weETH.
+        _mintSyWithToken(WEETH, amount);
+
+        // Mint some PT and YT using SY.
+        _mintPyWithSy(amount);
+
+        uint256 pyBalance = IRateProvider(address(WEETH)).getRate().mulDivDown(amount, 1e18);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRedeemPyToSy(pendleWeETHMarket, pyBalance, 0);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        SwapData memory swapData;
+        TokenOutput memory output = TokenOutput(address(WEETH), 0, address(WEETH), address(0), swapData);
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(pendleWeETHMarket, type(uint256).max, output);
+
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(WEETH.balanceOf(address(cellar)), amount, 10, "Should have received weETH tokens back");
+    }
+
     function _mintSyWithToken(ERC20 token, uint256 amount) internal {
         deal(address(token), address(cellar), amount);
         SwapData memory swapData;
