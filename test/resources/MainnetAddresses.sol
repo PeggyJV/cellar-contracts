@@ -355,4 +355,6 @@ contract MainnetAddresses {
     address public pendleWeethSy = 0xAC0047886a985071476a1186bE89222659970d65;
     address public pendleEethPt = 0xc69Ad9baB1dEE23F4605a82b3354F8E40d1E5966;
     address public pendleEethYt = 0xfb35Fd0095dD1096b1Ca49AD44d8C5812A201677;
+
+    address public pendleSwethMarket = 0x0e1C5509B503358eA1Dac119C1D413e28Cc4b303;
 }

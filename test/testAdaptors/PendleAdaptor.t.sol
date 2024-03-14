@@ -94,7 +94,6 @@ contract PendleAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 ptPrice = 3_784e8;
         uint256 ytPrice = 200e8;
 
-        // TODO what should the underlying be for all these assets?
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(pendleExtension));
         PendleExtension.ExtensionStorage memory pstor =
             PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.LP, pendleWeETHMarket, 300, EETH, 18);

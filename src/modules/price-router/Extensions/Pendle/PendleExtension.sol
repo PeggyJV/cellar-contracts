@@ -5,14 +5,12 @@ import {Extension, PriceRouter, ERC20, Math} from "src/modules/price-router/Exte
 import {IRateProvider} from "src/interfaces/external/EtherFi/IRateProvider.sol";
 import {IPendleOracle} from "src/interfaces/external/Pendle/IPendleOracle.sol";
 
-/**
- * @title Sommelier Price Router eETH Extension.
- * @notice Allows the Price Router to price eETH.
- * @author 0xEinCodes
- */
 contract PendleExtension is Extension {
     using Math for uint256;
 
+    /**
+     * @notice The PT oracle that implements `getOracleState`, `getLpToAssetRate`,  and `getPtToAssetRate`.
+     */
     IPendleOracle public immutable ptOracle;
 
     constructor(PriceRouter _priceRouter, address _ptOracle) Extension(_priceRouter) {
@@ -25,10 +23,18 @@ contract PendleExtension is Extension {
     error PendleExtension__UNDERLYING_NOT_SUPPORTED();
 
     /**
-     * @notice Attempted to use this extension to price something other than eETH.
+     * @notice Oracle is not ready.
      */
-    error eEthExtension__ASSET_NOT_EETH();
+    error PendleExtension__ORACLE_NOT_READY();
 
+    /**
+     * @notice Tried pricing an unknown Pendle Asset Type.
+     */
+    error PendleExtension__UNKNOWN_TYPE();
+
+    /**
+     * @notice Enum containing all the possible Pendle Asset Types.
+     */
     enum PendleAsset {
         SY,
         PT,
@@ -36,6 +42,13 @@ contract PendleExtension is Extension {
         LP
     }
 
+    /**
+     * @param kind the Pendle Asset Type
+     * @param market the Pendle Market
+     * @param duration the TWAP duration
+     * @param underlying the underlying asset of the Pendle Asset Type
+     * @param underlyingDecimals the underlying asset decimals
+     */
     struct ExtensionStorage {
         PendleAsset kind;
         address market;
@@ -44,12 +57,15 @@ contract PendleExtension is Extension {
         uint8 underlyingDecimals;
     }
 
+    /**
+     * @notice Maps ERC20 Pendle Assets to ExtensionStorage structs.
+     */
     mapping(ERC20 => ExtensionStorage) public extensionStorage;
 
     /**
      * @notice Called by the price router during `_updateAsset` calls.
      * @param asset a pendle asset
-     * @param _storage ExtensionStorage with kind, and underlying
+     * @param _storage ExtensionStorage needed to price asset
      */
     function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
         ExtensionStorage memory stor = abi.decode(_storage, (ExtensionStorage));
@@ -58,7 +74,7 @@ contract PendleExtension is Extension {
             // Verify TWAP stuff is supported
             (bool increaseCardinalityRequired,, bool oldestObservationSatisfied) =
                 ptOracle.getOracleState(stor.market, stor.duration);
-            if (increaseCardinalityRequired || !oldestObservationSatisfied) revert("Oracle not ready");
+            if (increaseCardinalityRequired || !oldestObservationSatisfied) revert PendleExtension__ORACLE_NOT_READY();
         }
         stor.underlyingDecimals = stor.underlying.decimals();
         extensionStorage[asset] = stor;
@@ -66,7 +82,7 @@ contract PendleExtension is Extension {
 
     /**
      * @notice Called during pricing operations.
-     * @return price of eETH in USD [USD/eETH]
+     * @return price of Pendle Asset in USD
      */
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         ExtensionStorage memory stor = extensionStorage[asset];
@@ -92,7 +108,7 @@ contract PendleExtension is Extension {
                         return underlyingAssetInUsd - ptPriceInUsd;
                     }
                 } else {
-                    revert("unknown");
+                    revert PendleExtension__UNKNOWN_TYPE();
                 }
             }
         }
