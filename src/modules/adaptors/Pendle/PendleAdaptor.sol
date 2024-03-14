@@ -62,8 +62,6 @@ contract PendleAdaptor is PositionlessAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    // TODO test reverts
-
     /**
      * @notice Allows strategist to exchange a token for an SY.
      * @dev `input.tokenIn` must equal `input.tokenMintSy`, and `tokenMintSy` must be in `SY.getTokensIn()`.
