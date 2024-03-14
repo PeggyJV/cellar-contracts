@@ -13,7 +13,7 @@ import {IRedstoneAdapter} from "src/interfaces/external/Redstone/IRedstoneAdapte
 import {PendleAdaptor, TokenInput, TokenOutput} from "src/modules/adaptors/Pendle/PendleAdaptor.sol";
 import {PendleExtension} from "src/modules/price-router/Extensions/Pendle/PendleExtension.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {SwapData} from "@pendle/contracts/router/swap-aggregator/IPSwapAggregator.sol";
+import {SwapData, SwapType} from "@pendle/contracts/router/swap-aggregator/IPSwapAggregator.sol";
 import {IRateProvider} from "src/interfaces/external/IRateProvider.sol";
 import {ApproxParams} from "@pendle/contracts/router/base/MarketApproxLib.sol";
 
@@ -332,7 +332,8 @@ contract PendleAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertApproxEqAbs(WEETH.balanceOf(address(cellar)), amount, 10, "Should have received weETH tokens back");
     }
 
-    // Test max available logic.
+    //============================================ Max Available Tests ===========================================
+
     function testMintSyFromTokenWithMaxAvailable(uint256 amount) external {
         amount = bound(amount, 0.01e18, 1_000e18);
         // Mint some SY tokens from weETH.
@@ -507,6 +508,146 @@ contract PendleAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         assertApproxEqAbs(WEETH.balanceOf(address(cellar)), amount, 10, "Should have received weETH tokens back");
     }
+
+    //============================================ Revert Tests ===========================================
+
+    function testVerifyMarketRevert() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        address fakeMarket = vm.addr(420);
+        TokenInput memory input;
+        TokenOutput memory output;
+        ApproxParams memory approxParams;
+
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(fakeMarket, 0, input);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToMintPyFromSy(fakeMarket, 0, 0);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToSwapExactPtForYt(fakeMarket, 0, 0, approxParams);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToSwapExactYtForPt(fakeMarket, 0, 0, approxParams);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToAddLiquidityDualSyAndPt(fakeMarket, 0, 0, 0);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToRemoveLiquidityDualSyAndPt(fakeMarket, 0, 0, 0);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToRedeemPyToSy(fakeMarket, 0, 0);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(fakeMarket, 0, output);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__BadMarket.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    function testDexAggregatorReverts() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        address fakePendleSwapAddress = vm.addr(1);
+        address fakeExtRouterAddress = vm.addr(2);
+
+        SwapData memory swapData =
+            SwapData({swapType: SwapType.NONE, extRouter: address(0), extCalldata: hex"", needScale: false});
+        TokenInput memory input = TokenInput({
+            tokenIn: address(WEETH),
+            netTokenIn: 0,
+            tokenMintSy: address(WEETH),
+            pendleSwap: address(0),
+            swapData: swapData
+        });
+        TokenOutput memory output = TokenOutput({
+            tokenOut: address(WEETH),
+            minTokenOut: 0,
+            tokenRedeemSy: address(WEETH),
+            pendleSwap: address(0),
+            swapData: swapData
+        });
+        // Change tokenIn.
+        input.tokenIn = address(WETH);
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(pendleWeETHMarket, 0, input);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix tokenIn but change pendleSwap to fake address.
+        input.tokenIn = address(WEETH);
+        input.pendleSwap = fakePendleSwapAddress;
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(pendleWeETHMarket, 0, input);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix pendleSwap but change extRouter
+        input.pendleSwap = address(0);
+        input.swapData.extRouter = fakeExtRouterAddress;
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(pendleWeETHMarket, 0, input);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix extRouter but change swapType to not NONE.
+        input.swapData.extRouter = address(0);
+        input.swapData.swapType = SwapType.ONE_INCH;
+        adaptorCalls[0] = _createBytesDataToMintSyFromToken(pendleWeETHMarket, 0, input);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Change tokenOut
+        output.tokenOut = address(WETH);
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(pendleWeETHMarket, 0, output);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix tokenOut but change pendleSwap to fake address.
+        output.tokenOut = address(WEETH);
+        output.pendleSwap = fakePendleSwapAddress;
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(pendleWeETHMarket, 0, output);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix pendleSwap but change extRouter
+        output.pendleSwap = address(0);
+        output.swapData.extRouter = fakeExtRouterAddress;
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(pendleWeETHMarket, 0, output);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Fix extRouter but change swapType to not NONE.
+        output.swapData.extRouter = address(0);
+        output.swapData.swapType = SwapType.ONE_INCH;
+        adaptorCalls[0] = _createBytesDataToRedeemSyToToken(pendleWeETHMarket, 0, output);
+        data[0] = Cellar.AdaptorCall({adaptor: address(pendleAdaptor), callData: adaptorCalls});
+        vm.expectRevert(bytes(abi.encodeWithSelector(PendleAdaptor.PendleAdaptor__UseAggregatorToSwap.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    //============================================ Helper Functions ===========================================
 
     function _mintSyWithToken(ERC20 token, uint256 amount) internal {
         deal(address(token), address(cellar), amount);
