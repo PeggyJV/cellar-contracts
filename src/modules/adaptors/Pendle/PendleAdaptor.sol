@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import {ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math} from "src/modules/adaptors/BaseAdaptor.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IMarketFactory, IPendleMarket, ISyToken} from "src/interfaces/external/Pendle/IPendle.sol";
+import {IMarketFactory, IPendleMarket, ISyToken, IYT} from "src/interfaces/external/Pendle/IPendle.sol";
 import {PositionlessAdaptor} from "src/modules/adaptors/PositionlessAdaptor.sol";
 import {IPAllActionV3} from "@pendle/contracts/interfaces/IPAllActionV3.sol";
 import {TokenInput, TokenOutput} from "@pendle/contracts/interfaces/IPAllActionTypeV3.sol";
@@ -184,9 +184,13 @@ contract PendleAdaptor is PositionlessAdaptor {
         ERC20 ytIn = ERC20(yt);
         if (netPyIn == type(uint256).max) {
             uint256 ptBalance = ptIn.balanceOf(address(this));
-            uint256 ytBalance = ytIn.balanceOf(address(this));
-            // Choose the smaller of the two balances.
-            netPyIn = ptBalance > ytBalance ? ytBalance : ptBalance;
+            if (IYT(yt).isExpired()) {
+                netPyIn = ptBalance;
+            } else {
+                // Choose the smaller of the two balances.
+                uint256 ytBalance = ytIn.balanceOf(address(this));
+                netPyIn = ptBalance > ytBalance ? ytBalance : ptBalance;
+            }
         }
         ptIn.safeApprove(address(router), netPyIn);
         ytIn.safeApprove(address(router), netPyIn);

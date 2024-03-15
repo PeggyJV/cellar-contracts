@@ -13,3 +13,7 @@ interface ISyToken {
     function getTokensIn() external view returns (address[] memory);
     function exchangeRate() external view returns (uint256);
 }
+
+interface IYT {
+    function isExpired() external view returns (bool);
+}
