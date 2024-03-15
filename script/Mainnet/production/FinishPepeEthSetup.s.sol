@@ -320,6 +320,7 @@ contract FinishPepeEthSetupScript is Script, MainnetAddresses, ContractDeploymen
         // addAdaptorToCatalogue
 
         vm.stopBroadcast();
+        // TODO create script to deploy timelocks
     }
 
     function _checkTokenOrdering(uint32 registryId) internal view {
