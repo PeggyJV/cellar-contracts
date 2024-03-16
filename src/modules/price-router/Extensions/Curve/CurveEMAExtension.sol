@@ -3,6 +3,8 @@ pragma solidity 0.8.21;
 
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+import { console } from "@forge-std/Test.sol";
+
 
 /**
  * @title Sommelier Price Router Curve EMA Extension
@@ -126,7 +128,11 @@ contract CurveEMAExtension is Extension {
      * @notice Helper function to check if a provided answer is within a reasonable bound.
      */
     function _enforceBounds(uint256 providedAnswer, uint32 lowerBound, uint32 upperBound) internal view {
+                // uint32 providedAnswerConvertedToBoundDecimals = uint32(providedAnswer);
+
         uint32 providedAnswerConvertedToBoundDecimals = uint32(providedAnswer.changeDecimals(curveEMADecimals, 4));
+
+        console.log("EIN - providedAnswerConvertedToBoundDecimals: %s, providedAnswerAsUint256, upperBound: %s", providedAnswerConvertedToBoundDecimals, providedAnswer, upperBound);
         if (providedAnswerConvertedToBoundDecimals < lowerBound || providedAnswerConvertedToBoundDecimals > upperBound)
             revert CurveEMAExtension_BOUNDS_EXCEEDED();
     }

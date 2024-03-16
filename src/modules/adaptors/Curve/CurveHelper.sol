@@ -11,15 +11,21 @@ import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
 /**
- * @title Curve Helper
+ * @title Curve Helper v2
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
- * @author crispymangoes
+ * @dev Adjustment made to be able to handle dynamic arrays for mutative functions with new curve pool versions
+ * @author crispymangoes and 0xEinCodes
  */
 contract CurveHelper {
     using SafeTransferLib for ERC20;
     using Address for address;
     using Strings for uint256;
     using Math for uint256;
+
+    enum FixedOrDynamic {
+        Fixed,
+        Dynamic
+    }
 
     //========================================= Reentrancy Guard Functions =======================================
 
@@ -151,7 +157,8 @@ contract CurveHelper {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying
+        bool useUnderlying,
+        FixedOrDynamic fixedOrDynamic
     ) external nonReentrant returns (uint256 lpTokenDeltaBalance) {
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
 
@@ -179,7 +186,8 @@ contract CurveHelper {
         bytes memory data = _curveAddLiquidityEncodedCallData(
             orderedUnderlyingTokenAmounts,
             minLPAmount,
-            useUnderlying
+            useUnderlying,
+            fixedOrDynamic
         );
 
         // Track the change in lpToken balance.
@@ -213,7 +221,9 @@ contract CurveHelper {
         uint256 lpTokenAmount,
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
-        bool useUnderlying
+        bool useUnderlying,
+                FixedOrDynamic fixedOrDynamic
+
     ) external nonReentrant returns (uint256[] memory balanceDelta) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
@@ -222,7 +232,8 @@ contract CurveHelper {
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
-            useUnderlying
+            useUnderlying,
+            fixedOrDynamic
         );
 
         // Transfer token in.
@@ -268,7 +279,8 @@ contract CurveHelper {
     function _curveAddLiquidityEncodedCallData(
         uint256[] memory orderedTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying
+        bool useUnderlying,
+        FixedOrDynamic fixedOrDynamic
     ) internal pure returns (bytes memory data) {
         bytes memory finalEncodedArgOrEmpty;
         if (useUnderlying) {
@@ -276,7 +288,7 @@ contract CurveHelper {
         }
 
         data = abi.encodePacked(
-            _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying),
+            _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic),
             abi.encodePacked(orderedTokenAmounts),
             minLPAmount,
             finalEncodedArgOrEmpty
@@ -288,12 +300,29 @@ contract CurveHelper {
      */
     function _curveAddLiquidityEncodeSelector(
         uint256 numberOfCoins,
-        bool useUnderlying
+        bool useUnderlying,
+        FixedOrDynamic fixedOrDynamic
     ) internal pure returns (bytes4 selector_) {
         string memory finalArgOrEmpty;
         if (useUnderlying) {
             finalArgOrEmpty = ",bool";
         }
+
+        if(fixedOrDynamic == FixedOrDynamic.Dynamic) {
+            return
+            bytes4(
+                keccak256(
+                    abi.encodePacked(
+                        "add_liquidity(uint256[],",
+                        "uint256",
+                        finalArgOrEmpty,
+                        ")"
+                    )
+                )
+            );
+        } 
+
+        // if not dynamic, it is fixed
 
         return
             bytes4(
@@ -316,7 +345,8 @@ contract CurveHelper {
     function _curveRemoveLiquidityEncodedCalldata(
         uint256 lpTokenAmount,
         uint256[] memory orderedTokenAmounts,
-        bool useUnderlyings
+        bool useUnderlyings,
+        FixedOrDynamic fixedOrDynamic
     ) internal pure returns (bytes memory callData_) {
         bytes memory finalEncodedArgOrEmpty;
         if (useUnderlyings) {
@@ -325,10 +355,11 @@ contract CurveHelper {
 
         return
             abi.encodePacked(
-                _curveRemoveLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlyings),
+                _curveRemoveLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlyings, fixedOrDynamic),
                 lpTokenAmount,
                 abi.encodePacked(orderedTokenAmounts),
-                finalEncodedArgOrEmpty
+                finalEncodedArgOrEmpty,
+                fixedOrDynamic
             );
     }
 
@@ -337,12 +368,29 @@ contract CurveHelper {
      */
     function _curveRemoveLiquidityEncodeSelector(
         uint256 numberOfCoins,
-        bool useUnderlyings
+        bool useUnderlyings,
+        FixedOrDynamic fixedOrDynamic
     ) internal pure returns (bytes4 selector_) {
         string memory finalArgOrEmpty;
         if (useUnderlyings) {
             finalArgOrEmpty = ",bool";
         }
+
+        if(fixedOrDynamic == FixedOrDynamic.Dynamic) {
+            return
+            bytes4(
+                keccak256(
+                    abi.encodePacked(
+                        "remove_liquidity(uint256[],",
+                        "uint256",
+                        finalArgOrEmpty,
+                        ")"
+                    )
+                )
+            );
+        } 
+
+        // if not dynamic, it is fixed
 
         return
             bytes4(
@@ -390,6 +438,9 @@ contract CurveHelper {
 
     /**
      * @notice Helper function to get the underlying tokens in a Curve pool.
+     * 1st, it just checks if it'll revert with checking coins(i). So if we're expecting a large amount of coins, like 5, and it only has 3 coins in it, then it'll revert.
+     * 2nd, it tries 1 more than the index for the coins length of the pool... so if we are working with a pool with two coins, then it'll try pool.coins(2), but we know that it should max out at pool.coins(1). So why do the first check?
+     * For the try-catch, let's say we have 
      */
     function _getPoolUnderlyingTokens(
         CurvePool pool,
@@ -397,10 +448,10 @@ contract CurveHelper {
     ) internal view returns (ERC20[] memory underlyingTokens) {
         underlyingTokens = new ERC20[](expectedTokenCount);
 
-        // It is expected behavior that if expectedTokenCount is > than the actual token count, this will revert.
+        // Assigns `underlyingTokens` array, but also checks expected behavior that if expectedTokenCount is > than the actual token count, this will revert.
         for (uint256 i; i < expectedTokenCount; ++i) underlyingTokens[i] = ERC20(pool.coins(i));
 
-        // Make sure expectedTokenCount is correct, and that there are not more tokens.
+        // Checks that expectedTokenCount is correct, and that there are not more tokens (by checking one more above expected max index for coins array w/ respective pool).
         try pool.coins(expectedTokenCount) {
             revert CurveHelper___PoolHasMoreTokensThanExpected();
         } catch {

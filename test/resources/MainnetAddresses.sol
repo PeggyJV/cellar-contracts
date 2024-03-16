@@ -63,6 +63,7 @@ contract MainnetAddresses {
     ERC20 public EETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
     ERC20 public EZETH = ERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
     ERC20 public RSETH = ERC20(0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7);
+    ERC20 public RSWETH = ERC20(0xFAe103DC9cf190eD75350761e95403b7b8aFa6c0);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -265,6 +266,23 @@ contract MainnetAddresses {
     address public EthEthXGauge = 0x7671299eA7B4bbE4f3fD305A994e6443b4be680E;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
+
+    /// newer curve pools (using dynamic arrays params instead of fixed arrays for mutative functions)
+    address public WeEthWethPool = 0x13947303F63b363876868D070F14dc865C36463b;
+    address public WeEthWethToken = 0x13947303F63b363876868D070F14dc865C36463b;
+    address public WeEthWethGauge = 0x1CAC1a0Ed47E2e0A313c712b2dcF85994021a365;
+    
+    address public WeethRswEthPool = 0x278cfB6f06B1EFc09d34fC7127d6060C61d629Db;
+    address public WeethRswEthToken = 0x278cfB6f06B1EFc09d34fC7127d6060C61d629Db;
+    address public WeethRswEthGauge = 0x0Bfb387B87e8Bf173a10A7DCf786B0b7875F6771;
+
+    address public EzEthWethPool = 0x85dE3ADd465a219EE25E04d22c39aB027cF5C12E;
+    address public EzEthWethToken = 0x85dE3ADd465a219EE25E04d22c39aB027cF5C12E;
+    address public EzEthWethGauge = 0xE8d52f614Fb6c11760b2D1e2Bf7c7e8b4C5C0438;
+
+    // NOTE - prioritize.
+    address public EethEthPool = 0xeAC874aeD7761460dD4c89778Ba6db7d320911a8;
+    address public EethEthToken = 0xeAC874aeD7761460dD4c89778Ba6db7d320911a8;
 
     // Convex-Curve Platform Specifics
     address public convexCurveMainnetBooster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
