@@ -242,9 +242,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     // TODO - assess if we need to do this test too
     function testWithdrawLogic(uint256 assets) external {}
 
-    /// TODO - EIN happy path dynamic array pool tests
-
-    // general TODO: trust positions with new curve pools, add pricing for them if we don't have it yet, add positions to the cellar
+    /// TODO - EIN happy path dynamic array pool tests - unsure why 
 
     // weethWeth
     function testManagingLiquidityInDynamicArrayPool0() external {
@@ -289,7 +287,6 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     }
 
     // eethEth
-    // TODO - how to handle no gauge address?
     function testManagingLiquidityInDynamicArrayPoolWithETH() external {
         // assets = bound(assets, 1e6, 1_000_000e6);
         uint256 assets = 1e6;
@@ -743,7 +740,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 false,
                 gauge,
                 selector,
-                CurveHelper.FixedOrDynamic.Fixed
+                CurveHelper.FixedOrDynamic.Dynamic
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -784,7 +781,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 false,
                 gauge,
                 selector,
-                CurveHelper.FixedOrDynamic.Fixed
+                CurveHelper.FixedOrDynamic.Dynamic
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -877,7 +874,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 false,
                 gauge,
                 selector,
-                CurveHelper.FixedOrDynamic.Fixed
+                CurveHelper.FixedOrDynamic.Dynamic
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -958,7 +955,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 false,
                 gauge,
                 selector,
-                CurveHelper.FixedOrDynamic.Fixed
+                CurveHelper.FixedOrDynamic.Dynamic
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
