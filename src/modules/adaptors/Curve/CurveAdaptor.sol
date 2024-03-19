@@ -214,6 +214,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param lpToken the curve pool token
      * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
      * @param minLPAmount the minimum amount of LP out
+     * @param fixedOrDynamic enum indicating if dealing with fixed or dynamic array in respective pool function selector
+
      */
     function addLiquidity(
         address pool,
@@ -221,7 +223,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         CurveGauge gauge,
-        bytes4 selector
+        bytes4 selector,
+        FixedOrDynamic fixedOrDynamic
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
@@ -240,7 +243,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         }
 
         // Generate `add_liquidity` function call data.
-        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false);
+        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false, fixedOrDynamic);
 
         // Track the change in lpToken balance.
         uint256 balanceDelta = lpToken.balanceOf(address(this));
@@ -270,6 +273,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
      * @param minLPAmount the minimum amount of LP out
      * @param useUnderlying bool indicating whether or not to add a true bool to the end of abi.encoded `addLiquidity` call
+     * @param fixedOrDynamic enum indicating if dealing with fixed or dynamic array in respective pool function selector
      */
     function addLiquidityETH(
         address pool,
@@ -278,7 +282,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minLPAmount,
         bool useUnderlying,
         CurveGauge gauge,
-        bytes4 selector
+        bytes4 selector,
+        FixedOrDynamic fixedOrDynamic
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
@@ -310,7 +315,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             underlyingTokens,
             orderedUnderlyingTokenAmounts,
             minLPAmount,
-            useUnderlying
+            useUnderlying,
+            fixedOrDynamic
         );
 
         // Compare value out vs value in, and check for slippage.
@@ -346,7 +352,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 lpTokenAmount,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         CurveGauge gauge,
-        bytes4 selector
+        bytes4 selector,
+        FixedOrDynamic fixedOrDynamic
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
@@ -362,7 +369,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
-            false
+            false,
+            fixedOrDynamic
         );
 
         // Track the changes in token balances.
@@ -397,7 +405,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying,
         CurveGauge gauge,
-        bytes4 selector
+        bytes4 selector,
+        FixedOrDynamic fixedOrDynamic
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
@@ -418,7 +427,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             lpTokenAmount,
             underlyingTokens,
             orderedMinimumUnderlyingTokenAmountsOut,
-            useUnderlying
+            useUnderlying,
+            fixedOrDynamic
         );
 
         // Compare value out vs value in, and check for slippage.
