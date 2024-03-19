@@ -287,12 +287,23 @@ contract CurveHelper {
             finalEncodedArgOrEmpty = abi.encode(true);
         }
 
-        data = abi.encodePacked(
-            _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic),
-            abi.encodePacked(orderedTokenAmounts),
+        data = abi.encodeWithSelector(_curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic), orderedTokenAmounts,
             minLPAmount,
-            finalEncodedArgOrEmpty
-        );
+            finalEncodedArgOrEmpty);
+
+        // if(fixedOrDynamic == FixedOrDynamic.Dynamic) {
+        //     data = abi.encodeWithSelector(_curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic), abi.encodePacked(orderedTokenAmounts),
+        //     minLPAmount,
+        //     finalEncodedArgOrEmpty);
+        // } else {
+        // data = abi.encodePacked(
+        //     _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic),
+        //     abi.encodePacked(orderedTokenAmounts),
+        //     minLPAmount,
+        //     finalEncodedArgOrEmpty
+        // );
+        // }
+
     }
 
     /**
@@ -312,7 +323,7 @@ contract CurveHelper {
             return
             bytes4(
                 keccak256(
-                    abi.encodePacked(
+                    abi.encode(
                         "add_liquidity(uint256[],",
                         "uint256",
                         finalArgOrEmpty,

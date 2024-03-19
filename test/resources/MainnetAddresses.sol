@@ -281,7 +281,7 @@ contract MainnetAddresses {
     address public EzEthWethGauge = 0xE8d52f614Fb6c11760b2D1e2Bf7c7e8b4C5C0438;
 
     // NOTE - prioritize.
-    address public EethEthPool = 0xeAC874aeD7761460dD4c89778Ba6db7d320911a8;
+    address public EethEthPool = 0xeAC874aeD7761460dD4c89778Ba6db7d320911a8; // turns out the coins are [0] = eeth, [1] = weth
     address public EethEthToken = 0xeAC874aeD7761460dD4c89778Ba6db7d320911a8;
 
     // Convex-Curve Platform Specifics

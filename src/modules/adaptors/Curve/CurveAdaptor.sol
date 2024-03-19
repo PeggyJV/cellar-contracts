@@ -242,8 +242,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
             }
         }
 
-        // TODO - EIN THIS IS WHERE YOU LEFT OFF, you were debugging why add_liquidity (See terminal error revert) was not working. It looks like it gets to `pool.functionCall(data)` but perhaps the data is not right :()
-        // TODO - Going to check out working tests from Crispy to see if that helps resolves things.
         // Generate `add_liquidity` function call data.
         bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false, fixedOrDynamic);
 
