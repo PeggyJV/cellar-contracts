@@ -178,7 +178,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
         registry.trustPosition(
             WeEthWethPoolPosition,
             address(curveAdaptor),
-            abi.encode(WeEthWethPool, WeEthWethToken, WeEthWethGauge, CurvePool.withdraw_admin_fees.selector)
+            abi.encode(WeEthWethPool, WeEthWethToken, WeEthWethGauge, bytes4(keccak256(abi.encodePacked("D_oracle()"))))
         );
         registry.trustPosition(
             WeethRswEthPoolPosition,
@@ -242,19 +242,19 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     // TODO - assess if we need to do this test too
     function testWithdrawLogic(uint256 assets) external {}
 
-    /// TODO - EIN happy path dynamic array pool tests - unsure why 
+    /// TODO - EIN happy path dynamic array pool tests - unsure why
 
     // weethWeth
     function testManagingLiquidityInDynamicArrayPool0() external {
         // assets = bound(assets, 1e6, 1_000_000e6);
-        uint256 assets = 1e6;
+        uint256 assets = 1_000_000e6;
         _manageLiquidityIn2PoolDynamicArraysNoETH(
             assets,
             WeEthWethPool,
             WeEthWethToken,
             WeEthWethGauge,
-            0.0005e18,
-            CurvePool.withdraw_admin_fees.selector
+            0.01e18,
+            bytes4(keccak256(abi.encodePacked("D_oracle()")))
         );
     }
 
@@ -300,30 +300,22 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
             0.0010e18,
             CurvePool.withdraw_admin_fees.selector
         );
-
     }
 
     // ========================================= Reverts =========================================
 
     // TODO - do we want to test this too?
-    function testSlippageRevertsNoETH( ) external {
-        
-    }
+    function testSlippageRevertsNoETH() external {}
 
     // TODO - do we want to test this too?
-    function testSlippageRevertsWithETH( ) external {
-       
-    }
+    function testSlippageRevertsWithETH() external {}
 
     // TODO - do we want to test this too?
-    function testReentrancyProtection3( ) external {
-    }
+    function testReentrancyProtection3() external {}
     // ========================================= Reverts =========================================
 
     // TODO - do we want to test this too?
-    function testInteractingWithPositionThatIsNotUsed() external {
-        
-    }
+    function testInteractingWithPositionThatIsNotUsed() external {}
 
     // TODO - assess if we need to do this test too
     function testMismatchedArrayLengths() external {}
@@ -719,7 +711,6 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 if (coins[0] == STETH) _takeSteth(assets, address(cellar));
                 else if (coins[0] == OETH) _takeOeth(assets, address(cellar));
                 else if (coins[0] == EETH) _takeEETH(assets, address(cellar));
-                
                 else deal(address(coins[0]), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -774,7 +765,6 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
             if (coins[0] == STETH) _takeSteth(assets / 4, address(cellar));
             else if (coins[0] == OETH) _takeOeth(assets / 4, address(cellar));
             else if (coins[0] == EETH) _takeEETH(assets / 4, address(cellar));
-
             else deal(address(coins[0]), address(cellar), assets / 4);
             if (coins[1] == STETH) _takeSteth(coins1Amount, address(cellar));
             else if (coins[1] == OETH) _takeOeth(coins1Amount, address(cellar));
@@ -939,7 +929,6 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 if (coins[0] == STETH) _takeSteth(assets, address(cellar));
                 else if (coins[0] == OETH) _takeOeth(assets, address(cellar));
                 else if (coins[0] == EETH) _takeEETH(assets, address(cellar));
-
                 else deal(address(coins[0]), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
