@@ -178,7 +178,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
         registry.trustPosition(
             WeEthWethPoolPosition,
             address(curveAdaptor),
-            abi.encode(WeEthWethPool, WeEthWethToken, WeEthWethGauge, CurvePool.withdraw_admin_fees.selector)
+            abi.encode(WeEthWethPool, WeEthWethToken, WeEthWethGauge, bytes4(keccak256(abi.encodePacked("D_oracle()"))))
         );
         registry.trustPosition(
             WeethRswEthPoolPosition,
@@ -242,19 +242,19 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     // TODO - assess if we need to do this test too
     function testWithdrawLogic(uint256 assets) external {}
 
-    /// TODO - EIN happy path dynamic array pool tests - unsure why 
+    /// TODO - EIN happy path dynamic array pool tests - unsure why
 
     // weethWeth
     function testManagingLiquidityInDynamicArrayPool0() external {
         // assets = bound(assets, 1e6, 1_000_000e6);
-        uint256 assets = 1e6;
+        uint256 assets = 1_000_000e6;
         _manageLiquidityIn2PoolDynamicArraysNoETH(
             assets,
             WeEthWethPool,
             WeEthWethToken,
             WeEthWethGauge,
-            0.0005e18,
-            CurvePool.withdraw_admin_fees.selector
+            0.01e18,
+            bytes4(keccak256(abi.encodePacked("D_oracle()")))
         );
     }
 
@@ -303,24 +303,17 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     // ========================================= Reverts =========================================
 
     // TODO - do we want to test this too?
-    function testSlippageRevertsNoETH( ) external {
-        
-    }
+    function testSlippageRevertsNoETH() external {}
 
     // TODO - do we want to test this too?
-    function testSlippageRevertsWithETH( ) external {
-       
-    }
+    function testSlippageRevertsWithETH() external {}
 
     // TODO - do we want to test this too?
-    function testReentrancyProtection3( ) external {
-    }
+    function testReentrancyProtection3() external {}
     // ========================================= Reverts =========================================
 
     // TODO - do we want to test this too?
-    function testInteractingWithPositionThatIsNotUsed() external {
-        
-    }
+    function testInteractingWithPositionThatIsNotUsed() external {}
 
     // TODO - assess if we need to do this test too
     function testMismatchedArrayLengths() external {}
@@ -1034,10 +1027,10 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
         vm.roll(block.number + blocksToRoll);
         mockWETHdataFeed.setMockUpdatedAt(block.timestamp);
         mockUSDCdataFeed.setMockUpdatedAt(block.timestamp);
-        mockDAI_dataFeed.setMockUpdatedAt(block.timestamp);
-        mockUSDTdataFeed.setMockUpdatedAt(block.timestamp);
-        mockFRAXdataFeed.setMockUpdatedAt(block.timestamp);
-        mockSTETdataFeed.setMockUpdatedAt(block.timestamp);
-        mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
+        // mockDAI_dataFeed.setMockUpdatedAt(block.timestamp);
+        // mockUSDTdataFeed.setMockUpdatedAt(block.timestamp);
+        // mockFRAXdataFeed.setMockUpdatedAt(block.timestamp);
+        // mockSTETdataFeed.setMockUpdatedAt(block.timestamp);
+        // mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
     }
 }

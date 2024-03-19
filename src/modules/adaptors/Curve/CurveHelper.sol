@@ -222,8 +222,7 @@ contract CurveHelper {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying,
-                FixedOrDynamic fixedOrDynamic
-
+        FixedOrDynamic fixedOrDynamic
     ) external nonReentrant returns (uint256[] memory balanceDelta) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
@@ -287,9 +286,9 @@ contract CurveHelper {
             finalEncodedArgOrEmpty = abi.encode(true);
         }
 
-        data = abi.encodePacked(
+        data = abi.encodeWithSelector(
             _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying, fixedOrDynamic),
-            abi.encodePacked(orderedTokenAmounts),
+            orderedTokenAmounts,
             minLPAmount,
             finalEncodedArgOrEmpty
         );
@@ -308,19 +307,9 @@ contract CurveHelper {
             finalArgOrEmpty = ",bool";
         }
 
-        if(fixedOrDynamic == FixedOrDynamic.Dynamic) {
-            return
-            bytes4(
-                keccak256(
-                    abi.encodePacked(
-                        "add_liquidity(uint256[],",
-                        "uint256",
-                        finalArgOrEmpty,
-                        ")"
-                    )
-                )
-            );
-        } 
+        if (fixedOrDynamic == FixedOrDynamic.Dynamic) {
+            return bytes4(keccak256(abi.encodePacked("add_liquidity(uint256[],", "uint256", finalArgOrEmpty, ")")));
+        }
 
         // if not dynamic, it is fixed
 
@@ -376,19 +365,9 @@ contract CurveHelper {
             finalArgOrEmpty = ",bool";
         }
 
-        if(fixedOrDynamic == FixedOrDynamic.Dynamic) {
-            return
-            bytes4(
-                keccak256(
-                    abi.encodePacked(
-                        "remove_liquidity(uint256[],",
-                        "uint256",
-                        finalArgOrEmpty,
-                        ")"
-                    )
-                )
-            );
-        } 
+        if (fixedOrDynamic == FixedOrDynamic.Dynamic) {
+            return bytes4(keccak256(abi.encodePacked("remove_liquidity(uint256[],", "uint256", finalArgOrEmpty, ")")));
+        }
 
         // if not dynamic, it is fixed
 
@@ -440,7 +419,7 @@ contract CurveHelper {
      * @notice Helper function to get the underlying tokens in a Curve pool.
      * 1st, it just checks if it'll revert with checking coins(i). So if we're expecting a large amount of coins, like 5, and it only has 3 coins in it, then it'll revert.
      * 2nd, it tries 1 more than the index for the coins length of the pool... so if we are working with a pool with two coins, then it'll try pool.coins(2), but we know that it should max out at pool.coins(1). So why do the first check?
-     * For the try-catch, let's say we have 
+     * For the try-catch, let's say we have
      */
     function _getPoolUnderlyingTokens(
         CurvePool pool,
