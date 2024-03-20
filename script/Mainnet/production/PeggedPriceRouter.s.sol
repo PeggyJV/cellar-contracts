@@ -19,33 +19,31 @@ import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
 
 /**
- *  source .env && forge script script/Mainnet/production/SetUpArchitecture.s.sol:SetUpArchitectureScript --evm-version london --with-gas-price 60000000000 --slow --broadcast --etherscan-api-key $MAINNET_RPC_URL --verify
+ *  source .env && forge script script/Mainnet/production/PeggedPriceRouter.s.sol:PeggedPriceRouterScript --with-gas-price 30000000000 --slow --broadcast --etherscan-api-key $MAINNET_RPC_URL --verify
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract SetUpArchitectureScript is Script, MainnetAddresses {
+contract PeggedPriceRouterScript is Script, MainnetAddresses {
     using Math for uint256;
     using stdJson for string;
 
     uint256 public privateKey;
     PriceRouter public priceRouter;
     address public weEthExtensionAddress;
+    address public pendleExtension;
 
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    uint256 expectedWeEthPriceInUsd8Decimals = 4_087e8;
-    uint256 expectedEEthPriceInUsd8Decimals = 3_869e8;
-    uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_883e8;
-    uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_883e8;
-    uint256 lpPrice = 7_413e8;
-    uint256 ptPrice = 3_497e8;
-    uint256 ytPrice = 179e8;
+    uint256 lpPrice = 6_662e8;
+    uint256 ptPrice = 3_113e8;
+    uint256 ytPrice = 201e8;
+    uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_403e8;
+    uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_347e8;
 
     address public devOwner = 0x59bAE9c3d121152B27A2B5a46bD917574Ca18142;
     Registry public registry = Registry(0x37912f4c0F0d916890eBD755BF6d1f0A0e059BbD);
-    address public balancerStablePoolExtension = 0xf504B437ed0b8ae134D78D8315308eB6Ce0e79F6;
-    address public pendleExtension = 0x8279BE9F54b514d81E3fD23da149e8fBB788e9cf;
+    address public balancerStablePoolExtension;
 
     function setUp() external {
         privateKey = vm.envUint("SEVEN_SEAS_PRIVATE_KEY");
@@ -59,6 +57,8 @@ contract SetUpArchitectureScript is Script, MainnetAddresses {
 
         // Deploy Pricing Extensions.
         weEthExtensionAddress = address(new weEthExtension(priceRouter));
+        pendleExtension = address(new PendleExtension(priceRouter, pendleOracle));
+        balancerStablePoolExtension = address(new BalancerStablePoolExtension(priceRouter, IVault(vault)));
 
         // Add pricing.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
