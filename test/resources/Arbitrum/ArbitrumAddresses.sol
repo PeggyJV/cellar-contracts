@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { CErc20 } from "src/interfaces/external/ICompound.sol";
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {CErc20} from "src/interfaces/external/ICompound.sol";
 
 contract ArbitrumAddresses {
     // Sommelier
@@ -43,6 +43,7 @@ contract ArbitrumAddresses {
     ERC20 public CRV = ERC20(0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978);
     ERC20 public FRXETH = ERC20(0x178412e79c25968a32e89b11f63B33F733770c2A);
     ERC20 public ARB = ERC20(0x912CE59144191C1204E64559FE8253a0e49E6548);
+    ERC20 public WEETH = ERC20(0x35751007a407ca6FEFfE80b3cB397736D2cf4dbe);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612;
@@ -63,6 +64,7 @@ contract ArbitrumAddresses {
     address public ARB_USD_FEED = 0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6;
     address public LINK_USD_FEED = 0x86E53CF1B870786351Da77A57575e79CB55812CB;
     address public LINK_ETH_FEED = 0xb7c8Fb1dB45007F98A68Da0588e1AA524C317f27;
+    address public WEETH_ETH_FEED = 0x20bAe7e1De9c596f5F7615aeaa1342Ba99294e12;
 
     // Aave V3 Tokens
     ERC20 public aV3USDC = ERC20(0x724dc807b04555b71ed48a6896b6F41593b8C637);
@@ -107,4 +109,14 @@ contract ArbitrumAddresses {
     // Uniswap V3
 
     // Redstone
+
+    // Pendle
+    address public pendleMarketFactory = 0x2FCb47B58350cD377f94d3821e7373Df60bD9Ced;
+    address public pendleRouter = 0x00000000005BBB0EF59571E58418F9a4357b68A0;
+    address public pendleOracle = 0x1Fd95db7B7C0067De8D45C0cb35D59796adfD187;
+
+    address public pendleWeETHMarket = 0xE11f9786B06438456b044B3E21712228ADcAA0D1;
+    address public pendleWeethSy = 0xa6C895EB332E91c5b3D00B7baeEAae478cc502DA;
+    address public pendleEethPt = 0x9bEcd6b4Fb076348A455518aea23d3799361FE95;
+    address public pendleEethYt = 0xF28Db483773E3616DA91FDfa7b5D4090Ac40cC59;
 }

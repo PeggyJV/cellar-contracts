@@ -10,3 +10,4 @@ ds-test/=lib/forge-std/lib/ds-test/src/
 @uniswapV3C=lib/v3-core/contracts/
 @balancer=lib/balancer-v2-monorepo/pkg
 @ccip=lib/ccip/
+@pendle=lib/pendle-core-v2-public/

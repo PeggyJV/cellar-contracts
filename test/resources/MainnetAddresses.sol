@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { CErc20 } from "src/interfaces/external/ICompound.sol";
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {CErc20} from "src/interfaces/external/ICompound.sol";
 
 contract MainnetAddresses {
     // Sommelier
@@ -159,6 +159,8 @@ contract MainnetAddresses {
     ERC20 public bb_a_USDT_BPT = ERC20(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
     ERC20 public aura_rETH_wETH_BPT = ERC20(0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D);
     ERC20 public GHO_bb_a_USD_BPT = ERC20(0xc2B021133D1b0cF07dba696fd5DD89338428225B);
+    ERC20 public wEth_weETH_bpt = ERC20(0xb9dEbDDF1d894c79D2B2d09f819FF9B856FCa552);
+    ERC20 public rETH_weETH_bpt = ERC20(0x05ff47AFADa98a98982113758878F9A8B9FddA0a);
 
     // Rate Providers
     address public cbethRateProvider = 0x7311E4BB8a72e7B300c5B8BDE4de6CdaA822a5b1;
@@ -345,4 +347,16 @@ contract MainnetAddresses {
 
     // 0x
     address public zeroXTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+
+    // Pendle
+    address public pendleMarketFactory = 0x1A6fCc85557BC4fB7B534ed835a03EF056552D52;
+    address public pendleRouter = 0x00000000005BBB0EF59571E58418F9a4357b68A0;
+    address public pendleOracle = 0x66a1096C6366b2529274dF4f5D8247827fe4CEA8;
+
+    address public pendleWeETHMarket = 0xF32e58F92e60f4b0A37A69b95d642A471365EAe8;
+    address public pendleWeethSy = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPt = 0xc69Ad9baB1dEE23F4605a82b3354F8E40d1E5966;
+    address public pendleEethYt = 0xfb35Fd0095dD1096b1Ca49AD44d8C5812A201677;
+
+    address public pendleSwethMarket = 0x0e1C5509B503358eA1Dac119C1D413e28Cc4b303;
 }
