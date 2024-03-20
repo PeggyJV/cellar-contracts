@@ -67,7 +67,7 @@ contract ProposeOnLongTimelockScript is Script, MainnetAddresses, ContractDeploy
     using stdJson for string;
 
     uint256 public privateKey;
-    TimelockController private longTimelock = TimelockController(address(0));
+    TimelockController private longTimelock = TimelockController(payable(address(0)));
 
     function setUp() external {
         privateKey = vm.envUint("SEVEN_SEAS_PRIVATE_KEY");
