@@ -35,11 +35,11 @@ contract PeggedPriceRouterScript is Script, MainnetAddresses {
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    uint256 lpPrice = 6_662e8;
-    uint256 ptPrice = 3_113e8;
-    uint256 ytPrice = 201e8;
-    uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_403e8;
-    uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_347e8;
+    uint256 lpPrice = 7_062e8;
+    uint256 ptPrice = 3_295e8;
+    uint256 ytPrice = 224e8;
+    uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_613e8;
+    uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_553e8;
 
     address public devOwner = 0x59bAE9c3d121152B27A2B5a46bD917574Ca18142;
     Registry public registry = Registry(0x37912f4c0F0d916890eBD755BF6d1f0A0e059BbD);
