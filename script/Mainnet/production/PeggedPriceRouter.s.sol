@@ -19,7 +19,7 @@ import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
 
 /**
- *  source .env && forge script script/Mainnet/production/PeggedPriceRouter.s.sol:PeggedPriceRouterScript --with-gas-price 30000000000 --slow --broadcast --etherscan-api-key $MAINNET_RPC_URL --verify
+ *  source .env && forge script script/Mainnet/production/PeggedPriceRouter.s.sol:PeggedPriceRouterScript --with-gas-price 30000000000 --slow --broadcast --etherscan-api-key $ETHERSCAN_API_KEY --verify
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract PeggedPriceRouterScript is Script, MainnetAddresses {
