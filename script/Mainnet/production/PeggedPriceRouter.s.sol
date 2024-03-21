@@ -27,9 +27,9 @@ contract PeggedPriceRouterScript is Script, MainnetAddresses {
     using stdJson for string;
 
     uint256 public privateKey;
-    PriceRouter public priceRouter;
-    address public weEthExtensionAddress;
-    address public pendleExtension;
+    PriceRouter public priceRouter = PriceRouter(0x693799805B502264f9365440B93C113D86a4fFF5);
+    address public weEthExtensionAddress = 0x78E59309bA2779A5D3522E965Fe9Be2790Fd7535;
+    address public pendleExtension = 0x7D43A81e32A2c69e0b8457C815E811Ebe8463E56;
 
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
     uint8 public constant TWAP_DERIVATIVE = 2;
@@ -37,13 +37,13 @@ contract PeggedPriceRouterScript is Script, MainnetAddresses {
 
     uint256 lpPrice = 7_062e8;
     uint256 ptPrice = 3_295e8;
-    uint256 ytPrice = 224e8;
+    uint256 ytPrice = 241e8;
     uint256 currentPriceOfOneWethWeethBptWith8Decimals = 3_613e8;
     uint256 currentPriceOfOneRethWeethBptWith8Decimals = 3_553e8;
 
     address public devOwner = 0x59bAE9c3d121152B27A2B5a46bD917574Ca18142;
     Registry public registry = Registry(0x37912f4c0F0d916890eBD755BF6d1f0A0e059BbD);
-    address public balancerStablePoolExtension;
+    address public balancerStablePoolExtension = 0x7EdBa5c3796f47f6b6263eD307206ED2496Bd79C;
 
     function setUp() external {
         privateKey = vm.envUint("SEVEN_SEAS_PRIVATE_KEY");
@@ -53,53 +53,12 @@ contract PeggedPriceRouterScript is Script, MainnetAddresses {
         vm.createSelectFork("mainnet");
         vm.startBroadcast(privateKey);
         // Deploy Price Router
-        priceRouter = new PriceRouter(devOwner, registry, WETH);
-
-        // Deploy Pricing Extensions.
-        weEthExtensionAddress = address(new weEthExtension(priceRouter));
-        pendleExtension = address(new PendleExtension(priceRouter, pendleOracle));
-        balancerStablePoolExtension = address(new BalancerStablePoolExtension(priceRouter, IVault(vault)));
-
         // Add pricing.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
-
-        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        priceRouter.addAsset(EETH, settings, abi.encode(stor), price);
-
-        stor.inETH = true;
-        price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
-        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
-        priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
-
-        price = priceRouter.getPriceInUSD(WETH); // 8 decimals
-
-        // Add weETH.
-        uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
-
-        price = price.mulDivDown(weEthToEEthConversion, 10 ** WEETH.decimals());
-
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, weEthExtensionAddress);
-        priceRouter.addAsset(WEETH, settings, hex"", price);
-
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, pendleExtension);
         PendleExtension.ExtensionStorage memory pstor =
-            PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.LP, pendleWeETHMarket, 300, EETH);
-        priceRouter.addAsset(ERC20(pendleWeETHMarket), settings, abi.encode(pstor), lpPrice);
-
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.SY, pendleWeETHMarket, 300, EETH);
-        priceRouter.addAsset(ERC20(pendleWeethSy), settings, abi.encode(pstor), priceRouter.getPriceInUSD(WEETH));
-
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.PT, pendleWeETHMarket, 300, EETH);
-        priceRouter.addAsset(ERC20(pendleEethPt), settings, abi.encode(pstor), ptPrice);
-
-        pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.YT, pendleWeETHMarket, 300, EETH);
+            PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.YT, pendleWeETHMarket, 300, EETH);
         priceRouter.addAsset(ERC20(pendleEethYt), settings, abi.encode(pstor), ytPrice);
 
         BalancerStablePoolExtension.ExtensionStorage memory bstor;
