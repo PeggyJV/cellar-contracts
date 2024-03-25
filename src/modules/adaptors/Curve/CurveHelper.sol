@@ -343,10 +343,10 @@ contract CurveHelper {
         }
 
         return
-            abi.encodePacked(
+            abi.encodeWithSelector(
                 _curveRemoveLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlyings, fixedOrDynamic),
                 lpTokenAmount,
-                abi.encodePacked(orderedTokenAmounts),
+                orderedTokenAmounts,
                 finalEncodedArgOrEmpty,
                 fixedOrDynamic
             );

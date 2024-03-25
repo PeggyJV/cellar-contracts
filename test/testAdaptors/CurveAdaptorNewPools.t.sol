@@ -287,10 +287,12 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
     }
 
     // eethEth
-    function testManagingLiquidityInDynamicArrayPoolWithETH() external {
+    function testManagingLiquidityInDynamicArrayPool3() external {
         // assets = bound(assets, 1e6, 1_000_000e6);
         uint256 assets = 1e6;
-        _manageLiquidityIn2PoolDynamicArrayWithETH(
+
+        // // NOTE: even though pool is named with eth, it is weth based!
+        _manageLiquidityIn2PoolDynamicArraysNoETH(
             assets,
             EethEthPool,
             EethEthToken,
@@ -510,6 +512,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 assets = priceRouter.getValue(USDC, assets, coins0);
                 if (coins0 == STETH) _takeSteth(assets, address(cellar));
                 else if (coins0 == OETH) _takeOeth(assets, address(cellar));
+                else if (coins0 == EETH) _takeEETH(assets, address(cellar));
                 else deal(address(coins0), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -559,9 +562,12 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
             orderedTokenAmounts[1] = coins1Amount;
             if (coins0 == STETH) _takeSteth(assets / 4, address(cellar));
             else if (coins0 == OETH) _takeOeth(assets / 4, address(cellar));
+            else if (coins0 == EETH) _takeEETH(assets / 4, address(cellar));
             else deal(address(coins0), address(cellar), assets / 4);
             if (coins1 == STETH) _takeSteth(coins1Amount, address(cellar));
             else if (coins1 == OETH) _takeOeth(coins1Amount, address(cellar));
+            else if (coins1 == EETH) _takeEETH(coins1Amount, address(cellar));
+
             else deal(address(coins1), address(cellar), coins1Amount);
         }
         {
@@ -597,6 +603,8 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
         balanceDelta[0] = coins0.balanceOf(address(cellar));
         balanceDelta[1] = coins1.balanceOf(address(cellar));
 
+
+        if (gauge != address(0)) {
         // Strategist stakes LP.
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -648,6 +656,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
         }
+    }
 
         // TODO assertGt(CRV.balanceOf(address(cellar)), 0, "Cellar should have recieved CRV rewards.");
 
@@ -704,6 +713,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 assets = priceRouter.getValue(USDC, assets, coins[0]);
                 if (coins[0] == STETH) _takeSteth(assets, address(cellar));
                 else if (coins[0] == OETH) _takeOeth(assets, address(cellar));
+                else if (coins[0] == EETH) _takeEETH(assets, address(cellar));
                 else deal(address(coins[0]), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -757,9 +767,11 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
             orderedTokenAmounts[1] = coins1Amount;
             if (coins[0] == STETH) _takeSteth(assets / 4, address(cellar));
             else if (coins[0] == OETH) _takeOeth(assets / 4, address(cellar));
+            else if (coins[0] == EETH) _takeEETH(assets / 4, address(cellar));
             else deal(address(coins[0]), address(cellar), assets / 4);
             if (coins[1] == STETH) _takeSteth(coins1Amount, address(cellar));
             else if (coins[1] == OETH) _takeOeth(coins1Amount, address(cellar));
+            else if (coins[1] == EETH) _takeEETH(assets / 4, address(cellar));
             else deal(address(coins[1]), address(cellar), coins1Amount);
         }
         {
@@ -919,6 +931,7 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
                 assets = priceRouter.getValue(USDC, assets, coins[0]);
                 if (coins[0] == STETH) _takeSteth(assets, address(cellar));
                 else if (coins[0] == OETH) _takeOeth(assets, address(cellar));
+                else if (coins[0] == EETH) _takeEETH(assets, address(cellar));
                 else deal(address(coins[0]), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -1019,6 +1032,13 @@ contract CurveAdaptorNewPoolsTest is MainnetStarterTest, AdaptorHelperFunctions 
         address oethWhale = 0xEADB3840596cabF312F2bC88A4Bb0b93A4E1FF5F;
         vm.prank(oethWhale);
         OETH.safeTransfer(to, amount);
+    }
+
+    function _takeEETH(uint256 amount, address to) internal {
+        // EETH does not work with DEAL, so steal EETH from a whale.
+        address eethWhale = 0x22162DbBa43fE0477cdC5234E248264eC7C6EA7c;
+        vm.prank(eethWhale);
+        EETH.safeTransfer(to, amount);
     }
 
     function _skip(uint256 time) internal {
