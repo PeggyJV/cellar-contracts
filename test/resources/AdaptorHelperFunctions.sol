@@ -557,6 +557,14 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(ERC4626Adaptor.depositToVault.selector, vault, assets);
     }
 
+    function _createBytesDataToWithdrawFromERC4626Vault(address vault, uint256 assets)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(ERC4626Adaptor.withdrawFromVault.selector, vault, assets);
+    }
+
     // ========================================= FraxLendV2 COLLATERAL FUNCTIONS =========================================
 
     function _createBytesDataToAddCollateralWithFraxlendV2(address _fraxlendPair, uint256 _collateralToDeposit)
