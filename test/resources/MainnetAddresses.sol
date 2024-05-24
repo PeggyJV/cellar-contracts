@@ -358,5 +358,15 @@ contract MainnetAddresses {
     address public pendleEethPt = 0xc69Ad9baB1dEE23F4605a82b3354F8E40d1E5966;
     address public pendleEethYt = 0xfb35Fd0095dD1096b1Ca49AD44d8C5812A201677;
 
+    address public pendleWeETHMarketSeptember = 0xC8eDd52D0502Aa8b4D5C77361D4B3D300e8fC81c;
+    address public pendleWeethSySeptember = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPtSeptember = 0x1c085195437738d73d75DC64bC5A3E098b7f93b1;
+    address public pendleEethYtSeptember = 0xA54Df645A042D24121a737dAA89a57EbF8E0b71c;
+
+    address public pendleWeETHMarketDecember = 0x7d372819240D14fB477f17b964f95F33BeB4c704;
+    address public pendleWeethSyDecember = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPtDecember = 0x6ee2b5E19ECBa773a352E5B21415Dc419A700d1d;
+    address public pendleEethYtDecember = 0x129e6B5DBC0Ecc12F9e486C5BC9cDF1a6A80bc6A;
+
     address public pendleSwethMarket = 0x0e1C5509B503358eA1Dac119C1D413e28Cc4b303;
 }
