@@ -131,6 +131,14 @@ contract AddPendleAssetsScript is Script, MainnetAddresses, ContractDeploymentNa
         pstor = PendleExtension.ExtensionStorage(PendleExtension.PendleAsset.YT, pendleWeETHMarketDecember, 300, EETH);
         priceRouter.addAsset(ERC20(pendleEethYtDecember), settings, abi.encode(pstor), ytDecemberPrice);
 
+        // Also add aweETH to price router.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        stor.inETH = true;
+
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WEETH_ETH_FEED);
+        uint256 weEthPrice = priceRouter.getPriceInUSD(WEETH);
+        priceRouter.addAsset(aV3WeETH, settings, abi.encode(stor), weEthPrice);
+
         // Add Pendle positions
         // registry.trustPosition(15, address(erc20Adaptor), abi.encode(pendleWeETHMarket));
         // registry.trustPosition(16, address(erc20Adaptor), abi.encode(pendleWeethSy));
