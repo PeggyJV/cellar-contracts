@@ -54,7 +54,7 @@ contract PeggedPriceRouterScript is Script, MainnetAddresses {
         vm.startBroadcast(privateKey);
         // Deploy Price Router
         // Add pricing.
-        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        // PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
 
         PendleExtension.ExtensionStorage memory pstor =

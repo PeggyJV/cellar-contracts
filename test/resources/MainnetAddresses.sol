@@ -91,6 +91,7 @@ contract MainnetAddresses {
     address public CVX_ETH_FEED = 0xC9CbF687f43176B302F03f5e58470b77D07c61c6;
     address public CRVUSD_USD_FEED = 0xEEf0C605546958c1f899b6fB336C20671f9cD49F;
     address public LINK_USD_FEED = 0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c;
+    address public WEETH_ETH_FEED = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -118,6 +119,7 @@ contract MainnetAddresses {
     ERC20 public aV3sDAI = ERC20(0x4C612E3B15b96Ff9A6faED838F8d07d479a8dD4c);
     ERC20 public aV3CrvUsd = ERC20(0xb82fa9f31612989525992FCfBB09AB22Eff5c85A);
     ERC20 public dV3CrvUsd = ERC20(0x028f7886F3e937f8479efaD64f31B3fE1119857a);
+    ERC20 public aV3WeETH = ERC20(0xBdfa7b7893081B35Fb54027489e2Bc7A38275129);
 
     // Balancer V2 Addresses
     ERC20 public BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
@@ -357,6 +359,16 @@ contract MainnetAddresses {
     address public pendleWeethSy = 0xAC0047886a985071476a1186bE89222659970d65;
     address public pendleEethPt = 0xc69Ad9baB1dEE23F4605a82b3354F8E40d1E5966;
     address public pendleEethYt = 0xfb35Fd0095dD1096b1Ca49AD44d8C5812A201677;
+
+    address public pendleWeETHMarketSeptember = 0xC8eDd52D0502Aa8b4D5C77361D4B3D300e8fC81c;
+    address public pendleWeethSySeptember = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPtSeptember = 0x1c085195437738d73d75DC64bC5A3E098b7f93b1;
+    address public pendleEethYtSeptember = 0xA54Df645A042D24121a737dAA89a57EbF8E0b71c;
+
+    address public pendleWeETHMarketDecember = 0x7d372819240D14fB477f17b964f95F33BeB4c704;
+    address public pendleWeethSyDecember = 0xAC0047886a985071476a1186bE89222659970d65;
+    address public pendleEethPtDecember = 0x6ee2b5E19ECBa773a352E5B21415Dc419A700d1d;
+    address public pendleEethYtDecember = 0x129e6B5DBC0Ecc12F9e486C5BC9cDF1a6A80bc6A;
 
     address public pendleSwethMarket = 0x0e1C5509B503358eA1Dac119C1D413e28Cc4b303;
 }

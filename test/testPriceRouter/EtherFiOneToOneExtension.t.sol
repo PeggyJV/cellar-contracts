@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import {weEthExtension} from "src/modules/price-router/Extensions/EtherFi/weETHExtension.sol";
+import {weEthExtension} from "src/modules/price-router/Extensions/EtherFi/weEthExtension.sol";
 import {AdaptorHelperFunctions} from "test/resources/AdaptorHelperFunctions.sol";
 import {RedstonePriceFeedExtension} from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
 import {IRedstoneAdapter} from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";

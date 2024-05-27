@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { eEthExtension } from "src/modules/price-router/Extensions/EtherFi/eETHExtension.sol";
-import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
-import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
-import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
-import { IRateProvider } from "src/interfaces/external/EtherFi/IRateProvider.sol";
+import {eEthExtension} from "src/modules/price-router/Extensions/EtherFi/eEthExtension.sol";
+import {AdaptorHelperFunctions} from "test/resources/AdaptorHelperFunctions.sol";
+import {RedstonePriceFeedExtension} from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
+import {IRedstoneAdapter} from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
+import {IRateProvider} from "src/interfaces/external/EtherFi/IRateProvider.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -42,17 +42,14 @@ contract eEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Add eETH.
         uint256 weEthToEEthConversion = IRateProvider(address(WEETH)).getRate(); // [weETH / eETH]
 
-        price = price.mulDivDown(
-                10 ** weETH.decimals(),
-                IRateProvider(address(WEETH)).getRate()
-            );
+        price = price.mulDivDown(10 ** weETH.decimals(), IRateProvider(address(WEETH)).getRate());
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(eethExtension));
         priceRouter.addAsset(EETH, settings, abi.encode(0), price);
 
         // check getValue()
         assertApproxEqRel(
-            priceRouter.getValue(WEETH, 1e18, EETH), 
+            priceRouter.getValue(WEETH, 1e18, EETH),
             weEthToEEthConversion,
             1e8,
             "WEETH value in EETH should approx equal conversion."
