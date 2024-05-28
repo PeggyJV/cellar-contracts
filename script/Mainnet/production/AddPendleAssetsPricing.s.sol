@@ -85,13 +85,13 @@ contract AddPendleAssetsScript is Script, MainnetAddresses, ContractDeploymentNa
     uint8 public constant SHORT_TIMELOCK_ROLE = 2;
 
     address public jointMultisig = address(0);
-    uint256 lpSeptemberPrice = 7_420e8;
-    uint256 ptSeptemberPrice = 3_592e8;
-    uint256 ytSeptemberPrice = 142e8;
+    uint256 lpSeptemberPrice = 7_735e8;
+    uint256 ptSeptemberPrice = 3_728e8;
+    uint256 ytSeptemberPrice = 157e8;
 
-    uint256 lpDecemberPrice = 7_171e8;
-    uint256 ptDecemberPrice = 3_411e8;
-    uint256 ytDecemberPrice = 323e8;
+    uint256 lpDecemberPrice = 7_479e8;
+    uint256 ptDecemberPrice = 3_590e8;
+    uint256 ytDecemberPrice = 295e8;
 
     address public devOwner = 0x2322ba43eFF1542b6A7bAeD35e66099Ea0d12Bd1;
 
@@ -140,10 +140,12 @@ contract AddPendleAssetsScript is Script, MainnetAddresses, ContractDeploymentNa
         priceRouter.addAsset(aV3WeETH, settings, abi.encode(stor), weEthPrice);
 
         // Add Pendle positions
-        // registry.trustPosition(15, address(erc20Adaptor), abi.encode(pendleWeETHMarket));
-        // registry.trustPosition(16, address(erc20Adaptor), abi.encode(pendleWeethSy));
-        // registry.trustPosition(17, address(erc20Adaptor), abi.encode(pendleEethPt));
-        // registry.trustPosition(18, address(erc20Adaptor), abi.encode(pendleEethYt));
+        // registry.trustPosition(34, address(erc20Adaptor), abi.encode(pendleWeETHMarketSeptember));
+        // registry.trustPosition(35, address(erc20Adaptor), abi.encode(pendleEethPtSeptember));
+        // registry.trustPosition(36, address(erc20Adaptor), abi.encode(pendleEethYtSeptember));
+        // registry.trustPosition(37, address(erc20Adaptor), abi.encode(pendleWeETHMarketDecember));
+        // registry.trustPosition(38, address(erc20Adaptor), abi.encode(pendleEethPtDecember));
+        // registry.trustPosition(39, address(erc20Adaptor), abi.encode(pendleEethYtDecember));
 
         vm.stopBroadcast();
     }
