@@ -371,4 +371,7 @@ contract MainnetAddresses {
     address public pendleEethYtDecember = 0x129e6B5DBC0Ecc12F9e486C5BC9cDF1a6A80bc6A;
 
     address public pendleSwethMarket = 0x0e1C5509B503358eA1Dac119C1D413e28Cc4b303;
+
+    // Swell Simple Staking
+    address public swellSimpleStaking = 0x38D43a6Cb8DA0E855A42fB6b0733A0498531d774;
 }

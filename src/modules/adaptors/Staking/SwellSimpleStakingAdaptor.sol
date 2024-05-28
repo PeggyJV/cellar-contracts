@@ -131,7 +131,8 @@ contract SwellSimpleStakingAdaptor is BaseAdaptor {
      *      this is safe to do since the SwellSimpleStaking contract is immutable,
      *      so we know the Cellar is interacting with a safe contract.
      */
-    function deposit(ERC20 token, uint256 amount) external {
+    function depositIntoSimpleStaking(ERC20 token, uint256 amount) external {
+        amount = _maxAvailable(token, amount);
         token.safeApprove(address(swellSimpleStaking), amount);
         swellSimpleStaking.deposit(address(token), amount, address(this));
 
@@ -145,7 +146,10 @@ contract SwellSimpleStakingAdaptor is BaseAdaptor {
      *      this is safe to do since the SwellSimpleStaking contract is immutable,
      *      so we know the Cellar is interacting with a safe contract.
      */
-    function withdraw(ERC20 token, uint256 amount) external {
+    function withdrawFromSimpleStaking(ERC20 token, uint256 amount) external {
+        if (amount == type(uint256).max) {
+            amount = swellSimpleStaking.stakedBalances(address(this), address(token));
+        }
         swellSimpleStaking.withdraw(address(token), amount, address(this));
     }
 }
