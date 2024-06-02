@@ -46,7 +46,7 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
 // Curve
-import { CurveAdaptor, CurvePool } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
+import { CurveAdaptor, CurvePool, CurveHelper } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
@@ -650,7 +650,9 @@ contract AdaptorHelperFunctions {
         uint256[] memory orderedTokenAmounts,
         uint256 minLPAmount,
         address gauge,
-        bytes4 selector
+        bytes4 selector,
+        CurveHelper.FixedOrDynamic fixedOrDynamic
+
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -660,7 +662,8 @@ contract AdaptorHelperFunctions {
                 orderedTokenAmounts,
                 minLPAmount,
                 gauge,
-                selector
+                selector,
+                fixedOrDynamic
             );
     }
 
@@ -671,7 +674,9 @@ contract AdaptorHelperFunctions {
         uint256 minLPAmount,
         bool useUnderlying,
         address gauge,
-        bytes4 selector
+        bytes4 selector,
+        CurveHelper.FixedOrDynamic fixedOrDynamic
+
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -682,7 +687,8 @@ contract AdaptorHelperFunctions {
                 minLPAmount,
                 useUnderlying,
                 gauge,
-                selector
+                selector,
+                fixedOrDynamic
             );
     }
 
@@ -692,7 +698,9 @@ contract AdaptorHelperFunctions {
         uint256 lpTokenAmount,
         uint256[] memory orderedTokenAmountsOut,
         address gauge,
-        bytes4 selector
+        bytes4 selector,
+        CurveHelper.FixedOrDynamic fixedOrDynamic
+
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -702,7 +710,8 @@ contract AdaptorHelperFunctions {
                 lpTokenAmount,
                 orderedTokenAmountsOut,
                 gauge,
-                selector
+                selector,
+                fixedOrDynamic
             );
     }
 
@@ -713,7 +722,9 @@ contract AdaptorHelperFunctions {
         uint256[] memory orderedTokenAmountsOut,
         bool useUnderlying,
         address gauge,
-        bytes4 selector
+        bytes4 selector,
+                CurveHelper.FixedOrDynamic fixedOrDynamic
+
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
@@ -724,7 +735,8 @@ contract AdaptorHelperFunctions {
                 orderedTokenAmountsOut,
                 useUnderlying,
                 gauge,
-                selector
+                selector,
+                fixedOrDynamic
             );
     }
 
