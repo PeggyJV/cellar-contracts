@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { CErc20 } from "src/interfaces/external/ICompound.sol";
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {CErc20} from "src/interfaces/external/ICompound.sol";
 
 contract ArbitrumAddresses {
     // Sommelier
@@ -43,6 +43,11 @@ contract ArbitrumAddresses {
     ERC20 public CRV = ERC20(0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978);
     ERC20 public FRXETH = ERC20(0x178412e79c25968a32e89b11f63B33F733770c2A);
     ERC20 public ARB = ERC20(0x912CE59144191C1204E64559FE8253a0e49E6548);
+    ERC20 public WEETH = ERC20(0x35751007a407ca6FEFfE80b3cB397736D2cf4dbe);
+    ERC20 public AXL_SOMM = ERC20(0x4e914bbDCDE0f455A8aC9d59d3bF739c46287Ed2);
+    address public WSTETH_EXCHANGE_RATE_FEED = 0xB1552C5e96B312d0Bf8b554186F846C40614a540;
+    address public RETH_EXCHANGE_RATE_FEED = 0xF3272CAfe65b190e76caAF483db13424a3e23dD2;
+    address public ARB_SEQUENCER_UPTIME_FEED = 0xFdB631F5EE196F0ed6FAa767959853A9F217697D;
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612;
@@ -63,6 +68,7 @@ contract ArbitrumAddresses {
     address public ARB_USD_FEED = 0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6;
     address public LINK_USD_FEED = 0x86E53CF1B870786351Da77A57575e79CB55812CB;
     address public LINK_ETH_FEED = 0xb7c8Fb1dB45007F98A68Da0588e1AA524C317f27;
+    address public WEETH_ETH_FEED = 0x20bAe7e1De9c596f5F7615aeaa1342Ba99294e12;
 
     // Aave V3 Tokens
     ERC20 public aV3USDC = ERC20(0x724dc807b04555b71ed48a6896b6F41593b8C637);
@@ -107,4 +113,33 @@ contract ArbitrumAddresses {
     // Uniswap V3
 
     // Redstone
+
+    // Pendle
+    address public pendleMarketFactory = 0x2FCb47B58350cD377f94d3821e7373Df60bD9Ced;
+    address public pendleRouter = 0x00000000005BBB0EF59571E58418F9a4357b68A0;
+    address public pendleOracle = 0x1Fd95db7B7C0067De8D45C0cb35D59796adfD187;
+
+    address public pendleWeETHMarket = 0xE11f9786B06438456b044B3E21712228ADcAA0D1;
+    address public pendleWeethSy = 0xa6C895EB332E91c5b3D00B7baeEAae478cc502DA;
+    address public pendleEethPt = 0x9bEcd6b4Fb076348A455518aea23d3799361FE95;
+    address public pendleEethYt = 0xF28Db483773E3616DA91FDfa7b5D4090Ac40cC59;
+
+    // Uniswap V3
+    address public uniswapV3PositionManager = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
+    address public uniswapV3Factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+
+    // Aave
+    address public aaveV3Pool = 0x794a61358D6845594F94dc1DB02A252b5b4814aD;
+    address public aaveV3Oracle = 0xb56c2F0B653B2e0b10C9b928C8580Ac5Df02C7C7;
+
+    // 1Inch
+    address public oneInchTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
+
+    // 0x
+    address public zeroXTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+
+    // Compound V3
+    address public compoundV3UsdcComet = 0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf;
+    address public compoundV3UsdceComet = 0xA5EDBDD9646f8dFF606d7448e414884C7d905dCA;
+    address public compoundV3Rewards = 0x88730d254A2f7e6AC8388c3198aFd694bA9f7fae;
 }
