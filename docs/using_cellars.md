@@ -73,3 +73,8 @@ bytes memory holdingPositionConfig,
 uint256 initialDeposit,
 uint64 platformCut
 ```
+
+### Configuring the Price Router
+
+
+###
