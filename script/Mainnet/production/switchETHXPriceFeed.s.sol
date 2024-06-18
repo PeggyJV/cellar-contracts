@@ -33,7 +33,10 @@ contract swithEthXPriceFeed is Script, MainnetAddresses {
 
         //Start EDIT asset
 
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, ETHX_USD_FEED);
+        PriceRouter.AssetSettings memory settings;
+
+
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, ETHX_ETH_FEED);
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         stor.inETH = true;
 
