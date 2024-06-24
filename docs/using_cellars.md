@@ -74,7 +74,42 @@ uint256 initialDeposit,
 uint64 platformCut
 ```
 
+### Deploying the Registry
+
+The Registry is a critical trust boundary in the security of the Cellar architecture. It enables a multsig to manage the adapters and positions that the cellar will use. This acts as a check and balance on Sommelier governance.
+
+``` solidity
+
+creationCode = type(Registry).creationCode;
+constructorArgs = abi.encode(dev0Address, dev0Address, address(0), address(0));
+registry = Registry(deployer.deployContract(registryName, creationCode, constructorArgs, 0));
+```
+
+Then deploy an adapter.
+
+``` solidity
+
+// Deploy SwapWithUniswapAdaptor.
+creationCode = type(SwapWithUniswapAdaptor).creationCode;
+constructorArgs = abi.encode(uniV2Router, uniV3Router);
+swapWithUniswapAdaptor = deployer.deployContract(swapWithUniswapAdaptorName, creationCode, constructorArgs, 0);
+```
+
+Then register the adapter with the registry.
+
+``` solidity
+registry.trustAdaptor(swapWithUniswapAdaptor);
+```
+
+
 ### Configuring the Price Router
+
+The price router needs to be configured with the price oracles that the cellar will use to price assets. The price router is a contract that is generally managed by a timelock multisig and is used to get the price of assets in the cellar. The price router is used to price the shares of the cellar when deposits and withdrawals are made. The one instance of the price router can be shared by multiple cellars operated by the same strategist.
+
+The price router should be deployed on any chain where the cellar will operate. If deploying on an L1 chain, the base price router should be deployed. If deploying on an L2 chain, the Sequencer Price Router should be deployed. The Sequencer Price Router is aware of liveness failures in the sequencer and can operate accordinly in the case of a sequencer halt.
+
+
+
 
 
 ###
