@@ -20,4 +20,20 @@ The multiAssetDeposit functionality takes a fee on the deposit. This fee serves 
 
 The Strategist on a cellar can set all the supported asset with `setAlternativeAssetData`. The variable `alternativeAssetData` holds a map of ERC20 addresses to supported Alternative assets.
 
-## Withdrawls
+## Withdrawals
+
+### Basic Withdrawls
+All cellars posses a `redeem` and `withdraw` function. These functions are equivalent. This duplicate functionality is there to enable cellars to conform to the er4626 vault standard. The Cellar implementation overrides the default er4626 implentations. These functions are only able to withdraw liquidity from positions where the `_withdrawableFrom` value is greater than 0. Many adapters do not enable withdrawls. This has the effect of increasing security of the vault by reducing the surface for arbitrage attacks but it requires the strategist to interactively manage the vault for requests.
+
+### The Withdrawal Queue
+
+The withdrawal queue functionality is provided to enable user to place requests for withdrawl liquidity that are larger than current withdrawalable liquduity into a smart contract that the strategist can monitor and service requests from. The flow is a users who wishes to withdraw with call `maxRedeem` if the amount of shares they want to redeem is greater than `maxRedeem`. The user will called `updateWithdrawRequest` with the vault shares they want to redeem with appropiate metdata.
+
+```solidity
+struct WithdrawRequest {
+    uint64 deadline; // deadline to fulfill request
+    uint88 executionSharePrice; // In terms of asset decimals
+    uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
+    bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
+}
+```
