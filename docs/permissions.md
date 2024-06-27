@@ -7,7 +7,7 @@ The basic Cellar contract uses the Auth contract from solmate for permissioning.
 
 Sommelier chain has a complex permissioning system which can isolate calls to requiring either messagages from the strategist to the Sommelier validators which are typicallly executed in 1-5 min or calls that require a full 48-hour vote of the Sommelier token holders.
 
-One key thing to note is that Cellars often hold complex defi positions that are non trivial to unwind. Even if a Cellar is in the Shutdown state, there still needs to be a mechanism to execute trades that unwind the complex positions in an intelligent way.
+One key thing to note is that Cellars often hold complex defi positions that are non-trivial to unwind. Even if a Cellar is in the Shutdown state, there still needs to be a mechanism to execute trades that unwind the complex positions in an intelligent way.
 
 ## Registry
 
