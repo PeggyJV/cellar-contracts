@@ -33,8 +33,11 @@ contract switchEthXPriceFeed is Script, MainnetAddresses {
 
         //Complete EDIT asset
 
-        uint256 price = uint256(IChainlinkAggregator(ETHX_ETH_FEED).latestAnswer());
+        uint256 ethx_price = uint256(IChainlinkAggregator(ETHX_ETH_FEED).latestAnswer());
 
+        uint256 eth_price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+
+        uint256 price = ethx_price * eth_price/1e18;
 
         PriceRouter.AssetSettings memory settings;
 
