@@ -3,7 +3,7 @@
 
 ## Cellars
 
-The basic Cellar contract use the Auth contract from solmate from permissioning. A typical deployment transfers authorization to either Axelar Proxy Contract or the Sommelier Gravity contract that then manages the permissions for the Cellar.
+The basic Cellar contract uses the Auth contract from solmate for permissioning. A typical deployment transfers authorization to either Axelar Proxy Contract or the Sommelier Gravity contract that then manages the permissions for the Cellar.
 
 Sommelier chain has a complex permissioning system which can isolate calls to requiring either messagages from the strategist to the Sommelier validators which are typicallly executed in 1-5 min or calls that require a full 48-hour vote of the Sommelier token holders.
 
