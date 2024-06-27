@@ -5,7 +5,7 @@ Cellar contracts for the Sommelier Network.
 
 ### Documentation
 
-- [Contracts](./docs/cellar_ui.md) Building UI flows with Cellars
+- [UI guidelines](./docs/cellar_ui.md) Building UI flows with Cellars
 - [Permissions](./docs/permissions.md) Permissions in Cellars
 - [Using Cellars](./docs/using_cellars.md) Using the Cellars Smart Contracts as a strategist
 - [Fees](./docs/fees.md) How fees work for the strategist and the platform
