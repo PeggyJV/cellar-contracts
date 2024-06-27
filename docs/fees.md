@@ -47,3 +47,5 @@ Fees are storied in the metadata strct of the fees and reserves module. The mana
   ## Platform Fees
 
   When the strategist withdraw fees from the Cellar, the top level platform fee takes a cut for the Sommelier protocol. These fees are sent to the Sommelier chain via the gravity bridge on Ethereum mainnet and the Axelar on other chains. The fees are then auctioned to generate staking rewards.
+
+  It's expected that Strategists will collect fees every two weeks and trigger auctions on the Somm chain periodically.
