@@ -11,7 +11,7 @@ One key thing to note is that Cellars often hold complex defi positions that are
 
 ## Registry
 
-The Registry contract is typically managed by the a multisig (Gnosis Safe). The registry is a contract that holds the addresses of all the adapters that the Cellar will use. The ability to trust and distrust a postion further regulates the behavior of the Cellar. Typically adding a new adapter to the cellar requires both the multisig on the Registry and Sommelier governance to approve the change. The Registry makes it so the Cellar will trust the new adapter and Sommelier governance makes the new adapter callable by the strategist.
+The Registry contract is typically managed by a multisig (Gnosis Safe). The registry is a contract that holds the addresses of all the adapters that the Cellar will use. Typically, adding a new adapter to the cellar requires both the multisig on the Registry and Sommelier governance to approve the change. The Registry makes it so the Cellar will trust the new adapter, and Sommelier governance makes the new adapter callable by the strategist.
 
 ## PriceRouter
 
