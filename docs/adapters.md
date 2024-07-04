@@ -6,7 +6,7 @@ We have an established catalogue of adapters that can be used to integrate with 
 
 ## Aave
 
-Thare are adapters for both Aave V2 and V3.
+There are adapters for both Aave V2 and V3.
 
 The adapters support both despoting assets and borrowing assets.
 
