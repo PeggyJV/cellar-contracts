@@ -2,7 +2,7 @@
 
 Adapters integrate Cellars with extenal Defi protocols enabling them to use the assets in the protocol.
 
-We have an establish catalogue of adapters that can be used to integrate with the following protocols:
+We have an established catalogue of adapters that can be used to integrate with the following protocols:
 
 ## Aave
 
