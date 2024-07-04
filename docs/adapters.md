@@ -1,6 +1,6 @@
 # Adapters
 
-Adapters integrate Cellars with extenal Defi protocols enabling them to use the assets in the protocol.
+Adapters integrate Cellars with external DeFi protocols, enabling them to use the assets in the protocol.
 
 We have an established catalogue of adapters that can be used to integrate with the following protocols:
 
