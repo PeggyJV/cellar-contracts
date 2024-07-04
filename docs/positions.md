@@ -1,6 +1,6 @@
 # Positions
 
-A Position is an instantiation for an adapter for a specific asset. A cellar may have multiple positions using the same adapter.
+A Position is an instantiation of an adapter for a specific asset. A cellar may have multiple positions using the same adapter.
 
 The process for setting up a position is as follows:
 
