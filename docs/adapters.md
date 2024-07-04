@@ -11,9 +11,9 @@ Thare are adapters for both Aave V2 and V3.
 The adapters support both despoting assets and borrowing assets.
 
 Frequent uses cases include:
-  - Leveraged Staking
-  - Stablecoin lending
-  - Leveraged Peg Arbitrage
+ - Leveraged Staking
+ - Stablecoin lending
+ - Leveraged Peg Arbitrage
 
 ## Aura
 
