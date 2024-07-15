@@ -1,19 +1,19 @@
 # Adapters
 
-Adapters integrate Cellars with extenal Defi protocols enabling them to use the assets in the protocol.
+Adapters integrate Cellars with external DeFi protocols, enabling them to use the assets in the protocol.
 
-We have an establish catalogue of adapters that can be used to integrate with the following protocols:
+We have an established catalogue of adapters that can be used to integrate with the following protocols:
 
 ## Aave
 
-Thare are adapters for both Aave V2 and V3.
+There are adapters for both Aave V2 and V3.
 
 The adapters support both despoting assets and borrowing assets.
 
 Frequent uses cases include:
-  - Leveraged Staking
-  - Stablecoin lending
-  - Leveraged Peg Arbitrage
+ - Leveraged Staking
+ - Stablecoin lending
+ - Leveraged Peg Arbitrage
 
 ## Aura
 
@@ -44,8 +44,6 @@ The Frax adapter supports using the Frax lend protocol to deposit Frax and eary 
 Support for DAI staking to earn stablecoin yield.
 
 ## Morpho
-
-
 
 ## OneInch
 
