@@ -10,7 +10,7 @@ Cellar contracts for the Sommelier Network.
 - [Using Cellars](./docs/using_cellars.md) Using the Cellars Smart Contracts as a strategist
 - [Fees](./docs/fees.md) How fees work for the strategist and the platform
 - [Positions](./docs/positions.md) How positions are created and managed
-- [Adapaters](./docs/adapters.md) How adapters are created and managed
+- [Adapters](./docs/adapters.md) How adapters are created and managed
 
 ### Development
 
