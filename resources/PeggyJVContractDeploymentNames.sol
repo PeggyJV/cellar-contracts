@@ -33,22 +33,22 @@ contract ContractDeploymentNames {
     string public convexCurveAdaptorName = "PJV Convex Curve Adaptor V 0.0";
 
     // Vault Names
-    string public realYieldUsdName = "Real Yield USD V0.0";
-    string public realYieldEthName = "Real Yield ETH V0.1";
-    string public realYieldMaticName = "Real Yield MATIC V0.0";
-    string public realYieldAvaxName = "Real Yield AVAX V0.0";
-    string public turboRSETHName = "Turbo RSETH V0.0";
-    string public turboEZETHName = "Turbo EZETH V0.0";
+    string public realYieldUsdName = "PJV2 Real Yield USD V0.0";
+    string public realYieldEthName = "PJV2 Real Yield ETH V0.1";
+    string public realYieldMaticName = "PJV2 Real Yield MATIC V0.0";
+    string public realYieldAvaxName = "PJV2 Real Yield AVAX V0.0";
+    string public turboRSETHName = " PJV2 Turbo RSETH V0.0";
+    string public turboEZETHName = "PJV2 Turbo EZETH V0.0";
 
     // Share Price Oracle Names
-    string public realYieldUsdSharePriceOracleName = "Real Yield USD Share Price Oracle V0.0";
-    string public realYieldEthSharePriceOracleName = "Real Yield ETH Share Price Oracle V0.1";
-    string public realYieldMaticSharePriceOracleName = "Real Yield MATIC Share Price Oracle V0.0";
-    string public realYieldAvaxSharePriceOracleName = "Real Yield AVAX Share Price Oracle V0.0";
+    string public realYieldUsdSharePriceOracleName = "PJV Real Yield USD Share Price Oracle V0.0";
+    string public realYieldEthSharePriceOracleName = "PJV Real Yield ETH Share Price Oracle V0.1";
+    string public realYieldMaticSharePriceOracleName = "PJV Real Yield MATIC Share Price Oracle V0.0";
+    string public realYieldAvaxSharePriceOracleName = "PJV Real Yield AVAX Share Price Oracle V0.0";
 
     // Cellar Staking Contracts
-    string public realYieldUsdStakingName = "Real Yield USD Staking V0.0";
-    string public realYieldEthStakingName = "Real Yield ETH Staking V0.1";
+    string public realYieldUsdStakingName = "PJV Real Yield USD Staking V0.0";
+    string public realYieldEthStakingName = "PJV Real Yield ETH Staking V0.1";
     // Mainnet
     // TODO morpho adaptors
     // aave v2 adaptors
