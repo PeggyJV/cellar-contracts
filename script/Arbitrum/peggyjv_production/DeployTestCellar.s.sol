@@ -23,7 +23,7 @@ import "forge-std/StdJson.sol";
 /**
  *  source .env && forge script script/Arbitrum/production/DeployTestCellar.s.sol:DeployRealYieldProductsScript --evm-version london --with-gas-price 100000000 --slow --broadcast --etherscan-api-key $ARBISCAN_KEY --verify
  * If you need to verify contracts after deployment run the following command
- *  source .env && forge script script/Arbitrum/production/DeployTestCellar.s.sol:DeployRealYieldProductsScript --evm-version london --etherscan-api-key $ARBISCAN_KEY --verify --resume --rpc-url $ARBITRUM_RPC_URL
+ *  source .env && forge script script/Arbitrum/peggyjv_production/DeployTestCellar.s.sol:DeployRealYieldProductsScript --evm-version london --etherscan-api-key $ARBISCAN_KEY --verify --resume --rpc-url $ARBITRUM_RPC_URL --private-key $PRIVATE_KEY
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployRealYieldProductsScript is Script, ArbitrumAddresses, ContractDeploymentNames, PositionIds {
@@ -80,51 +80,63 @@ contract DeployRealYieldProductsScript is Script, ArbitrumAddresses, ContractDep
         args._sequencerGracePeriod = 3_600;
         vm.startBroadcast(privateKey);
 
-        // Deploy RYE.
-        RYE = _createCellarWithNativeSupport(
-            realYieldEthName,
-            "Test PJV2 Real Yield ETH",
-            "RYETEST",
-            WETH,
-            ERC20_WETH_POSITION,
+        // Deploy RYUSD.
+        RYUSD = _createCellarNoNativeSupport(
+            realYieldUsdName,
+            "Real Yield USD",
+            "RYUSD",
+            USDC,
+            ERC20_USDC_POSITION,
             abi.encode(true),
-            0.0001e18,
+            0.1e6,
             0.8e18
         );
 
-        // Setup Real Yield ETH.
-        RYE.addAdaptorToCatalogue(swapWithUniswapAdaptor);
-        RYE.addAdaptorToCatalogue(uniswapV3Adaptor);
-        RYE.addAdaptorToCatalogue(aaveV3ATokenAdaptor);
-        RYE.addAdaptorToCatalogue(aaveV3DebtTokenAdaptor);
-        RYE.addAdaptorToCatalogue(erc4626Adaptor);
-        RYE.addAdaptorToCatalogue(oneInchAdaptor);
-        RYE.addAdaptorToCatalogue(zeroXAdaptor);
-        RYE.addPositionToCatalogue(ERC20_WETH_POSITION);
-        RYE.addPositionToCatalogue(ERC20_WSTETH_POSITION);
-        RYE.addPositionToCatalogue(ERC20_RETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_A_WETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_A_WSTETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_A_RETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_WETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_WSTETH_POSITION);
-        RYE.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_RETH_POSITION);
-        RYE.addPositionToCatalogue(UNISWAP_V3_WETH_WSTETH_POSITION);
-        RYE.addPositionToCatalogue(UNISWAP_V3_WETH_RETH_POSITION);
-        RYE.addPositionToCatalogue(UNISWAP_V3_WSTETH_RETH_POSITION);
+        // Setup Real Yield USD.
+        RYUSD.addAdaptorToCatalogue(swapWithUniswapAdaptor);
+        RYUSD.addAdaptorToCatalogue(uniswapV3Adaptor);
+        RYUSD.addAdaptorToCatalogue(aaveV3ATokenAdaptor);
+        RYUSD.addAdaptorToCatalogue(aaveV3DebtTokenAdaptor);
+        RYUSD.addAdaptorToCatalogue(erc4626Adaptor);
+        RYUSD.addAdaptorToCatalogue(oneInchAdaptor);
+        RYUSD.addAdaptorToCatalogue(zeroXAdaptor);
+        RYUSD.addPositionToCatalogue(ERC20_USDC_POSITION);
+        RYUSD.addPositionToCatalogue(ERC20_USDCE_POSITION);
+        RYUSD.addPositionToCatalogue(ERC20_DAI_POSITION);
+        RYUSD.addPositionToCatalogue(ERC20_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(ERC20_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(ERC20_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_USDC_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_USDCE_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_DAI_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_A_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_USDC_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_USDCE_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_DAI_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(AAVE_V3_LOW_HF_DEBT_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_USDCE_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_DAI_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDCE_DAI_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDCE_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDCE_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDCE_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_DAI_USDT_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_DAI_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_DAI_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDT_LUSD_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_USDT_FRAX_POSITION);
+        RYUSD.addPositionToCatalogue(UNISWAP_V3_LUSD_FRAX_POSITION);
 
-        // Create Share Price Oracle for RYE.
-        args._target = RYE;
-        _createSharePriceOracle(realYieldEthSharePriceOracleName, args);
-
-        // Also Create a dummy Share Price Oracles for RYUSD and RYE.
-        args._heartbeat = 300; // 5 min.
-        args._gracePeriod = 30 days;
-        args._allowedAnswerChangeLower = 0.1e4;
-        args._allowedAnswerChangeUpper = 10e4;
-
-        args._target = RYE;
-        _createSharePriceOracle("Test PJV RYE Share Price Oracle V 0.0", args);
+        // Create Share Price Oracle for RYUSD.
+        args._target = RYUSD;
+        _createSharePriceOracle(realYieldUsdSharePriceOracleName, args);
 
         vm.stopBroadcast();
     }
