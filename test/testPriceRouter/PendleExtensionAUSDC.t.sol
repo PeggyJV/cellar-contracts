@@ -58,7 +58,7 @@ contract PendleExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         console.log("Pendle Extension Test setUp 1.");
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 19428610;
+        uint256 blockNumber = 254030300;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -84,9 +84,14 @@ contract PendleExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
         priceRouter.addAsset(aV3USDCArb, settings, abi.encode(stor), price);
 
         // Add pendle pricing.
-        uint256 lpPrice = 8_000e8;
-        uint256 ptPrice = 3_784e8;
-        uint256 ytPrice = 200e8;
+        // uint256 lpPrice = 8_000e8; // 8,000,00000000
+        // uint256 ptPrice = 3_784e8;
+        // uint256 ytPrice = 200e8;
+
+        // Add pendle pricing.
+        uint256 lpPrice = 2.071e8; // 8,000,00000000, 207169090
+        uint256 ptPrice = 9.871e7;
+        uint256 ytPrice = 1.272e6;
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(pendleExtension));
         PendleExtension.ExtensionStorage memory pstor = PendleExtension.ExtensionStorage(
