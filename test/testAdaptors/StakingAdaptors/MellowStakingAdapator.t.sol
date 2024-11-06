@@ -23,6 +23,7 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
     uint32 public wethPosition = 1;
     uint32 public wstEthPosition = 2;
+    uint32 public mellowPosition = 2;
 
     ERC20 public primitive = WETH;
     ERC20 public derivative = STETH;
@@ -41,7 +42,7 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Run Starter setUp code.
         _setUp();
 
-        lidoAdaptor = new MellowStakingAdaptor(address(WETH), maxRequests, address(STETH), address(WSTETH), unstETH);
+        mellowAdaptor = new MellowStakingAdaptor(address(WETH), maxRequests, address(0x7a4EffD87C2f3C55CA251080b1343b605f327E3a), address(WSTETH));
         wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -56,22 +57,22 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, STETH_USD_FEED);
         priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
 
-        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
-        price = price.mulDivDown(wstethToStethConversion, 1e18);
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
-        priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
+//        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
+//        price = price.mulDivDown(wstethToStethConversion, 1e18);
+//        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
+//        priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
 
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(lidoAdaptor));
+        registry.trustAdaptor(address(mellowAdaptor));
 
         registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(stEthPosition, address(erc20Adaptor), abi.encode(STETH));
+//        registry.trustPosition(stEthPosition, address(erc20Adaptor), abi.encode(STETH));
         registry.trustPosition(wstEthPosition, address(erc20Adaptor), abi.encode(WSTETH));
-        registry.trustPosition(lidoPosition, address(lidoAdaptor), abi.encode(primitive));
+        registry.trustPosition(mellowPosition, address(mellowAdaptor), abi.encode(primitive));
 
-        string memory cellarName = "Lido Cellar V0.0";
+        string memory cellarName = "Mellow Cellar V0.0";
         uint256 initialDeposit = 0.0001e18;
         uint64 platformCut = 0.75e18;
 
@@ -84,14 +85,14 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
             platformCut
         );
 
-        cellar.addAdaptorToCatalogue(address(lidoAdaptor));
+        cellar.addAdaptorToCatalogue(address(mellowAdaptor));
 
-        cellar.addPositionToCatalogue(stEthPosition);
+//        cellar.addPositionToCatalogue(stEthPosition);
         cellar.addPositionToCatalogue(wstEthPosition);
-        cellar.addPositionToCatalogue(lidoPosition);
-        cellar.addPosition(1, stEthPosition, abi.encode(true), false);
+        cellar.addPositionToCatalogue(mellowPosition);
+//        cellar.addPosition(1, stEthPosition, abi.encode(true), false);
         cellar.addPosition(2, wstEthPosition, abi.encode(true), false);
-        cellar.addPosition(3, lidoPosition, abi.encode(0), false);
+        cellar.addPosition(3, mellowPosition, abi.encode(0), false);
 
         cellar.setRebalanceDeviation(0.01e18);
 

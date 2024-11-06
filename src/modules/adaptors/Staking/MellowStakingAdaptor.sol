@@ -29,7 +29,7 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
         address _baseAsset,
         uint8 _maxRequests,
         address _mellowVault,
-        address _vaultToken,
+        address _vaultToken
     ) StakingAdaptor(_baseAsset, _maxRequests) {
         mellowVault = IVault(_mellowVault);
         vaultToken = ERC20(_vaultToken);
@@ -50,7 +50,7 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      * @dev Deposit funds into the Mellow staking contract.
      * @param _amount The amount of funds to deposit.
      */
-    function deposit(uint256 _amount) internal returns (uint256[] memory actualAmounts, uint256 lpAmount) {
+    function _mint(uint256 _amount, bytes calldata) internal override returns (uint256[] memory actualAmounts, uint256 lpAmount) {
         vaultToken.safeTransferFrom(msg.sender, address(this), _amount);
         vaultToken.safeApprove(address(mellowStaking), _amount);
         uint256[] memory amounts = new uint256[](1);
@@ -62,7 +62,7 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      * @dev Withdraw funds from the Mellow staking contract.
      * @param _amount The amount of funds to withdraw.
      */
-    function registerWithdrawl(uint256 _amount) internal {
+    function _requestBurn(uint256 _amount) internal override {
         uint256[] memory min_amounts = new uint256[](1);
         min_amounts[0] = 0;
         mellowStaking.registerWithdrawal(this,_amount, amounts, type(uint256).max, type(uint256).max, false);
