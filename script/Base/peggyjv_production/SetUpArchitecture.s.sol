@@ -131,17 +131,9 @@ contract SetUpArchitectureScript is Script, BaseAddresses, ContractDeploymentNam
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
-
-        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
-
-        price = uint256(IChainlinkAggregator(USDCe_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDCe_USD_FEED);
-        priceRouter.addAsset(USDCe, settings, abi.encode(stor), price);
 
         price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
@@ -151,77 +143,19 @@ contract SetUpArchitectureScript is Script, BaseAddresses, ContractDeploymentNam
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
         priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(LUSD_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, LUSD_USD_FEED);
-        priceRouter.addAsset(LUSD, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
-        priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
-
-        stor.inETH = true;
-
-        price = uint256(IChainlinkAggregator(WSTETH_ETH_FEED).latestAnswer());
-        price = priceRouter.getValue(WETH, price, USDC);
-        price = price.changeDecimals(6, 8);
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WSTETH_ETH_FEED);
-        priceRouter.addAsset(WSTETH, settings, abi.encode(stor), price);
-
-        price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
-        price = priceRouter.getValue(WETH, price, USDC);
-        price = price.changeDecimals(6, 8);
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
-        priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
-
-        // Add ERC20 positions for RYE and RYUSD
+        // Add ERC20 positions.
         registry.trustPosition(ERC20_USDC_POSITION, address(erc20Adaptor), abi.encode(USDC));
-        registry.trustPosition(ERC20_USDCE_POSITION, address(erc20Adaptor), abi.encode(USDCe));
         registry.trustPosition(ERC20_DAI_POSITION, address(erc20Adaptor), abi.encode(DAI));
         registry.trustPosition(ERC20_USDT_POSITION, address(erc20Adaptor), abi.encode(USDT));
-        registry.trustPosition(ERC20_LUSD_POSITION, address(erc20Adaptor), abi.encode(LUSD));
-        registry.trustPosition(ERC20_FRAX_POSITION, address(erc20Adaptor), abi.encode(FRAX));
-        registry.trustPosition(ERC20_WETH_POSITION, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(ERC20_WSTETH_POSITION, address(erc20Adaptor), abi.encode(WSTETH));
-        registry.trustPosition(ERC20_RETH_POSITION, address(erc20Adaptor), abi.encode(rETH));
 
-        // Add Aave V3 a token positions for RYE and RYUSD.
+        // Add Aave V3 a token positions.
         registry.trustPosition(AAVE_V3_LOW_HF_A_USDC_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3USDC));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_USDCE_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3USDCe));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_DAI_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3DAI));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_USDT_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3USDT));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_LUSD_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3LUSD));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_FRAX_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3FRAX));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_WETH_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3WETH));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_WSTETH_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3WSTETH));
-        registry.trustPosition(AAVE_V3_LOW_HF_A_RETH_POSITION, address(aaveV3ATokenAdaptor), abi.encode(aV3rETH));
 
-        // Add Aave V3 debt token positions for RYE and RYUSD.
+        // Add Aave V3 debt token positions.
         registry.trustPosition(AAVE_V3_LOW_HF_DEBT_USDC_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDC));
-        registry.trustPosition(
-            AAVE_V3_LOW_HF_DEBT_USDCE_POSITION,
-            address(aaveV3DebtTokenAdaptor),
-            abi.encode(dV3USDCe)
-        );
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_DAI_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3DAI));
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_USDT_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDT));
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_LUSD_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3LUSD));
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_FRAX_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3FRAX));
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_WETH_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3WETH));
-        registry.trustPosition(
-            AAVE_V3_LOW_HF_DEBT_WSTETH_POSITION,
-            address(aaveV3DebtTokenAdaptor),
-            abi.encode(dV3WSTETH)
-        );
-        registry.trustPosition(AAVE_V3_LOW_HF_DEBT_RETH_POSITION, address(aaveV3DebtTokenAdaptor), abi.encode(dV3rETH));
-
-        // Add Uniswap V3 positions for RYE and RYUSD.
-        registry.trustPosition(
-            UNISWAP_V3_USDC_USDCE_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDC) < address(USDCe) ? [USDC, USDCe] : [USDCe, USDC])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDC_USDCE_POSITION);
-
+        
+        // Add Uniswap V3 positions.
         registry.trustPosition(
             UNISWAP_V3_USDC_DAI_POSITION,
             address(uniswapV3Adaptor),
@@ -237,111 +171,12 @@ contract SetUpArchitectureScript is Script, BaseAddresses, ContractDeploymentNam
         _checkTokenOrdering(UNISWAP_V3_USDC_USDT_POSITION);
 
         registry.trustPosition(
-            UNISWAP_V3_USDC_LUSD_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDC) < address(LUSD) ? [USDC, LUSD] : [LUSD, USDC])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDC_LUSD_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDC_FRAX_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDC) < address(FRAX) ? [USDC, FRAX] : [FRAX, USDC])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDC_FRAX_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDCE_DAI_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDCe) < address(DAI) ? [USDCe, DAI] : [DAI, USDCe])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDCE_DAI_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDCE_USDT_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDCe) < address(USDT) ? [USDCe, USDT] : [USDT, USDCe])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDCE_USDT_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDCE_LUSD_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDCe) < address(LUSD) ? [USDCe, LUSD] : [LUSD, USDCe])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDCE_LUSD_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDCE_FRAX_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDCe) < address(FRAX) ? [USDCe, FRAX] : [FRAX, USDCe])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDCE_FRAX_POSITION);
-
-        registry.trustPosition(
             UNISWAP_V3_DAI_USDT_POSITION,
             address(uniswapV3Adaptor),
             abi.encode(address(DAI) < address(USDT) ? [DAI, USDT] : [USDT, DAI])
         );
         _checkTokenOrdering(UNISWAP_V3_DAI_USDT_POSITION);
 
-        registry.trustPosition(
-            UNISWAP_V3_DAI_LUSD_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(DAI) < address(LUSD) ? [DAI, LUSD] : [LUSD, DAI])
-        );
-        _checkTokenOrdering(UNISWAP_V3_DAI_LUSD_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_DAI_FRAX_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(DAI) < address(FRAX) ? [DAI, FRAX] : [FRAX, DAI])
-        );
-        _checkTokenOrdering(UNISWAP_V3_DAI_FRAX_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDT_LUSD_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDT) < address(LUSD) ? [USDT, LUSD] : [LUSD, USDT])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDT_LUSD_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_USDT_FRAX_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(USDT) < address(FRAX) ? [USDT, FRAX] : [FRAX, USDT])
-        );
-        _checkTokenOrdering(UNISWAP_V3_USDT_FRAX_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_LUSD_FRAX_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(LUSD) < address(FRAX) ? [LUSD, FRAX] : [FRAX, LUSD])
-        );
-        _checkTokenOrdering(UNISWAP_V3_LUSD_FRAX_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_WETH_WSTETH_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(WETH) < address(WSTETH) ? [WETH, WSTETH] : [WSTETH, WETH])
-        );
-        _checkTokenOrdering(UNISWAP_V3_WETH_WSTETH_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_WETH_RETH_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(WETH) < address(rETH) ? [WETH, rETH] : [rETH, WETH])
-        );
-        _checkTokenOrdering(UNISWAP_V3_WETH_RETH_POSITION);
-
-        registry.trustPosition(
-            UNISWAP_V3_WSTETH_RETH_POSITION,
-            address(uniswapV3Adaptor),
-            abi.encode(address(WSTETH) < address(rETH) ? [WSTETH, rETH] : [rETH, WSTETH])
-        );
-        _checkTokenOrdering(UNISWAP_V3_WSTETH_RETH_POSITION);
-
-        vm.stopBroadcast();
     }
 
     function _checkTokenOrdering(uint32 registryId) internal view {
