@@ -16,7 +16,7 @@ contract BaseAddresses {
     // address public dev1Address = 0x6d3655EE04820f4385a910FD1898d4Ec6241F520;
     // address public cosmos = address(0xCAAA);
     // address public multisig = address(0);
-    address public deployerAddress = 0x58e75944B2B544B8F54C1e6f79eB464b98f0299b;
+    address public deployerAddress = 0x9fE006deb3D7de177968aEF714dbF96a98FE67F4;
     // address public priceRouter = address(0);
 
     // DeFi Ecosystem

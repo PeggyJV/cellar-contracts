@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { Deployer } from "src/Deployer.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { BaseAddresses} from "test/resources/Base/BaseAddressesPeggyJV.sol";
+import { BaseAddresses } from "test/resources/Base/BaseAddressesPeggyJV.sol";
 import { ContractDeploymentNames } from "resources/PeggyJVContractDeploymentNames.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
@@ -19,9 +19,7 @@ import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
 
 /**
- *  source .env && forge script script/Base/peggyjv_production/DeployTestCellar.s.sol:DeployCellarScript --evm-version london --with-gas-price 100000000 --slow --broadcast
- * If you need to verify contracts after deployment run the following command
- *  source .env && forge script script/Base/peggyjv_production/DeployTestCellar.s.sol:DeployCellarScript --evm-version london --etherscan-api-key $BASESCAN_KEY --verify --resume --rpc-url $BASE_RPC_URL --private-key $DEV0_PRIVATE_KEY
+ *  source .env && forge script script/Base/peggyjv_production/DeployTestCellar.s.sol:DeployCellarScript --evm-version london --with-gas-price 100000000 --slow --broadcast --rpc-url $BASE_RPC_URL --private-key $PRIVATE_KEY
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployCellarScript is Script, BaseAddresses, ContractDeploymentNames, PositionIds {
@@ -46,8 +44,8 @@ contract DeployCellarScript is Script, BaseAddresses, ContractDeploymentNames, P
     CellarWithOracleWithBalancerFlashLoansWithMultiAssetDeposit public RYUSD;
 
     function setUp() external {
-        privateKey = vm.envUint("DEV0_PRIVATE_KEY");
-        vm.createSelectFork("base");
+        privateKey = vm.envUint("PRIVATE_KEY");
+
         registry = Registry(deployer.getAddress(registryName));
         priceRouter = PriceRouter(deployer.getAddress(priceRouterName));
         erc20Adaptor = deployer.getAddress(erc20AdaptorName);
@@ -78,7 +76,7 @@ contract DeployCellarScript is Script, BaseAddresses, ContractDeploymentNames, P
         vm.startBroadcast(privateKey);
 
         // Deploy cellar.
-        RYUSD = _createCellarNoNativeSupport(
+        RYUSD = _createCellar(
             realYieldUsdName,
             "Real Yield USD",
             "RYUSD",
@@ -108,28 +106,31 @@ contract DeployCellarScript is Script, BaseAddresses, ContractDeploymentNames, P
         RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_DAI_POSITION);
         RYUSD.addPositionToCatalogue(UNISWAP_V3_USDC_USDT_POSITION);
         RYUSD.addPositionToCatalogue(UNISWAP_V3_DAI_USDT_POSITION);
-       
 
         // Create Share Price Oracle.
         args._target = RYUSD;
         ERC4626SharePriceOracle oracle = _createSharePriceOracle(realYieldUsdSharePriceOracleName, args);
 
-
-        // Initialize oracle.
-        uint96 initialUpkeepFunds = 0.26367e18;
-        LINK.safeApprove(address(oracle), initialUpkeepFunds);
-        oracle.initialize(initialUpkeepFunds);
+        // Register cellar and oracle 
+        registry.register(address(RYUSD));
+        registry.register(address(oracle));
 
         // Set the oracle for cellar.
         RYUSD.setSharePriceOracle(4, oracle);
-        console.log(address(RYUSD));
+
+        // Initialize oracle.
+        uint96 initialUpkeepFunds = 0.1e18;
+        LINK.safeApprove(address(oracle), initialUpkeepFunds);
+
+        oracle.initialize(initialUpkeepFunds);
+
         vm.stopBroadcast();
     }
 
-    function _createSharePriceOracle(
-        string memory _name,
-        ERC4626SharePriceOracle.ConstructorArgs memory args
-    ) internal returns (ERC4626SharePriceOracle) {
+    function _createSharePriceOracle(string memory _name, ERC4626SharePriceOracle.ConstructorArgs memory args)
+        internal
+        returns (ERC4626SharePriceOracle)
+    {
         bytes memory creationCode;
         bytes memory constructorArgs;
         creationCode = type(ERC4626SharePriceOracle).creationCode;
@@ -138,7 +139,7 @@ contract DeployCellarScript is Script, BaseAddresses, ContractDeploymentNames, P
         return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }
 
-    function _createCellarNoNativeSupport(
+    function _createCellar(
         string memory deploymentName,
         string memory cellarName,
         string memory cellarSymbol,

@@ -26,7 +26,7 @@ import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
 
 /**
- *  source .env && forge script script/Base/peggyjv_production/SetUpArchitecture.s.sol:SetUpArchitectureScript --rpc-url $BASE_RPC_URL --with-gas-price 100000000 --slow --broadcast
+ *  source .env && forge script script/Base/peggyjv_production/SetUpArchitecture.s.sol:SetUpArchitectureScript --rpc-url $BASE_RPC_URL --with-gas-price 100000000 --slow --broadcast --evm-version london --private-key $PRIVATE_KEY —optimize —optimizer-runs 200
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract SetUpArchitectureScript is Script, BaseAddresses, ContractDeploymentNames, PositionIds {
@@ -53,13 +53,13 @@ contract SetUpArchitectureScript is Script, BaseAddresses, ContractDeploymentNam
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
     function setUp() external {
-        privateKey = vm.envUint("DEV0_PRIVATE_KEY");
+        privateKey = vm.envUint("PRIVATE_KEY");
     }
 
     function run() external {
         bytes memory creationCode;
         bytes memory constructorArgs;
-        vm.createSelectFork("base");
+
         vm.startBroadcast(privateKey);
         // Deploy Registry
         creationCode = type(Registry).creationCode;
