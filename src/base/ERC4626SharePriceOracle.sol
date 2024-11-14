@@ -297,17 +297,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         IRegistrar registrar = IRegistrar(automationRegistrar);
         IRegistry registry = IRegistry(automationRegistry);
         IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams({
-            upkeepContract: address(this),
-            amount: initialUpkeepFunds,
-            adminAddress: automationAdmin,
-            gasLimit: UPKEEP_GAS_LIMIT,
-            triggerType: 0,
-            billingToken: address(link),
             name: string.concat(target.name(), " Share Price Oracle"),
             encryptedEmail: hex"",
+            upkeepContract: address(this),
+            gasLimit: UPKEEP_GAS_LIMIT,
+            adminAddress: automationAdmin,
+            triggerType: 0,
             checkData: hex"",
             triggerConfig: hex"",
-            offchainConfig: hex""
+            offchainConfig: hex"",
+            amount: initialUpkeepFunds
         });
 
         link.safeApprove(automationRegistrar, initialUpkeepFunds);
