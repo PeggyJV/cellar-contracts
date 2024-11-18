@@ -19,7 +19,7 @@ import "forge-std/Script.sol";
 import "forge-std/StdJson.sol";
 
 /**
- *  source .env && forge script script/Arbitrum/peggyjv_production/ExampleDeploy/DeployTestCellar.s.sol:DeployCellarScript --evm-version london --with-gas-price 100000000 --slow --broadcast --rpc-url $ARBITRUM_RPC_URL --private-key $PRIVATE_KEY
+ *  source .env && forge script script/Arbitrum/peggyjv_production/ExampleDeploy/DeployTestCellar.s.sol:DeployCellarScript --evm-version london --with-gas-price 100000000 --slow --broadcast --rpc-url $ARBITRUM_RPC_URL --private-key $PRIVATE_KEY --etherscan-api-key $BASESCAN_KEY --verify
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployCellarScript is Script, ArbitrumAddresses, ContractDeploymentNames, PositionIds {
@@ -43,6 +43,7 @@ contract DeployCellarScript is Script, ArbitrumAddresses, ContractDeploymentName
 
     function setUp() external {
         privateKey = vm.envUint("PRIVATE_KEY");
+        vm.createSelectFork(base);
 
         registry = Registry(deployer.getAddress(registryName));
         priceRouter = PriceRouter(deployer.getAddress(priceRouterName));
