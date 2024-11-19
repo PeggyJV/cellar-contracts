@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.21;
+
 import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
@@ -42,33 +45,33 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() external view override returns (bytes32) {
-        return keccak256(abi.encodePacked("MellowStakingAdaptor", vaultToken.name(), address(this)));
+    function identifier() public override pure returns (bytes32) {
+        return keccak256(abi.encodePacked("MellowStakingAdaptor"));
     }
 
     /**
      * @dev Deposit funds into the Mellow staking contract.
      * @param _amount The amount of funds to deposit.
      */
-    function _mint(uint256 _amount, bytes calldata) internal override returns (uint256[] memory actualAmounts, uint256 lpAmount) {
+    function mint(uint256 _amount, uint256 minAmountOut, bytes calldata) external override {
         vaultToken.safeTransferFrom(msg.sender, address(this), _amount);
-        vaultToken.safeApprove(address(mellowStaking), _amount);
+        vaultToken.safeApprove(address(mellowVault), _amount);
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = _amount;
-        mellowStaking.deposit(this, amounts, 0,type(uint256).max,0);
+        mellowVault.deposit(address(this), amounts, 0, type(uint256).max, 0);
     }
 
     /**
      * @dev Withdraw funds from the Mellow staking contract.
      * @param _amount The amount of funds to withdraw.
      */
-    function _requestBurn(uint256 _amount) internal override {
+    function requestBurn(uint256 _amount, bytes calldata wildcard) external override {
         uint256[] memory min_amounts = new uint256[](1);
         min_amounts[0] = 0;
-        mellowStaking.registerWithdrawal(this,_amount, amounts, type(uint256).max, type(uint256).max, false);
+        mellowVault.registerWithdrawal(address(this),_amount, min_amounts, type(uint256).max, type(uint256).max, false);
     }
 
     function cancelWithdrawalRequest() internal {
-        mellowStaking.cancelWithdrawal();
+        mellowVault.cancelWithdrawalRequest();
     }
  }

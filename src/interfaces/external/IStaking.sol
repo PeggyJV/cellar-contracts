@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
+import { IERC20 } from "src/interfaces/external/Balancer/solidity-utils/IERC20.sol";
+
+
 // Swell
 interface ISWETH {
     function deposit() external payable;
