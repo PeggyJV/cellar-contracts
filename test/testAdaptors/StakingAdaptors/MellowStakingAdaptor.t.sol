@@ -7,6 +7,8 @@ import { Cellar } from "src/base/Cellar.sol";
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
 
+import "forge-std/console.sol";
+
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
 contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
@@ -17,13 +19,15 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
     MellowStakingAdaptor private mellowAdaptor;
     Cellar private cellar;
 
-    uint32 public wethPosition = 1;
+    uint32 public wstethPosition = 1;
     uint32 public rstETHPosition = 2;
 
     ERC20 public rstETH = ERC20(0x7a4EffD87C2f3C55CA251080b1343b605f327E3a);
     address public mellowVault = 0xaf108ae0AD8700ac41346aCb620e828c03BB8848;
 
-    ERC20 public primitive = WETH;
+    address public WSTETH_USD_FEED = 0x164b276057258d81941e97B0a900D4C7B358bCe0;
+
+    ERC20 public primitive = WSTETH;
     ERC20 public derivative = rstETH;
     ERC20 public wrappedDerivative = ERC20(address(0));
 
@@ -40,26 +44,26 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Run Starter setUp code.
         _setUp();
 
-        mellowAdaptor = new MellowStakingAdaptor(address(WETH), 8, mellowVault, address(rstETH));
+        mellowAdaptor = new MellowStakingAdaptor(address(primitive), 8, address(rstETH), address(rstETH));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+        uint256 price = uint256(IChainlinkAggregator(WSTETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WSTETH_USD_FEED);
+        priceRouter.addAsset(WSTETH, settings, abi.encode(stor), price);
 
-        // Set rstETH to be 1:1 with ETH.
-        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        // Set rstETH to be 1:1 with WSTETH.
+        price = uint256(IChainlinkAggregator(WSTETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WSTETH_USD_FEED);
         priceRouter.addAsset(rstETH, settings, abi.encode(stor), price);
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(mellowAdaptor));
 
-        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(wstethPosition, address(erc20Adaptor), abi.encode(WSTETH));
         registry.trustPosition(rstETHPosition, address(erc20Adaptor), abi.encode(rstETH));
 
         string memory cellarName = "Mellow Cellar V0.0";
@@ -68,8 +72,8 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         cellar = _createCellarLocal(
             cellarName,
-            WETH,
-            wethPosition,
+            WSTETH,
+            wstethPosition,
             abi.encode(true),
             initialDeposit,
             platformCut
@@ -84,12 +88,13 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
 
         initialAssets = initialDeposit;
 
-        WETH.safeApprove(address(cellar), type(uint256).max);
+        WSTETH.safeApprove(address(cellar), type(uint256).max);
     }
 
     function testMint(uint256 mintAmount) external {
         mintAmount = bound(mintAmount, 0.0001e18, 10e18);
         deal(address(primitive), address(this), mintAmount);
+
         cellar.deposit(mintAmount, address(this));
         // Rebalance Cellar to mint derivative.
         _mintDerivative(mintAmount, 0);
@@ -100,8 +105,10 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
             "Should only have initialAssets of primitive left."
         );
         uint256 expectedDerivativeAmount = priceRouter.getValue(primitive, mintAmount, derivative);
+        uint256 res = derivative.balanceOf(address(cellar));
+
         assertApproxEqRel(
-            derivative.balanceOf(address(cellar)),
+            res,
             expectedDerivativeAmount,
             0.01e18,
             "Should have minted wrapped derivative with mintAmount."
@@ -130,10 +137,13 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         // Rebalance Cellar to mint derivative.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToMint(mintAmount, minAmountOut, hex"");
+
+        adaptorCalls[0] = _createBytesDataToMintERC20(WSTETH, mintAmount, minAmountOut, hex"");
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(mellowAdaptor), callData: adaptorCalls });
+
         cellar.callOnAdaptor(data);
+        
     }
 
     function _createCellarLocal(

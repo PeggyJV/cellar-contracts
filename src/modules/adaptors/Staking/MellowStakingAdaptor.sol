@@ -28,12 +28,16 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      */
     ERC20 public immutable vaultToken;
 
+
+    ERC20 public immutable baseAsset;
+    
     constructor(
         address _baseAsset,
         uint8 _maxRequests,
         address _mellowVault,
         address _vaultToken
     ) StakingAdaptor(_baseAsset, _maxRequests) {
+        baseAsset = ERC20(_baseAsset);
         mellowVault = IVault(_mellowVault);
         vaultToken = ERC20(_vaultToken);
     }
@@ -53,25 +57,27 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      * @dev Deposit funds into the Mellow staking contract.
      * @param _amount The amount of funds to deposit.
      */
-    function mint(uint256 _amount, uint256 minAmountOut, bytes calldata) external override {
-        vaultToken.safeTransferFrom(msg.sender, address(this), _amount);
-        vaultToken.safeApprove(address(mellowVault), _amount);
+    function _mintERC20(ERC20, uint256 _amount, uint256, bytes calldata) internal override returns (uint256 shares) {
+
+        baseAsset.safeApprove(address(vaultToken), _amount);
+
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = _amount;
-        mellowVault.deposit(address(this), amounts, 0, type(uint256).max, 0);
+        (,uint256 shares) = mellowVault.deposit(address(this), amounts, 0, type(uint256).max);
     }
 
     /**
      * @dev Withdraw funds from the Mellow staking contract.
      * @param _amount The amount of funds to withdraw.
      */
-    function requestBurn(uint256 _amount, bytes calldata wildcard) external override {
+    function _requestBurn(uint256 _amount, bytes calldata) internal override returns (uint256) {
         uint256[] memory min_amounts = new uint256[](1);
         min_amounts[0] = 0;
         mellowVault.registerWithdrawal(address(this),_amount, min_amounts, type(uint256).max, type(uint256).max, false);
+        return 0;
     }
 
-    function cancelWithdrawalRequest() internal {
+    function _cancelBurn(uint256, bytes calldata) internal override {
         mellowVault.cancelWithdrawalRequest();
     }
  }

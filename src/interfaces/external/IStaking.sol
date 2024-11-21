@@ -194,15 +194,13 @@ interface IVault is IERC20 {
     /// @param amounts An array specifying the amounts for each underlying token.
     /// @param minLpAmount The minimum amount of LP tokens to mint.
     /// @param deadline The time before which the operation must be completed.
-    /// @param referralCode The referral code to use for the deposit.
     /// @return actualAmounts The actual amounts deposited for each underlying token.
     /// @return lpAmount The amount of LP tokens minted.
     function deposit(
         address to,
         uint256[] memory amounts,
         uint256 minLpAmount,
-        uint256 deadline,
-        uint256 referralCode
+        uint256 deadline
     ) external returns (uint256[] memory actualAmounts, uint256 lpAmount);
 
     /// @notice Handles emergency withdrawals, proportionally withdrawing all tokens in the system (not just the underlying).
