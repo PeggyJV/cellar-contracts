@@ -5,6 +5,7 @@ import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { StakingAdaptor, IWETH9 } from "./StakingAdaptor.sol";
 import { IVault } from "src/interfaces/external/IStaking.sol";
+
 /**
  * @title Mellow Staking Adaptor
  * @notice Allows Cellars to stake with Mellow.
@@ -57,13 +58,23 @@ import { IVault } from "src/interfaces/external/IStaking.sol";
      * @dev Deposit funds into the Mellow staking contract.
      * @param _amount The amount of funds to deposit.
      */
-    function _mintERC20(ERC20, uint256 _amount, uint256, bytes calldata) internal override returns (uint256 shares) {
+    function _mintERC20(ERC20, uint256 _amount, uint256 _minAmountOut, bytes calldata) internal override returns (uint256 shares) {
 
         baseAsset.safeApprove(address(vaultToken), _amount);
 
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = _amount;
-        (,uint256 shares) = mellowVault.deposit(address(this), amounts, 0, type(uint256).max);
+
+       try mellowVault.deposit(address(this), amounts, _minAmountOut, type(uint256).max) 
+            returns (uint256[] memory, uint256 returnedShares) {
+            return returnedShares;
+        } catch (bytes memory lowLevelData) {
+            if (lowLevelData.length >= 4 && bytes4(lowLevelData) == IVault.InsufficientLpAmount.selector) {
+                return 0;
+            }
+            revert(string(lowLevelData));
+        }
+    
     }
 
     /**

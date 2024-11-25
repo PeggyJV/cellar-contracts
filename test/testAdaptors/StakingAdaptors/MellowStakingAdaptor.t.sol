@@ -115,23 +115,23 @@ contract MellowStakingAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions 
         );
     }
 
-    // function testMintMinAmount() external {
-    //     uint256 mintAmount = 10e18;
-    //     deal(address(primitive), address(this), mintAmount);
-    //     cellar.deposit(mintAmount, address(this));
+    function testMintMinAmount() external {
+        uint256 mintAmount = 10e18;
+        deal(address(primitive), address(this), mintAmount);
+        cellar.deposit(mintAmount, address(this));
 
-    //     // Try minting with an excessive minAmountOut.
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 StakingAdaptor.StakingAdaptor__MinimumAmountNotMet.selector,
-    //                 9974724809485861084,
-    //                 type(uint256).max
-    //             )
-    //         )
-    //     );
-    //     _mintDerivative(mintAmount, type(uint256).max);
-    // }
+        // Try minting with an excessive minAmountOut.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    StakingAdaptor.StakingAdaptor__MinimumAmountNotMet.selector,
+                    0,
+                    type(uint256).max
+                )
+            )
+        );
+        _mintDerivative(mintAmount, type(uint256).max);
+    }
 
     function _mintDerivative(uint256 mintAmount, uint256 minAmountOut) internal {
         // Rebalance Cellar to mint derivative.
