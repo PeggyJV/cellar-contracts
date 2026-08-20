@@ -404,7 +404,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Save answer on chain, and update observations if needed.
      */
-    function performUpkeep(bytes calldata performData) external {
+    function performUpkeep(bytes calldata performData) external virtual {
         if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
