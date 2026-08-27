@@ -34,7 +34,15 @@ import { Math } from "src/utils/Math.sol";
 contract ERC4626SharePriceOracleKeeper is ERC4626SharePriceOracle {
     using Math for uint256;
 
+    /**
+     * @notice Thrown when deployed with a zero keeper address.
+     * @dev `automationForwarder` has no setter, so a zero keeper would brick the
+     *      oracle permanently: no caller can ever satisfy `msg.sender == address(0)`.
+     */
+    error ERC4626SharePriceOracleKeeper__ZeroKeeper();
+
     constructor(ConstructorArgs memory args, address keeper) ERC4626SharePriceOracle(args) {
+        if (keeper == address(0)) revert ERC4626SharePriceOracleKeeper__ZeroKeeper();
         automationForwarder = keeper;
     }
 
