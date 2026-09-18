@@ -30,9 +30,16 @@ contract DisciplinedKeeper is Test {
     uint256 public upkeeps;
     uint256 public maxSpacingUsed;
 
+    /// @dev The handler's own clock. Older forge invariant runners (including the
+    ///      nightly CI pins) reset `block.timestamp` between calls, so a bare
+    ///      `vm.warp(block.timestamp + x)` does not accumulate and time appears to
+    ///      run backwards. Tracking it here keeps time monotonic on every version.
+    uint256 public clock;
+
     constructor(MockERC20 _asset, MockERC4626 _target) {
         asset = _asset;
         target = _target;
+        clock = block.timestamp;
     }
 
     function setOracle(ERC4626SharePriceOracleKeeper _oracle) external {
@@ -43,7 +50,8 @@ contract DisciplinedKeeper is Test {
     /// @param yieldSeed   modest asset movement, far inside the kill-switch band
     function advanceAndUpkeep(uint256 spacingSeed, uint256 yieldSeed) external {
         uint256 spacing = bound(spacingSeed, HEARTBEAT, HEARTBEAT + BUDGET);
-        vm.warp(block.timestamp + spacing);
+        clock += spacing;
+        vm.warp(clock);
 
         // Up to 1% drift per interval. Real vaults here are idle WETH, so this
         // is generous; the point is that the invariant must not depend on the
@@ -126,6 +134,8 @@ contract TwapWindowInvariants is StdInvariant, Test {
     function invariant_disciplinedKeeperKeepsTheOracleUsable() public {
         // The ring needs (L-2) completed intervals before a TWAA exists at all.
         if (keeper.upkeeps() < uint256(RING) - 1) return;
+        // Evaluate at the keeper's time, not whatever the runner reset it to.
+        vm.warp(keeper.clock());
         (, , bool notSafe) = oracle.getLatest();
         assertFalse(notSafe, "oracle left its window despite in-bound spacing");
     }
