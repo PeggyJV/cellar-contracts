@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import {PriceRouter, Registry, ERC20, IChainlinkAggregator} from "src/modules/price-router/PriceRouter.sol";
+import { PriceRouter, Registry, ERC20, IChainlinkAggregator } from "src/modules/price-router/PriceRouter.sol";
 
 /**
  * @title SequencerPriceRouter
@@ -13,6 +13,7 @@ contract SequencerPriceRouter is PriceRouter {
 
     error SequencerPriceRouter__SequencerDown();
     error SequencerPriceRouter__GracePeriodNotOver();
+    error SequencerPriceRouter__InvalidRound();
 
     //============================== IMMUTABLES ===============================
 
@@ -27,9 +28,13 @@ contract SequencerPriceRouter is PriceRouter {
      */
     uint256 internal immutable gracePeriod;
 
-    constructor(address _sequencerUptimeFeed, uint256 _gracePeriod, address newOwner, Registry _registry, ERC20 _weth)
-        PriceRouter(newOwner, _registry, _weth)
-    {
+    constructor(
+        address _sequencerUptimeFeed,
+        uint256 _gracePeriod,
+        address newOwner,
+        Registry _registry,
+        ERC20 _weth
+    ) PriceRouter(newOwner, _registry, _weth) {
         sequencerUptimeFeed = IChainlinkAggregator(_sequencerUptimeFeed);
         gracePeriod = _gracePeriod;
     }
@@ -41,13 +46,18 @@ contract SequencerPriceRouter is PriceRouter {
      *         to price assets, as the datafeeds could be stale, and need to be updated.
      */
     function _runPreFlightCheck() internal view override {
-        (, int256 answer, uint256 startedAt,,) = sequencerUptimeFeed.latestRoundData();
+        (, int256 answer, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
 
         // This check should make TXs from L1 to L2 revert if someone tried interacting with the cellar while the sequencer is down.
         // Answer == 0: Sequencer is up
         // Answer == 1: Sequencer is down
         if (answer == 1) {
             revert SequencerPriceRouter__SequencerDown();
+        }
+
+        // Detect invalid round in the oracle.
+        if (startedAt == 0) {
+            revert SequencerPriceRouter__InvalidRound();
         }
 
         // Make sure the grace period has passed after the
