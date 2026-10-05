@@ -23,6 +23,9 @@ contract ERC20WithdrawalRecoveryAdaptorTest is Test {
         assertFalse(adaptor.isDebt());
     }
 
+    /// @dev Intentional pin to the deployed Optimism runtime (metadata stripped). This fails on any change to the
+    /// adaptor's logic or to compiler settings (version, optimizer runs, EVM version). Do not update the hash to make
+    /// it pass; a mismatch means this source no longer describes the deployed contract.
     function testRuntimeMatchesDeployedSemanticBytecode() external {
         bytes memory runtimeCode = type(ERC20WithdrawalRecoveryAdaptor).runtimeCode;
         uint256 metadataLength = (uint256(uint8(runtimeCode[runtimeCode.length - 2])) << 8)
