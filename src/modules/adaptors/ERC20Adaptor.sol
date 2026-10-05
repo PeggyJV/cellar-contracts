@@ -27,7 +27,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("ERC20 Adaptor V 1.0"));
     }
 

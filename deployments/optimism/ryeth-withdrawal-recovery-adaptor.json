@@ -1,0 +1,21 @@
+{
+  "chainId": 10,
+  "network": "optimism",
+  "contract": "ERC20WithdrawalRecoveryAdaptor",
+  "address": "0x214ff95df1Ec8238977dACAeD9768441ce7d05dc",
+  "deploymentTransaction": "0x65bb90168ba5a3459d09c631105fb7cf8e53ac3820069b77f6927278dc02477d",
+  "deploymentBlock": 157785132,
+  "deployer": "0x096CA3674329bB66dD7CC14D1511dfB7728b9193",
+  "compiler": {
+    "version": "0.8.21",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "evmVersion": "shanghai"
+  },
+  "identifier": "0x711b45880aefcfc7e41d3d822547acaa8105eb22c3b1b224c84f11f2cb205410",
+  "runtimeBytecodeKeccak256": "0x0d037adbce330a32869a4ba8a29f93c56aa3767094a9185405061b2c6a38fb12",
+  "metadataFreeRuntimeBytecodeKeccak256": "0x5509c54323791d5da52562bf42d23f36858c1bd57454abe30ad056f5fc3ff0cb",
+  "sourceCommit": "07efdfa9ae15beb66d248722cbbd596926b5d55f",
+  "sourceChange": "The deployed source copied ERC20Adaptor and changed only its identifier string to ERC20 Adaptor Withdrawal Recovery Candidate V 1.0.",
+  "repositoryRepresentation": "The repository contract inherits ERC20Adaptor and overrides only identifier(). Its metadata-free runtime is byte-for-byte identical to the deployed runtime. Solidity metadata differs because the repository uses a distinct source path and contract name."
+}
