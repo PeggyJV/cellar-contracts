@@ -1,0 +1,44 @@
+{
+  "chainId": 10,
+  "network": "optimism",
+  "contract": "ERC20WithdrawalRecoveryAdaptor",
+  "address": "0x214ff95df1Ec8238977dACAeD9768441ce7d05dc",
+  "deploymentTransaction": "0x65bb90168ba5a3459d09c631105fb7cf8e53ac3820069b77f6927278dc02477d",
+  "deploymentBlock": 157785132,
+  "deployer": "0x096CA3674329bB66dD7CC14D1511dfB7728b9193",
+  "compiler": {
+    "version": "0.8.21",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "evmVersion": "shanghai"
+  },
+  "identifier": "0x711b45880aefcfc7e41d3d822547acaa8105eb22c3b1b224c84f11f2cb205410",
+  "runtimeBytecodeKeccak256": "0x0d037adbce330a32869a4ba8a29f93c56aa3767094a9185405061b2c6a38fb12",
+  "metadataFreeRuntimeBytecodeKeccak256": "0x5509c54323791d5da52562bf42d23f36858c1bd57454abe30ad056f5fc3ff0cb",
+  "sourceCommit": "07efdfa9ae15beb66d248722cbbd596926b5d55f",
+  "sourceChange": "The deployed source copied ERC20Adaptor and changed only its identifier string to ERC20 Adaptor Withdrawal Recovery Candidate V 1.0.",
+  "repositoryRepresentation": "The repository contract inherits ERC20Adaptor and overrides only identifier(). Its metadata-free runtime is byte-for-byte identical to the deployed runtime. Solidity metadata differs because the repository uses a distinct source path and contract name.",
+  "identifierNote": "The identifier string includes 'Candidate' and is fixed by the deployed bytecode. Do not rename it in source; a different string is a different identifier.",
+  "deployedSource": {
+    "path": "deployments/optimism/ryeth-withdrawal-recovery-adaptor.deployed-source.sol",
+    "sha256": "689ed6bca87c519a35a83bfa900badd50fc249d42a46d1edeec16030bd7901f6",
+    "compileAs": {
+      "path": "src/modules/adaptors/ERC20Adaptor.sol",
+      "contractName": "ERC20Adaptor",
+      "atCommit": "07efdfa9ae15beb66d248722cbbd596926b5d55f"
+    },
+    "reproduces": "Full runtime bytecode including metadata (keccak256 0x0d037adbce330a32869a4ba8a29f93c56aa3767094a9185405061b2c6a38fb12). Use this source and path for block explorer verification."
+  },
+  "intendedUse": {
+    "vault": "0xC47bB288178Ea40bF520a91826a3DEE9e0DbFA4C",
+    "registry": "0xb7f57c1a22e9cbac58016cd01749433f390091bb",
+    "token": "0x9Bcef72be871e61ED4fBbc7630889beE758eb81D",
+    "tokenSymbol": "rETH",
+    "replacesPositionId": 9,
+    "replacesPositionAdaptor": "0x2fD86717d9Bba566Fe637Ac6D3C69369CE998555",
+    "recoveryPositionId": 9999,
+    "invariant": "Position 9 (rETH via ERC20Adaptor) must be removed from the vault before or in the same operation as adding position 9999. Both adaptors report the vault's full rETH balance, so holding both counts rETH twice in totalAssets.",
+    "liveStateCheckedAtBlock": 157789515,
+    "liveStateAtCheck": "Vault credit positions [7, 8, 9, 16, 17, 18, 43]; position 9 is the only ERC20Adaptor rETH position; adaptor not yet trusted in the registry; position 9999 not yet registered."
+  }
+}
