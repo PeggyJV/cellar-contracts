@@ -864,7 +864,7 @@ contract MorphoBlueCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFun
     }
 
     // test attempting to removeCollateral() when the LTV would be too high as a result
-    function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
+    function test_RevertWhen_RemoveCollateralBecauseLTV(uint256 assets) external {
         assets = bound(assets, 1e18, 100e18);
         initialAssets = cellar.totalAssets();
         deal(address(WETH), address(this), assets);

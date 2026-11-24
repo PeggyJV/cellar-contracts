@@ -54,11 +54,13 @@ contract VestingTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ========================================== DEPOSIT/WITHDRAW TEST ========================================
 
-    function testFailDepositZero() external {
+    function test_RevertWhen_DepositZero() external {
+        vm.expectRevert(bytes(abi.encodeWithSelector(VestingSimple.Vesting_ZeroDeposit.selector)));
         vesting.deposit(0, user);
     }
 
-    function testFailDepositLessThanMinimum() external {
+    function test_RevertWhen_DepositLessThanMinimum() external {
+        vm.expectRevert(bytes(abi.encodeWithSelector(VestingSimple.Vesting_DepositTooSmall.selector, minimumDeposit)));
         vesting.deposit(vestingPeriod * 500, user);
     }
 

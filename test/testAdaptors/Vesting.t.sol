@@ -129,7 +129,7 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function testFailWithdrawMoreThanVested(uint256 assets) external {
+    function test_RevertWhen_WithdrawMoreThanVested(uint256 assets) external {
         assets = bound(assets, 0.1e6, totalDeposit / 10);
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
@@ -148,6 +148,7 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
 
         // Not looking at specific payload because amount available may be slightly  off
+        vm.expectRevert();
         cellar.callOnAdaptor(data);
     }
 

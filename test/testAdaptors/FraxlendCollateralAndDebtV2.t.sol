@@ -547,7 +547,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
     }
 
     // test attempting to removeCollateral() when the LTV would be too high as a result
-    function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
+    function test_RevertWhen_RemoveCollateralBecauseLTV(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);

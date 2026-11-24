@@ -1575,12 +1575,13 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    function testFailTransferEthToCellar() external {
+    function test_RevertWhen_TransferEthToCellar() external {
         // This test verifies that native eth transfers to the cellar will revert.
         // So even if the strategist somehow manages to make a swap send native eth
         // to the cellar it will revert.
 
         deal(address(this), 1 ether);
+        vm.expectRevert();
         address(cellar).safeTransferETH(1 ether);
     }
 
