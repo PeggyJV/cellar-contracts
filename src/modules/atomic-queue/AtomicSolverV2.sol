@@ -17,8 +17,9 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
     using FixedPointMathLib for uint256;
     // ========================================= CONSTANTS =========================================
 
-    ERC20 internal constant eETH = ERC20(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
-    ERC20 internal constant weETH = ERC20(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
+    address internal constant MAINNET_EETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    address internal constant MAINNET_WEETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    address internal constant ARBITRUM_WEETH = 0x35751007a407ca6FEFfE80b3cB397736D2cf4dbe;
 
     // ========================================= ENUMS =========================================
 
@@ -41,10 +42,28 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
     error AtomicSolverV2___SolveMaxAssetsExceeded(uint256 actualAssets, uint256 maxAssets);
     error AtomicSolverV2___P2PSolveMinSharesNotMet(uint256 actualShares, uint256 minShares);
     error AtomicSolverV2___RedeemSolveMinAssetDeltaNotMet(uint256 actualDelta, uint256 minDelta);
+    error AtomicSolverV2___UnsupportedRedeemPair(address asset, address want);
+    error AtomicSolverV2___UnsupportedLiquidPair(address asset, address want);
 
     //============================== IMMUTABLES ===============================
 
-    constructor(address _owner, Authority _authority) Auth(_owner, _authority) {}
+    ERC20 public immutable eETH;
+    ERC20 public immutable weETH;
+
+    constructor(address _owner, Authority _authority) Auth(_owner, _authority) {
+        address eEthAddress;
+        address weEthAddress;
+
+        if (block.chainid == 1) {
+            eEthAddress = MAINNET_EETH;
+            weEthAddress = MAINNET_WEETH;
+        } else if (block.chainid == 42161) {
+            weEthAddress = ARBITRUM_WEETH;
+        }
+
+        eETH = ERC20(eEthAddress);
+        weETH = ERC20(weEthAddress);
+    }
 
     //============================== SOLVE FUNCTIONS ===============================
     /**
@@ -68,6 +87,7 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
     /**
      * @notice Solver wants to redeem withdraw offer shares, to help cover withdraw.
      * @dev `offer` MUST be an ERC4626 vault.
+     * @dev `want` MUST equal the ERC4626 vault's asset.
      */
     function redeemSolve(
         AtomicQueue queue,
@@ -86,6 +106,7 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
     /**
      * @notice Solver wants to redeem withdraw offer shares, to help cover withdraw.
      * @dev `offer` MUST be an ERC4626 vault.
+     * @dev `want` MUST equal the ERC4626 vault's asset or form an eETH/weETH pair with it.
      */
     function redeemLiquidSolve(
         AtomicQueue queue,
@@ -191,14 +212,13 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
 
         // Redeem the shares, sending assets to solver.
         ERC4626 share = ERC4626(address(offer));
+        ERC20 asset = share.asset();
+        if (address(want) != address(asset)) {
+            revert AtomicSolverV2___UnsupportedRedeemPair(address(asset), address(want));
+        }
         uint256 assetsFromRedeem = share.redeem(offerReceived, solver, address(this));
 
-        if (wantApprovalAmount < assetsFromRedeem) {
-            uint256 assetDelta = assetsFromRedeem - wantApprovalAmount;
-            if (assetDelta < minAssetDelta) {
-                revert AtomicSolverV2___RedeemSolveMinAssetDeltaNotMet(assetDelta, minAssetDelta);
-            }
-        }
+        _enforceMinAssetDelta(assetsFromRedeem, wantApprovalAmount, minAssetDelta);
 
         // Transfer required assets from solver.
         want.safeTransferFrom(solver, address(this), wantApprovalAmount);
@@ -230,32 +250,30 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
         ERC4626 share = ERC4626(address(offer));
         uint256 assetsFromRedeem = share.redeem(offerReceived, solver, address(this));
 
-        if (wantApprovalAmount < assetsFromRedeem) {
-            uint256 assetDelta = assetsFromRedeem - wantApprovalAmount;
-            if (assetDelta < minAssetDelta) {
-                revert AtomicSolverV2___RedeemSolveMinAssetDeltaNotMet(assetDelta, minAssetDelta);
-            }
-        }
+        uint256 wantAmountInAsset = _wantAmountInAsset(want, share.asset(), wantApprovalAmount);
+        _enforceMinAssetDelta(assetsFromRedeem, wantAmountInAsset, minAssetDelta);
 
         // Transfer required assets from solver.
         if (want.balanceOf(solver) < wantApprovalAmount) {
             // Check if want is eETH, if so see if there is enough weETH to unwrap and cover withdraw.
             if (address(want) == address(eETH)) {
-                uint256 unwrapAmount = wantApprovalAmount.mulDivDown(1e18, IWEETH(address(weETH)).getRate()) + 1;
+                uint256 unwrapAmount = _wantAmountInAsset(want, weETH, wantApprovalAmount);
                 if (unwrapAmount <= weETH.balanceOf(solver)) {
                     weETH.safeTransferFrom(solver, address(this), unwrapAmount);
-                    IWEETH(address(weETH)).unwrap(unwrapAmount);
+                    uint256 amountOut = IWEETH(address(weETH)).unwrap(unwrapAmount);
+                    if (amountOut < wantApprovalAmount) revert AtomicSolverV2___FailedToSolve();
                 } else {
                     revert AtomicSolverV2___FailedToSolve();
                 }
             }
             // else check if want is weETH, if so see if there is enough eETH to wrap and cover withdraw.
             else if (address(want) == address(weETH)) {
-                uint256 wrapAmount = wantApprovalAmount.mulDivDown(IWEETH(address(weETH)).getRate(), 1e18) + 1;
+                uint256 wrapAmount = _wantAmountInAsset(want, eETH, wantApprovalAmount);
                 if (wrapAmount <= eETH.balanceOf(solver)) {
                     eETH.safeTransferFrom(solver, address(this), wrapAmount);
                     eETH.safeApprove(address(weETH), wrapAmount);
-                    IWEETH(address(weETH)).wrap(wrapAmount);
+                    uint256 amountOut = IWEETH(address(weETH)).wrap(wrapAmount);
+                    if (amountOut < wantApprovalAmount) revert AtomicSolverV2___FailedToSolve();
                 } else {
                     revert AtomicSolverV2___FailedToSolve();
                 }
@@ -268,5 +286,40 @@ contract AtomicSolverV2 is IAtomicSolver, Auth {
 
         // Approve queue to spend wantApprovalAmount.
         want.safeApprove(queue, wantApprovalAmount);
+    }
+
+    function _enforceMinAssetDelta(uint256 assetsFromRedeem, uint256 assetsRequired, uint256 minAssetDelta)
+        internal
+        pure
+    {
+        if (assetsFromRedeem < assetsRequired) {
+            revert AtomicSolverV2___RedeemSolveMinAssetDeltaNotMet(0, minAssetDelta);
+        }
+
+        uint256 assetDelta = assetsFromRedeem - assetsRequired;
+        if (assetDelta < minAssetDelta) {
+            revert AtomicSolverV2___RedeemSolveMinAssetDeltaNotMet(assetDelta, minAssetDelta);
+        }
+    }
+
+    function _wantAmountInAsset(ERC20 want, ERC20 asset, uint256 wantAmount)
+        internal
+        view
+        returns (uint256 assetAmount)
+    {
+        if (address(want) == address(asset)) return wantAmount;
+
+        if (address(want) == address(weETH) && address(asset) == address(eETH)) {
+            uint256 rate = IWEETH(address(weETH)).getRate();
+            // getRate() rounds the exact eETH-per-weETH ratio down. Increasing the rate by one
+            // gives a strict upper bound on the exact ratio before rounding the required amount up.
+            return wantAmount.mulDivUp(rate + 1, 1e18);
+        }
+        if (address(want) == address(eETH) && address(asset) == address(weETH)) {
+            uint256 rate = IWEETH(address(weETH)).getRate();
+            return wantAmount.mulDivUp(1e18, rate);
+        }
+
+        revert AtomicSolverV2___UnsupportedLiquidPair(address(asset), address(want));
     }
 }
