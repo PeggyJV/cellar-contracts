@@ -21,7 +21,7 @@ contract SequencerPriceRouterTest is Test {
 
     // Variables so this contract can act as a mock sequencer uptime fee.
     int256 mockAnswer = type(int256).max;
-    uint256 mockStartedAt = 0;
+    uint256 mockStartedAt = 1;
 
     function setUp() external {
         // Setup forked environment.
@@ -43,6 +43,16 @@ contract SequencerPriceRouterTest is Test {
 
     function testSequencerUptimeFeedLogic() external {
         // Sequencer is currently up so pricing succeeds.
+        sequencerPriceRouter.getPriceInUSD(USDC);
+
+        //if the sequencer is oracle experiences an invalid round
+        mockAnswer = 0;
+        mockStartedAt = 0;
+
+        // Pricing calls revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SequencerPriceRouter.SequencerPriceRouter__InvalidRound.selector))
+        );
         sequencerPriceRouter.getPriceInUSD(USDC);
 
         // But if sequencer goes down.
@@ -78,6 +88,6 @@ contract SequencerPriceRouterTest is Test {
         (roundID, answer, startedAt, updatedAt, answeredInRound) = IChainlinkAggregator(arbitrumSequencerUptimeFeed)
             .latestRoundData();
         if (mockAnswer != type(int256).max) answer = mockAnswer;
-        if (mockStartedAt != 0) startedAt = mockStartedAt;
+        startedAt = mockStartedAt;
     }
 }
