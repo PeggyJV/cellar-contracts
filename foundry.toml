@@ -7,6 +7,14 @@ evm_version = 'shanghai'
 optimizer = true
 optimizer_runs = 200
 
+[fuzz]
+runs = 4096
+
+[invariant]
+runs = 512
+depth = 64
+fail_on_revert = false
+
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC_URL}"
 polygon = "${MATIC_RPC_URL}"
